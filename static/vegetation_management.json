@@ -1,0 +1,46 @@
+{
+  "Overhead": {
+    "forested": 8000,
+    "scrubbed_flat": 10000,
+    "wetland": 7000,
+    "farmland": 500,
+    "desert_barren": 300,
+    "urban": 5000,
+    "rolling_hills": 3000,
+    "mountain": 9000,
+    "subsea": 0
+  },
+  "Underground Direct Buried": {
+    "forested": 0,
+    "scrubbed_flat": 0,
+    "wetland": 0,
+    "farmland": 0,
+    "desert_barren": 0,
+    "urban": 0,
+    "rolling_hills": 0,
+    "mountain": 0,
+    "subsea": 0
+  },
+  "Underground Tunnel": {
+    "forested": 0,
+    "scrubbed_flat": 0,
+    "wetland": 0,
+    "farmland": 0,
+    "desert_barren": 0,
+    "urban": 0,
+    "rolling_hills": 0,
+    "mountain": 0,
+    "subsea": 0
+  },
+  "Subsea": {
+    "forested": 0,
+    "scrubbed_flat": 0,
+    "wetland": 0,
+    "farmland": 0,
+    "desert_barren": 0,
+    "urban": 0,
+    "rolling_hills": 0,
+    "mountain": 0,
+    "subsea": 0
+  }
+}

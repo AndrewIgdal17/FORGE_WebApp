@@ -1,0 +1,78 @@
+{
+  "presets": [
+    {
+      "id": "default_template",
+      "label": "Default (template)",
+      "description": "Illustrative regional grid mix with moderate renewables growth.",
+      "grid_mix": {
+        "initial": {
+          "coal": 10,
+          "oil": 2,
+          "natural_gas": 38,
+          "solar": 10,
+          "wind": 26,
+          "hydro": 5,
+          "nuclear": 5,
+          "other": 4
+        },
+        "rate_pre_cod": {
+          "coal": -0.05,
+          "oil": -0.04,
+          "natural_gas": 0.0,
+          "solar": 0.05,
+          "wind": 0.04,
+          "hydro": 0.0,
+          "nuclear": 0.0,
+          "other": 0.0
+        },
+        "rate_post_cod": {
+          "coal": -0.05,
+          "oil": -0.04,
+          "natural_gas": 0.0,
+          "solar": 0.05,
+          "wind": 0.04,
+          "hydro": 0.0,
+          "nuclear": 0.0,
+          "other": 0.0
+        }
+      }
+    },
+    {
+      "id": "illustrative_high_renewables",
+      "label": "Illustrative — higher renewables",
+      "description": "Example preset for testing; not an ISO/RTO official mix.",
+      "grid_mix": {
+        "initial": {
+          "coal": 5,
+          "oil": 1,
+          "natural_gas": 30,
+          "solar": 18,
+          "wind": 32,
+          "hydro": 5,
+          "nuclear": 5,
+          "other": 4
+        },
+        "rate_pre_cod": {
+          "coal": -0.05,
+          "oil": -0.04,
+          "natural_gas": 0.0,
+          "solar": 0.05,
+          "wind": 0.04,
+          "hydro": 0.0,
+          "nuclear": 0.0,
+          "other": 0.0
+        },
+        "rate_post_cod": {
+          "coal": -0.05,
+          "oil": -0.04,
+          "natural_gas": 0.0,
+          "solar": 0.05,
+          "wind": 0.04,
+          "hydro": 0.0,
+          "nuclear": 0.0,
+          "other": 0.0
+        }
+      }
+    }
+  ]
+}

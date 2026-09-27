@@ -1,0 +1,1990 @@
+{
+  "sourceFile": "server/static/workspace.html",
+  "scriptStartLine": 374,
+  "scriptEndLine": 6928,
+  "lineOffset": 373,
+  "totalStatements": 261,
+  "totalFunctions": 104,
+  "totalVariables": 66,
+  "totalOtherStatements": 91,
+  "modules": {
+    "utils": [],
+    "lookup-data": [],
+    "comparison": [],
+    "scenarios": [],
+    "results-renderer": [],
+    "input-renderer": [
+      {
+        "name": "C",
+        "type": "const",
+        "startLine": 376,
+        "endLine": 376,
+        "lines": 1
+      },
+      {
+        "name": "form",
+        "type": "const",
+        "startLine": 377,
+        "endLine": 377,
+        "lines": 1
+      },
+      {
+        "name": "apiBaseInput",
+        "type": "const",
+        "startLine": 379,
+        "endLine": 379,
+        "lines": 1
+      },
+      {
+        "name": "messageInput",
+        "type": "const",
+        "startLine": 380,
+        "endLine": 380,
+        "lines": 1
+      },
+      {
+        "name": "valuesInput",
+        "type": "const",
+        "startLine": 381,
+        "endLine": 381,
+        "lines": 1
+      },
+      {
+        "name": "resultEl",
+        "type": "const",
+        "startLine": 382,
+        "endLine": 382,
+        "lines": 1
+      },
+      {
+        "name": "statusEl",
+        "type": "const",
+        "startLine": 383,
+        "endLine": 383,
+        "lines": 1
+      },
+      {
+        "name": "modeInputs",
+        "type": "const",
+        "startLine": 384,
+        "endLine": 384,
+        "lines": 1
+      },
+      {
+        "name": "simpleSection",
+        "type": "const",
+        "startLine": 385,
+        "endLine": 385,
+        "lines": 1
+      },
+      {
+        "name": "bulkSection",
+        "type": "const",
+        "startLine": 386,
+        "endLine": 386,
+        "lines": 1
+      },
+      {
+        "name": "forgeSection",
+        "type": "const",
+        "startLine": 387,
+        "endLine": 387,
+        "lines": 1
+      },
+      {
+        "name": "loadStatus",
+        "type": "const",
+        "startLine": 389,
+        "endLine": 389,
+        "lines": 1
+      },
+      {
+        "name": "tabsContainer",
+        "type": "const",
+        "startLine": 390,
+        "endLine": 390,
+        "lines": 1
+      },
+      {
+        "name": "tabButtonsContainer",
+        "type": "const",
+        "startLine": 391,
+        "endLine": 391,
+        "lines": 1
+      },
+      {
+        "name": "tabContentsContainer",
+        "type": "const",
+        "startLine": 392,
+        "endLine": 392,
+        "lines": 1
+      },
+      {
+        "name": "forgeJsonInputs",
+        "type": "const",
+        "startLine": 393,
+        "endLine": 393,
+        "lines": 1
+      },
+      {
+        "name": "forgeYamlMessage",
+        "type": "const",
+        "startLine": 394,
+        "endLine": 394,
+        "lines": 1
+      },
+      {
+        "name": "forgeInputModeInputs",
+        "type": "const",
+        "startLine": 395,
+        "endLine": 395,
+        "lines": 1
+      },
+      {
+        "name": "bulkSourceInputs",
+        "type": "const",
+        "startLine": 396,
+        "endLine": 396,
+        "lines": 1
+      },
+      {
+        "name": "bulkFileInput",
+        "type": "const",
+        "startLine": 397,
+        "endLine": 397,
+        "lines": 1
+      },
+      {
+        "name": "mainTabButtons",
+        "type": "const",
+        "startLine": 400,
+        "endLine": 400,
+        "lines": 1
+      },
+      {
+        "name": "mainTabContents",
+        "type": "const",
+        "startLine": 401,
+        "endLine": 401,
+        "lines": 1
+      },
+      {
+        "name": "statusBar",
+        "type": "const",
+        "startLine": 402,
+        "endLine": 402,
+        "lines": 1
+      },
+      {
+        "name": "statusBarIcon",
+        "type": "const",
+        "startLine": 403,
+        "endLine": 403,
+        "lines": 1
+      },
+      {
+        "name": "statusBarLabel",
+        "type": "const",
+        "startLine": 404,
+        "endLine": 404,
+        "lines": 1
+      },
+      {
+        "name": "statusBarTimestamp",
+        "type": "const",
+        "startLine": 405,
+        "endLine": 405,
+        "lines": 1
+      },
+      {
+        "name": "statusBarViewBtn",
+        "type": "const",
+        "startLine": 406,
+        "endLine": 406,
+        "lines": 1
+      },
+      {
+        "name": "modalOverlay",
+        "type": "const",
+        "startLine": 497,
+        "endLine": 497,
+        "lines": 1
+      },
+      {
+        "name": "saveOverlayMouseDownTarget",
+        "type": "let",
+        "startLine": 532,
+        "endLine": 532,
+        "lines": 1
+      },
+      {
+        "name": "DEFAULT_PORT",
+        "type": "const",
+        "startLine": 1138,
+        "endLine": 1138,
+        "lines": 1
+      },
+      {
+        "name": "isCurrencyField",
+        "type": "function",
+        "startLine": 1225,
+        "endLine": 1257,
+        "lines": 33
+      },
+      {
+        "name": "isPercentageField",
+        "type": "function",
+        "startLine": 1259,
+        "endLine": 1279,
+        "lines": 21
+      },
+      {
+        "name": "formatCurrencyInput",
+        "type": "function",
+        "startLine": 1281,
+        "endLine": 1286,
+        "lines": 6
+      },
+      {
+        "name": "parseCurrencyInput",
+        "type": "function",
+        "startLine": 1288,
+        "endLine": 1293,
+        "lines": 6
+      },
+      {
+        "name": "formatPercentageInput",
+        "type": "function",
+        "startLine": 1295,
+        "endLine": 1302,
+        "lines": 8
+      },
+      {
+        "name": "parsePercentageInput",
+        "type": "function",
+        "startLine": 1304,
+        "endLine": 1311,
+        "lines": 8
+      },
+      {
+        "name": "formatNumberInput",
+        "type": "function",
+        "startLine": 1313,
+        "endLine": 1318,
+        "lines": 6
+      },
+      {
+        "name": "parseNumberInput",
+        "type": "function",
+        "startLine": 1320,
+        "endLine": 1325,
+        "lines": 6
+      },
+      {
+        "name": "updateSliderFill",
+        "type": "function",
+        "startLine": 1328,
+        "endLine": 1334,
+        "lines": 7
+      },
+      {
+        "name": "TAB_GUIDE_CONTENT",
+        "type": "const",
+        "startLine": 1522,
+        "endLine": 1769,
+        "lines": 248
+      },
+      {
+        "name": "renderTabGuideBanner",
+        "type": "function",
+        "startLine": 1771,
+        "endLine": 1827,
+        "lines": 57
+      },
+      {
+        "name": "getValueAtFieldPath",
+        "type": "function",
+        "startLine": 1829,
+        "endLine": 1842,
+        "lines": 14
+      },
+      {
+        "name": "createFieldFromMetadata",
+        "type": "function",
+        "startLine": 1844,
+        "endLine": 2030,
+        "lines": 187
+      },
+      {
+        "name": "renderTaxonomySections",
+        "type": "function",
+        "startLine": 2032,
+        "endLine": 2144,
+        "lines": 113
+      },
+      {
+        "name": "makeEquationIcon",
+        "type": "function",
+        "startLine": 2147,
+        "endLine": 2185,
+        "lines": 39
+      },
+      {
+        "name": "EQ_WEIGHTED_MILES_TERRAIN",
+        "type": "const",
+        "startLine": 2187,
+        "endLine": 2190,
+        "lines": 4
+      },
+      {
+        "name": "EQ_WEIGHTED_MILES_TOTAL",
+        "type": "const",
+        "startLine": 2191,
+        "endLine": 2195,
+        "lines": 5
+      },
+      {
+        "name": "EQ_ZONE_AREA",
+        "type": "const",
+        "startLine": 2196,
+        "endLine": 2199,
+        "lines": 4
+      },
+      {
+        "name": "EQ_HOLD_ANNUAL",
+        "type": "const",
+        "startLine": 2200,
+        "endLine": 2203,
+        "lines": 4
+      },
+      {
+        "name": "EQ_ACQUISITION",
+        "type": "const",
+        "startLine": 2204,
+        "endLine": 2207,
+        "lines": 4
+      },
+      {
+        "name": "EQ_RENT_ANNUAL",
+        "type": "const",
+        "startLine": 2208,
+        "endLine": 2211,
+        "lines": 4
+      },
+      {
+        "name": "EQ_HOLD_NOMINAL",
+        "type": "const",
+        "startLine": 2212,
+        "endLine": 2216,
+        "lines": 5
+      },
+      {
+        "name": "EQ_HOLD_PV",
+        "type": "const",
+        "startLine": 2217,
+        "endLine": 2221,
+        "lines": 5
+      },
+      {
+        "name": "EQ_ACQ_NOMINAL",
+        "type": "const",
+        "startLine": 2222,
+        "endLine": 2226,
+        "lines": 5
+      },
+      {
+        "name": "EQ_ACQ_PV",
+        "type": "const",
+        "startLine": 2227,
+        "endLine": 2231,
+        "lines": 5
+      },
+      {
+        "name": "EQ_RENT_NOMINAL",
+        "type": "const",
+        "startLine": 2232,
+        "endLine": 2236,
+        "lines": 5
+      },
+      {
+        "name": "EQ_RENT_PV",
+        "type": "const",
+        "startLine": 2237,
+        "endLine": 2241,
+        "lines": 5
+      },
+      {
+        "name": "EQ_ROW_CAPITAL",
+        "type": "const",
+        "startLine": 2242,
+        "endLine": 2246,
+        "lines": 5
+      },
+      {
+        "name": "EQ_DELAY_ANNUAL",
+        "type": "const",
+        "startLine": 2248,
+        "endLine": 2251,
+        "lines": 4
+      },
+      {
+        "name": "EQ_DELAY_NOMINAL",
+        "type": "const",
+        "startLine": 2252,
+        "endLine": 2256,
+        "lines": 5
+      },
+      {
+        "name": "EQ_DELAY_PV",
+        "type": "const",
+        "startLine": 2257,
+        "endLine": 2261,
+        "lines": 5
+      },
+      {
+        "name": "EQ_CONG_DELAY",
+        "type": "const",
+        "startLine": 2262,
+        "endLine": 2266,
+        "lines": 5
+      },
+      {
+        "name": "EQ_CURT_DELAY",
+        "type": "const",
+        "startLine": 2267,
+        "endLine": 2271,
+        "lines": 5
+      },
+      {
+        "name": "EQ_ALL_DELAY",
+        "type": "const",
+        "startLine": 2272,
+        "endLine": 2276,
+        "lines": 5
+      },
+      {
+        "name": "FUEL_COLORS",
+        "type": "const",
+        "startLine": 2278,
+        "endLine": 2282,
+        "lines": 5
+      },
+      {
+        "name": "EQ_LINE_LOSS",
+        "type": "const",
+        "startLine": 2284,
+        "endLine": 2288,
+        "lines": 5
+      },
+      {
+        "name": "EQ_EMISSIONS",
+        "type": "const",
+        "startLine": 2289,
+        "endLine": 2293,
+        "lines": 5
+      },
+      {
+        "name": "EQ_DISPLACEMENT",
+        "type": "const",
+        "startLine": 2294,
+        "endLine": 2298,
+        "lines": 5
+      },
+      {
+        "name": "fuelMixChartInstance",
+        "type": "let",
+        "startLine": 2300,
+        "endLine": 2300,
+        "lines": 1
+      },
+      {
+        "name": "getEnergyDeliveredGWh",
+        "type": "function",
+        "startLine": 2303,
+        "endLine": 2307,
+        "lines": 5
+      },
+      {
+        "name": "readFuelShares",
+        "type": "function",
+        "startLine": 2309,
+        "endLine": 2316,
+        "lines": 8
+      },
+      {
+        "name": "readFuelRates",
+        "type": "function",
+        "startLine": 2318,
+        "endLine": 2325,
+        "lines": 8
+      },
+      {
+        "name": "projectFuelMix",
+        "type": "function",
+        "startLine": 2327,
+        "endLine": 2336,
+        "lines": 10
+      },
+      {
+        "name": "renderTerrainTable",
+        "type": "function",
+        "startLine": 2338,
+        "endLine": 2510,
+        "lines": 173
+      },
+      {
+        "name": "renderROWZoneTable",
+        "type": "function",
+        "startLine": 2512,
+        "endLine": 2700,
+        "lines": 189
+      },
+      {
+        "name": "isGreenfieldROW",
+        "type": "function",
+        "startLine": 2702,
+        "endLine": 2706,
+        "lines": 5
+      },
+      {
+        "name": "updateROWColumnVisibility",
+        "type": "function",
+        "startLine": 2708,
+        "endLine": 2718,
+        "lines": 11
+      },
+      {
+        "name": "renderROWCostPanel",
+        "type": "function",
+        "startLine": 2720,
+        "endLine": 2786,
+        "lines": 67
+      },
+      {
+        "name": "renderDelayCostPanel",
+        "type": "function",
+        "startLine": 2803,
+        "endLine": 2869,
+        "lines": 67
+      },
+      {
+        "name": "renderEnergyImpactPanel",
+        "type": "function",
+        "startLine": 2878,
+        "endLine": 2937,
+        "lines": 60
+      },
+      {
+        "name": "updateFuelMixChart",
+        "type": "function",
+        "startLine": 2940,
+        "endLine": 2986,
+        "lines": 47
+      },
+      {
+        "name": "emissionsChartInstances",
+        "type": "const",
+        "startLine": 2988,
+        "endLine": 2988,
+        "lines": 1
+      },
+      {
+        "name": "renderEmissionsImpactPanel",
+        "type": "function",
+        "startLine": 2990,
+        "endLine": 3082,
+        "lines": 93
+      },
+      {
+        "name": "calculateROWMilesTotal",
+        "type": "function",
+        "startLine": 3085,
+        "endLine": 3095,
+        "lines": 11
+      },
+      {
+        "name": "updateRoutingValidation",
+        "type": "function",
+        "startLine": 3097,
+        "endLine": 3120,
+        "lines": 24
+      },
+      {
+        "name": "validateCostTimingPatterns",
+        "type": "function",
+        "startLine": 3122,
+        "endLine": 3154,
+        "lines": 33
+      },
+      {
+        "name": "STANDARD_TERRAINS",
+        "type": "const",
+        "startLine": 3156,
+        "endLine": 3156,
+        "lines": 1
+      },
+      {
+        "name": "ENV_CONSTRUCTION_TYPES",
+        "type": "const",
+        "startLine": 3158,
+        "endLine": 3163,
+        "lines": 6
+      },
+      {
+        "name": "getActiveConstructionType",
+        "type": "function",
+        "startLine": 3165,
+        "endLine": 3168,
+        "lines": 4
+      },
+      {
+        "name": "terrainDisplayLabel",
+        "type": "function",
+        "startLine": 3170,
+        "endLine": 3172,
+        "lines": 3
+      },
+      {
+        "name": "getTerrainMilesFromDOM",
+        "type": "function",
+        "startLine": 3174,
+        "endLine": 3179,
+        "lines": 6
+      },
+      {
+        "name": "getUpliftFactorFromDOM",
+        "type": "function",
+        "startLine": 3181,
+        "endLine": 3186,
+        "lines": 6
+      },
+      {
+        "name": "renderEnvBaseMitigationTable",
+        "type": "function",
+        "startLine": 3188,
+        "endLine": 3330,
+        "lines": 143
+      },
+      {
+        "name": "renderEnvCreditsTable",
+        "type": "function",
+        "startLine": 3332,
+        "endLine": 3416,
+        "lines": 85
+      },
+      {
+        "name": "updateEnvironmentalAcres",
+        "type": "function",
+        "startLine": 3418,
+        "endLine": 3449,
+        "lines": 32
+      },
+      {
+        "name": "rebuildEnvBaseMitigation",
+        "type": "function",
+        "startLine": 3451,
+        "endLine": 3464,
+        "lines": 14
+      },
+      {
+        "name": "showBuildCostConfirmDialog",
+        "type": "function",
+        "startLine": 3468,
+        "endLine": 3494,
+        "lines": 27
+      },
+      {
+        "name": "CONDUCTOR_DETAIL_ROWS",
+        "type": "const",
+        "startLine": 3497,
+        "endLine": 3505,
+        "lines": 9
+      },
+      {
+        "name": "isReconductoring",
+        "type": "function",
+        "startLine": 3508,
+        "endLine": 3511,
+        "lines": 4
+      },
+      {
+        "name": "renderConductorDetailsTable",
+        "type": "function",
+        "startLine": 3513,
+        "endLine": 3579,
+        "lines": 67
+      },
+      {
+        "name": "updateAcDcWarning",
+        "type": "function",
+        "startLine": 3581,
+        "endLine": 3598,
+        "lines": 18
+      },
+      {
+        "name": "rebuildConductorDetails",
+        "type": "function",
+        "startLine": 3600,
+        "endLine": 3612,
+        "lines": 13
+      },
+      {
+        "name": "renderStructureDetailsTable",
+        "type": "function",
+        "startLine": 3614,
+        "endLine": 3697,
+        "lines": 84
+      },
+      {
+        "name": "renderConverterDetailsTable",
+        "type": "function",
+        "startLine": 3699,
+        "endLine": 3814,
+        "lines": 116
+      },
+      {
+        "name": "rebuildStructureDetails",
+        "type": "function",
+        "startLine": 3816,
+        "endLine": 3833,
+        "lines": 18
+      },
+      {
+        "name": "rebuildConverterDetails",
+        "type": "function",
+        "startLine": 3835,
+        "endLine": 3842,
+        "lines": 8
+      },
+      {
+        "name": "renderConductorMaintenanceTable",
+        "type": "function",
+        "startLine": 3848,
+        "endLine": 3919,
+        "lines": 72
+      },
+      {
+        "name": "rebuildConductorMaintenance",
+        "type": "function",
+        "startLine": 3921,
+        "endLine": 3927,
+        "lines": 7
+      },
+      {
+        "name": "renderStructureMaintenanceTable",
+        "type": "function",
+        "startLine": 3929,
+        "endLine": 4033,
+        "lines": 105
+      },
+      {
+        "name": "rebuildStructureMaintenance",
+        "type": "function",
+        "startLine": 4035,
+        "endLine": 4041,
+        "lines": 7
+      },
+      {
+        "name": "renderConverterMaintenanceTable",
+        "type": "function",
+        "startLine": 4043,
+        "endLine": 4114,
+        "lines": 72
+      },
+      {
+        "name": "rebuildConverterMaintenance",
+        "type": "function",
+        "startLine": 4116,
+        "endLine": 4122,
+        "lines": 7
+      },
+      {
+        "name": "renderInsurableAssetsTable",
+        "type": "function",
+        "startLine": 4124,
+        "endLine": 4233,
+        "lines": 110
+      },
+      {
+        "name": "renderVegetationManagementTable",
+        "type": "function",
+        "startLine": 4235,
+        "endLine": 4329,
+        "lines": 95
+      },
+      {
+        "name": "rebuildVegetationManagement",
+        "type": "function",
+        "startLine": 4331,
+        "endLine": 4337,
+        "lines": 7
+      },
+      {
+        "name": "updateMaintenanceSubTabVisibility",
+        "type": "function",
+        "startLine": 4339,
+        "endLine": 4358,
+        "lines": 20
+      },
+      {
+        "name": "FUEL_SOURCES",
+        "type": "const",
+        "startLine": 4364,
+        "endLine": 4364,
+        "lines": 1
+      },
+      {
+        "name": "FUEL_LABELS",
+        "type": "const",
+        "startLine": 4365,
+        "endLine": 4365,
+        "lines": 1
+      },
+      {
+        "name": "renderEnergyMixTable",
+        "type": "function",
+        "startLine": 4367,
+        "endLine": 4436,
+        "lines": 70
+      },
+      {
+        "name": "renderLineLossParametersTable",
+        "type": "function",
+        "startLine": 4438,
+        "endLine": 4506,
+        "lines": 69
+      },
+      {
+        "name": "rebuildLineLossParameters",
+        "type": "function",
+        "startLine": 4508,
+        "endLine": 4514,
+        "lines": 7
+      },
+      {
+        "name": "renderLossesPanel",
+        "type": "function",
+        "startLine": 4516,
+        "endLine": 4542,
+        "lines": 27
+      },
+      {
+        "name": "renderIntensityTable",
+        "type": "function",
+        "startLine": 4544,
+        "endLine": 4598,
+        "lines": 55
+      },
+      {
+        "name": "renderExternalityCostTable",
+        "type": "function",
+        "startLine": 4600,
+        "endLine": 4654,
+        "lines": 55
+      },
+      {
+        "name": "getTerrainMiles",
+        "type": "function",
+        "startLine": 4660,
+        "endLine": 4668,
+        "lines": 9
+      },
+      {
+        "name": "renderWildfireRiskPanel",
+        "type": "function",
+        "startLine": 4670,
+        "endLine": 4797,
+        "lines": 128
+      },
+      {
+        "name": "renderOutageRiskPanel",
+        "type": "function",
+        "startLine": 4799,
+        "endLine": 4933,
+        "lines": 135
+      },
+      {
+        "name": "rebuildRiskPanels",
+        "type": "function",
+        "startLine": 4935,
+        "endLine": 4940,
+        "lines": 6
+      },
+      {
+        "name": "renderFinancialRatesPanel",
+        "type": "function",
+        "startLine": 4946,
+        "endLine": 5082,
+        "lines": 137
+      },
+      {
+        "name": "TIMING_CATEGORIES",
+        "type": "const",
+        "startLine": 5084,
+        "endLine": 5094,
+        "lines": 11
+      },
+      {
+        "name": "renderFinancialAFUDCPanel",
+        "type": "function",
+        "startLine": 5096,
+        "endLine": 5242,
+        "lines": 147
+      },
+      {
+        "name": "renderEconomicDetailsPanel",
+        "type": "function",
+        "startLine": 5248,
+        "endLine": 5350,
+        "lines": 103
+      },
+      {
+        "name": "renderConstraintsPanel",
+        "type": "function",
+        "startLine": 5352,
+        "endLine": 5463,
+        "lines": 112
+      },
+      {
+        "name": "rebuildConstraintsPanel",
+        "type": "function",
+        "startLine": 5465,
+        "endLine": 5471,
+        "lines": 7
+      },
+      {
+        "name": "renderCapitalCostSubTab",
+        "type": "function",
+        "startLine": 5473,
+        "endLine": 5627,
+        "lines": 155
+      },
+      {
+        "name": "updateProjectTechnicalSubTabVisibility",
+        "type": "function",
+        "startLine": 5629,
+        "endLine": 5673,
+        "lines": 45
+      },
+      {
+        "name": "updateCapitalCostSubTabVisibility",
+        "type": "function",
+        "startLine": 5675,
+        "endLine": 5715,
+        "lines": 41
+      },
+      {
+        "name": "rebuildCapitalCosts",
+        "type": "function",
+        "startLine": 5717,
+        "endLine": 5749,
+        "lines": 33
+      },
+      {
+        "name": "renderInputsFromTaxonomy",
+        "type": "function",
+        "startLine": 5751,
+        "endLine": 6522,
+        "lines": 772
+      },
+      {
+        "name": "setupTaxonomyConditionalVisibility",
+        "type": "function",
+        "startLine": 6524,
+        "endLine": 6564,
+        "lines": 41
+      },
+      {
+        "name": "originalJsonData",
+        "type": "let",
+        "startLine": 6723,
+        "endLine": 6723,
+        "lines": 1
+      },
+      {
+        "name": "resetFieldToDefault",
+        "type": "function",
+        "startLine": 6725,
+        "endLine": 6774,
+        "lines": 50
+      },
+      {
+        "name": "resetSectionToDefaults",
+        "type": "function",
+        "startLine": 6776,
+        "endLine": 6788,
+        "lines": 13
+      },
+      {
+        "name": "getActiveTerrains",
+        "type": "function",
+        "startLine": 6795,
+        "endLine": 6803,
+        "lines": 9
+      },
+      {
+        "name": "updateLockedDiscountRate",
+        "type": "function",
+        "startLine": 6809,
+        "endLine": 6816,
+        "lines": 8
+      },
+      {
+        "name": "FUEL_MIX_SOURCE_KEYS",
+        "type": "const",
+        "startLine": 6819,
+        "endLine": 6819,
+        "lines": 1
+      },
+      {
+        "name": "FUEL_MIX_PATH_BASE",
+        "type": "const",
+        "startLine": 6820,
+        "endLine": 6820,
+        "lines": 1
+      },
+      {
+        "name": "syncFuelMixPresetBarVisibility",
+        "type": "function",
+        "startLine": 6822,
+        "endLine": 6827,
+        "lines": 6
+      },
+      {
+        "name": "applyEnergySourceMixPreset",
+        "type": "function",
+        "startLine": 6829,
+        "endLine": 6854,
+        "lines": 26
+      },
+      {
+        "name": "makeEmissionIntensitiesCollapsible",
+        "type": "function",
+        "startLine": 6857,
+        "endLine": 6885,
+        "lines": 29
+      },
+      {
+        "name": "normalizeEnergySourceMixInCombinedData",
+        "type": "function",
+        "startLine": 6896,
+        "endLine": 6907,
+        "lines": 12
+      },
+      {
+        "name": "renderJsonInputs",
+        "type": "function",
+        "startLine": 6909,
+        "endLine": 6913,
+        "lines": 5
+      }
+    ],
+    "inline-remainder": [
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 375,
+        "endLine": 375,
+        "lines": 1,
+        "preview": "console.log('DOM loaded, initializing...');"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 378,
+        "endLine": 378,
+        "lines": 1,
+        "preview": "console.log('Form element:', form);"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 388,
+        "endLine": 388,
+        "lines": 1,
+        "preview": "console.log('Sections found:', {simpleSection, bulkSection, forgeSection});"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 407,
+        "endLine": 410,
+        "lines": 4,
+        "preview": "document.getElementById('status-bar-save-btn').addEventListener('click', functio"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 412,
+        "endLine": 412,
+        "lines": 1,
+        "preview": "C.forgeJsonData = null;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 414,
+        "endLine": 414,
+        "lines": 1,
+        "preview": "C.cachedFuelMixPresets = [];"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 417,
+        "endLine": 417,
+        "lines": 1,
+        "preview": "C.taxonomy = null;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 418,
+        "endLine": 418,
+        "lines": 1,
+        "preview": "C.taxonomyById = {};"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 419,
+        "endLine": 419,
+        "lines": 1,
+        "preview": "C.taxonomyBySide = {};"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 420,
+        "endLine": 420,
+        "lines": 1,
+        "preview": "C.taxonomyByCategory = {};"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 423,
+        "endLine": 423,
+        "lines": 1,
+        "preview": "C.inputMetadata = null;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 424,
+        "endLine": 424,
+        "lines": 1,
+        "preview": "C.activeTabIndex = 0;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 427,
+        "endLine": 427,
+        "lines": 1,
+        "preview": "C.sessionScenarios = [];"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 428,
+        "endLine": 428,
+        "lines": 1,
+        "preview": "C.activeScenarioId = null;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 429,
+        "endLine": 429,
+        "lines": 1,
+        "preview": "C.activeScenarioName = '';"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 430,
+        "endLine": 430,
+        "lines": 1,
+        "preview": "C.lastRunResults = null;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 431,
+        "endLine": 431,
+        "lines": 1,
+        "preview": "C.scenarioCounter = 0;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 432,
+        "endLine": 432,
+        "lines": 1,
+        "preview": "C.comparisonScenarioIds = new Set();"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 433,
+        "endLine": 433,
+        "lines": 1,
+        "preview": "C.comparisonBaselineId = null;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 434,
+        "endLine": 434,
+        "lines": 1,
+        "preview": "C.showDeltaVsBaseline = false;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 436,
+        "endLine": 436,
+        "lines": 1,
+        "preview": "C.comparisonDeltaDisplayMode = 'values_plus_delta';"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 437,
+        "endLine": 437,
+        "lines": 1,
+        "preview": "C.showComparisonPercentDelta = false;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 438,
+        "endLine": 438,
+        "lines": 1,
+        "preview": "C.comparisonAutoSort = false;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 439,
+        "endLine": 439,
+        "lines": 1,
+        "preview": "C.comparisonColumns = ['bcr_societal', 'grand_total_pv', 'total_capital_pv', 'tota"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 441,
+        "endLine": 441,
+        "lines": 1,
+        "preview": "C.routingValid = true;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 444,
+        "endLine": 444,
+        "lines": 1,
+        "preview": "C.latestValidResults = null;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 445,
+        "endLine": 445,
+        "lines": 1,
+        "preview": "C.autoCalcInFlight = false;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 446,
+        "endLine": 446,
+        "lines": 1,
+        "preview": "C.autoCalcQueued = false;"
+      },
+      {
+        "name": "autoCalculate",
+        "type": "const-function",
+        "startLine": 448,
+        "endLine": 490,
+        "lines": 43
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 498,
+        "endLine": 502,
+        "lines": 5,
+        "preview": "modalOverlay.addEventListener('click', function(e) {"
+      },
+      {
+        "name": "<IfStatement>",
+        "type": "statement",
+        "startLine": 510,
+        "endLine": 510,
+        "lines": 1,
+        "preview": "if (C.comparisonAutoSort) sortComparisonColumnsByCatalog();"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 523,
+        "endLine": 528,
+        "lines": 6,
+        "preview": "document.querySelectorAll('.save-dialog .save-option').forEach(opt => {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 530,
+        "endLine": 530,
+        "lines": 1,
+        "preview": "document.getElementById('save-cancel-btn').addEventListener('click', hideSaveDia"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 533,
+        "endLine": 535,
+        "lines": 3,
+        "preview": "document.getElementById('save-overlay').addEventListener('mousedown', function(e"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 536,
+        "endLine": 538,
+        "lines": 3,
+        "preview": "document.getElementById('save-overlay').addEventListener('click', function(e) {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 540,
+        "endLine": 588,
+        "lines": 49,
+        "preview": "document.getElementById('save-confirm-btn').addEventListener('click', function()"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 590,
+        "endLine": 590,
+        "lines": 1,
+        "preview": "document.getElementById('scenario-save-btn').addEventListener('click', showSaveD"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 591,
+        "endLine": 604,
+        "lines": 14,
+        "preview": "document.getElementById('save-scenario-main-btn').addEventListener('click', () ="
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 606,
+        "endLine": 615,
+        "lines": 10,
+        "preview": "document.getElementById('save-copy-btn').addEventListener('click', () => {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 617,
+        "endLine": 648,
+        "lines": 32,
+        "preview": "document.getElementById('scenario-breadcrumb').addEventListener('click', (e) => "
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 650,
+        "endLine": 654,
+        "lines": 5,
+        "preview": "document.getElementById('tab-contents').addEventListener('click', (e) => {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 656,
+        "endLine": 682,
+        "lines": 27,
+        "preview": "document.getElementById('new-scenario-btn').addEventListener('click', () => {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 684,
+        "endLine": 701,
+        "lines": 18,
+        "preview": "document.getElementById('scenario-toggle-btn').addEventListener('click', functio"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 705,
+        "endLine": 765,
+        "lines": 61,
+        "preview": "document.getElementById('copy-table-btn').addEventListener('click', function() {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 768,
+        "endLine": 942,
+        "lines": 175,
+        "preview": "document.getElementById('export-png-btn').addEventListener('click', function() {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 947,
+        "endLine": 949,
+        "lines": 3,
+        "preview": "document.getElementById('scenario-upload-btn').addEventListener('click', () => {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 951,
+        "endLine": 979,
+        "lines": 29,
+        "preview": "document.getElementById('scenario-file-input').addEventListener('change', functi"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 986,
+        "endLine": 986,
+        "lines": 1,
+        "preview": "initComparisonToolbar();"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 992,
+        "endLine": 996,
+        "lines": 5,
+        "preview": "document.addEventListener('mouseenter', function(e) {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 998,
+        "endLine": 1002,
+        "lines": 5,
+        "preview": "document.addEventListener('mouseleave', function(e) {"
+      },
+      {
+        "name": "switchMainTab",
+        "type": "function",
+        "startLine": 1006,
+        "endLine": 1039,
+        "lines": 34
+      },
+      {
+        "name": "enableResultsTab",
+        "type": "function",
+        "startLine": 1041,
+        "endLine": 1046,
+        "lines": 6
+      },
+      {
+        "name": "showCalculating",
+        "type": "function",
+        "startLine": 1048,
+        "endLine": 1061,
+        "lines": 14
+      },
+      {
+        "name": "markResultsAvailable",
+        "type": "function",
+        "startLine": 1063,
+        "endLine": 1071,
+        "lines": 9
+      },
+      {
+        "name": "hideStatusBar",
+        "type": "function",
+        "startLine": 1073,
+        "endLine": 1078,
+        "lines": 6
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1081,
+        "endLine": 1087,
+        "lines": 7,
+        "preview": "mainTabButtons.forEach(btn => {"
+      },
+      {
+        "name": "switchScenarioSubtab",
+        "type": "function",
+        "startLine": 1090,
+        "endLine": 1098,
+        "lines": 9
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1100,
+        "endLine": 1107,
+        "lines": 8,
+        "preview": "document.querySelectorAll('#scenario-subtabs .tab-button').forEach(btn => {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1112,
+        "endLine": 1115,
+        "lines": 4,
+        "preview": "document.getElementById('cf-calc-lineloss-header')?.addEventListener('click', fu"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1118,
+        "endLine": 1118,
+        "lines": 1,
+        "preview": "document.getElementById('design-cmp-capacity')?.addEventListener('change', updat"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1119,
+        "endLine": 1119,
+        "lines": 1,
+        "preview": "document.getElementById('design-cmp-conductor')?.addEventListener('change', upda"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1121,
+        "endLine": 1135,
+        "lines": 15,
+        "preview": "document.getElementById('design-cmp-run-btn')?.addEventListener('click', () => {"
+      },
+      {
+        "name": "initialiseApiBase",
+        "type": "function",
+        "startLine": 1141,
+        "endLine": 1144,
+        "lines": 4
+      },
+      {
+        "name": "selectedMode",
+        "type": "function",
+        "startLine": 1146,
+        "endLine": 1149,
+        "lines": 4
+      },
+      {
+        "name": "updateModeVisibility",
+        "type": "function",
+        "startLine": 1151,
+        "endLine": 1166,
+        "lines": 16
+      },
+      {
+        "name": "updateForgeInputVisibility",
+        "type": "function",
+        "startLine": 1168,
+        "endLine": 1183,
+        "lines": 16
+      },
+      {
+        "name": "updateBulkSourceVisibility",
+        "type": "function",
+        "startLine": 1185,
+        "endLine": 1188,
+        "lines": 4
+      },
+      {
+        "name": "fetchFinalCombined",
+        "type": "function",
+        "startLine": 1191,
+        "endLine": 1199,
+        "lines": 9
+      },
+      {
+        "name": "fetchTaxonomy",
+        "type": "function",
+        "startLine": 1201,
+        "endLine": 1205,
+        "lines": 5
+      },
+      {
+        "name": "fetchInputMetadata",
+        "type": "function",
+        "startLine": 1207,
+        "endLine": 1211,
+        "lines": 5
+      },
+      {
+        "name": "fetchFuelMixPresets",
+        "type": "function",
+        "startLine": 1213,
+        "endLine": 1221,
+        "lines": 9
+      },
+      {
+        "name": "switchTab",
+        "type": "function",
+        "startLine": 1336,
+        "endLine": 1350,
+        "lines": 15
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1353,
+        "endLine": 1353,
+        "lines": 1,
+        "preview": "window.autoCalculate = autoCalculate;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1354,
+        "endLine": 1354,
+        "lines": 1,
+        "preview": "window.switchMainTab = switchMainTab;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1355,
+        "endLine": 1355,
+        "lines": 1,
+        "preview": "window.switchTab = switchTab;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1356,
+        "endLine": 1356,
+        "lines": 1,
+        "preview": "window.collectJsonData = collectJsonData;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1357,
+        "endLine": 1357,
+        "lines": 1,
+        "preview": "window.renderJsonInputs = renderJsonInputs;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1358,
+        "endLine": 1358,
+        "lines": 1,
+        "preview": "window.markResultsAvailable = markResultsAvailable;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1359,
+        "endLine": 1359,
+        "lines": 1,
+        "preview": "window.parseNumberInput = parseNumberInput;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1360,
+        "endLine": 1360,
+        "lines": 1,
+        "preview": "window.isGreenfieldROW = isGreenfieldROW;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1361,
+        "endLine": 1361,
+        "lines": 1,
+        "preview": "window.updateFuelMixChart = updateFuelMixChart;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1362,
+        "endLine": 1362,
+        "lines": 1,
+        "preview": "window.getEnergyDeliveredGWh = getEnergyDeliveredGWh;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1363,
+        "endLine": 1363,
+        "lines": 1,
+        "preview": "window.projectFuelMix = projectFuelMix;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1364,
+        "endLine": 1364,
+        "lines": 1,
+        "preview": "window.readFuelRates = readFuelRates;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1365,
+        "endLine": 1365,
+        "lines": 1,
+        "preview": "window.readFuelShares = readFuelShares;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1366,
+        "endLine": 1366,
+        "lines": 1,
+        "preview": "window.enableResultsTab = enableResultsTab;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1367,
+        "endLine": 1367,
+        "lines": 1,
+        "preview": "window.showCalculating = showCalculating;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1368,
+        "endLine": 1368,
+        "lines": 1,
+        "preview": "window.hideStatusBar = hideStatusBar;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1369,
+        "endLine": 1369,
+        "lines": 1,
+        "preview": "window.fetchFinalCombined = fetchFinalCombined;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1370,
+        "endLine": 1370,
+        "lines": 1,
+        "preview": "window.fetchTaxonomy = fetchTaxonomy;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1371,
+        "endLine": 1371,
+        "lines": 1,
+        "preview": "window.fetchInputMetadata = fetchInputMetadata;"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1372,
+        "endLine": 1372,
+        "lines": 1,
+        "preview": "window.fetchFuelMixPresets = fetchFuelMixPresets;"
+      },
+      {
+        "name": "collectJsonData",
+        "type": "function",
+        "startLine": 1374,
+        "endLine": 1461,
+        "lines": 88
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1469,
+        "endLine": 1469,
+        "lines": 1,
+        "preview": "C.INPUT_TAB_ORDER = ['project-technical', 'benefits', 'financial', 'capital-cost"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1470,
+        "endLine": 1475,
+        "lines": 6,
+        "preview": "C.INPUT_TAB_LABELS = {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 1476,
+        "endLine": 1515,
+        "lines": 40,
+        "preview": "C.SUB_TAB_LABELS = {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 2789,
+        "endLine": 2791,
+        "lines": 3,
+        "preview": "document.addEventListener('forge-results-updated', (e) => {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 2792,
+        "endLine": 2801,
+        "lines": 10,
+        "preview": "document.addEventListener('forge-calc-started', () => {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 2872,
+        "endLine": 2876,
+        "lines": 5,
+        "preview": "document.addEventListener('forge-results-updated', (e) => {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 6570,
+        "endLine": 6705,
+        "lines": 136,
+        "preview": "form.addEventListener(\"submit\", async (event) => {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 6708,
+        "endLine": 6708,
+        "lines": 1,
+        "preview": "form.addEventListener('input', () => autoCalculate());"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 6709,
+        "endLine": 6709,
+        "lines": 1,
+        "preview": "form.addEventListener('change', () => autoCalculate());"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 6915,
+        "endLine": 6915,
+        "lines": 1,
+        "preview": "console.log('Calling initialiseApiBase and updateModeVisibility...');"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 6916,
+        "endLine": 6916,
+        "lines": 1,
+        "preview": "initialiseApiBase();"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 6917,
+        "endLine": 6917,
+        "lines": 1,
+        "preview": "updateModeVisibility();"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 6918,
+        "endLine": 6918,
+        "lines": 1,
+        "preview": "console.log('Event listeners being attached to mode inputs:', modeInputs.length)"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 6919,
+        "endLine": 6921,
+        "lines": 3,
+        "preview": "modeInputs.forEach((input) => {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 6922,
+        "endLine": 6924,
+        "lines": 3,
+        "preview": "forgeInputModeInputs.forEach((input) => {"
+      },
+      {
+        "name": "<ExpressionStatement>",
+        "type": "statement",
+        "startLine": 6925,
+        "endLine": 6927,
+        "lines": 3,
+        "preview": "bulkSourceInputs.forEach((input) => {"
+      }
+    ]
+  },
+  "summary": {
+    "utils": {
+      "count": 0,
+      "totalLines": 0,
+      "functions": 0,
+      "variables": 0,
+      "statements": 0
+    },
+    "lookup-data": {
+      "count": 0,
+      "totalLines": 0,
+      "functions": 0,
+      "variables": 0,
+      "statements": 0
+    },
+    "comparison": {
+      "count": 0,
+      "totalLines": 0,
+      "functions": 0,
+      "variables": 0,
+      "statements": 0
+    },
+    "scenarios": {
+      "count": 0,
+      "totalLines": 0,
+      "functions": 0,
+      "variables": 0,
+      "statements": 0
+    },
+    "results-renderer": {
+      "count": 0,
+      "totalLines": 0,
+      "functions": 0,
+      "variables": 0,
+      "statements": 0
+    },
+    "input-renderer": {
+      "count": 152,
+      "totalLines": 5205,
+      "functions": 87,
+      "variables": 65,
+      "statements": 0
+    },
+    "inline-remainder": {
+      "count": 109,
+      "totalLines": 1053,
+      "functions": 18,
+      "variables": 1,
+      "statements": 91
+    }
+  }
+}

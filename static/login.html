@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Log In — FORGE</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      const SUPABASE_URL = 'https://fsjppprwigmuypyzpbir.supabase.co';
+      const SUPABASE_ANON_KEY = 'sb_publishable_LNsNVlF7rOtKNShrC3qbVQ_D5_Mncx1';
+      const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    </script>
+  </head>
+  <body>
+    <div class="signup-page">
+      <div class="signup-header">
+        <a href="/" class="signup-logo">FORGE</a>
+        <a href="/signup" class="signup-login-link">Sign Up</a>
+      </div>
+      <div class="signup-card">
+        <div class="signup-title" id="login-title">Log In</div>
+        <div id="login-error" style="display:none; padding:0.5rem 0.75rem; margin-bottom:1rem; background:#fee; color:#c00; border-radius:6px; font-size:0.85rem;"></div>
+        <div id="login-message" style="display:none; padding:0.5rem 0.75rem; margin-bottom:1rem; background:#efe; color:#060; border-radius:6px; font-size:0.85rem;"></div>
+
+        <form id="login-form" onsubmit="return false;" style="display:flex; flex-direction:column; gap:0.75rem;">
+          <input id="login-email" type="email" placeholder="Email" required style="padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;" />
+          <input id="login-password" type="password" placeholder="Password" required minlength="6" style="padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;" />
+          <button type="button" id="login-submit-btn" style="padding:0.65rem; background:#2563eb; color:#fff; border:none; border-radius:6px; font-size:0.95rem; font-weight:600; cursor:pointer;">Log In</button>
+        </form>
+
+        <div id="profile-section" style="display:none; margin-top:1.5rem; border-top:1px solid #eee; padding-top:1.5rem;">
+          <div style="font-size:1.1rem; font-weight:600; color:#1a1a1a; margin-bottom:1rem;">Complete Your Profile</div>
+          <form id="profile-form" onsubmit="return false;" style="display:flex; flex-direction:column; gap:0.75rem;">
+            <input id="profile-username" type="text" placeholder="Username *" required maxlength="40" style="padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;" />
+            <div style="display:flex; gap:0.5rem;">
+              <input id="profile-first-name" type="text" placeholder="First name (optional)" maxlength="60" style="flex:1; padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;" />
+              <input id="profile-last-name" type="text" placeholder="Last name (optional)" maxlength="60" style="flex:1; padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;" />
+            </div>
+            <input id="profile-org" type="text" placeholder="Organization (optional)" maxlength="120" style="padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;" />
+            <select id="profile-org-type" required style="padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem; color:#333; background:#fff;">
+              <option value="" disabled selected>User type *</option>
+              <option value="utility">Utility</option>
+              <option value="iso_rto">ISO / RTO</option>
+              <option value="consultant">Consultant</option>
+              <option value="academic">Academic</option>
+              <option value="government">Government</option>
+              <option value="other">Other</option>
+            </select>
+            <button type="button" id="profile-submit-btn" style="padding:0.65rem; background:#2563eb; color:#fff; border:none; border-radius:6px; font-size:0.95rem; font-weight:600; cursor:pointer;">Complete Profile</button>
+          </form>
+        </div>
+
+        <div style="text-align:center; margin-top:1rem; font-size:0.85rem; color:#666;">
+          Don't have an account? <a href="/signup" style="color:#2563eb; font-weight:600; text-decoration:none;">Sign Up</a>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    (function() {
+      var errEl = document.getElementById('login-error');
+      var msgEl = document.getElementById('login-message');
+      var loginForm = document.getElementById('login-form');
+      var profileSection = document.getElementById('profile-section');
+
+      function showError(msg) { errEl.textContent = msg; errEl.style.display = 'block'; msgEl.style.display = 'none'; }
+      function showMsg(msg) { msgEl.textContent = msg; msgEl.style.display = 'block'; errEl.style.display = 'none'; }
+
+      async function checkAndRedirect(session) {
+        if (!session) return;
+        var result = await _sb.from('profiles').select('*').eq('id', session.user.id).single();
+        if (result.data && result.data.username) {
+          window.location.href = '/app';
+          return;
+        }
+        loginForm.style.display = 'none';
+        document.getElementById('login-title').textContent = 'Complete Your Profile';
+        profileSection.style.display = '';
+      }
+
+      _sb.auth.getSession().then(async function(result) {
+        if (result.data.session) await checkAndRedirect(result.data.session);
+      });
+
+      _sb.auth.onAuthStateChange(async function(event, session) {
+        if (session) await checkAndRedirect(session);
+      });
+
+      document.getElementById('login-submit-btn').addEventListener('click', async function() {
+        errEl.style.display = 'none';
+        var result = await _sb.auth.signInWithPassword({
+          email: document.getElementById('login-email').value,
+          password: document.getElementById('login-password').value
+        });
+        if (result.error) showError(result.error.message);
+      });
+
+      document.getElementById('profile-submit-btn').addEventListener('click', async function() {
+        errEl.style.display = 'none';
+        var username = document.getElementById('profile-username').value.trim();
+        var orgType = document.getElementById('profile-org-type').value;
+        if (!username) { showError('Username is required.'); return; }
+        if (!orgType) { showError('User type is required.'); return; }
+        var sessionResult = await _sb.auth.getSession();
+        var session = sessionResult.data.session;
+        if (!session) { showError('Session expired. Please log in again.'); return; }
+        var updates = {
+          username: username,
+          first_name: document.getElementById('profile-first-name').value.trim() || null,
+          last_name: document.getElementById('profile-last-name').value.trim() || null,
+          org: document.getElementById('profile-org').value.trim() || null,
+          org_type: orgType
+        };
+        var updateResult = await _sb.from('profiles').update(updates).eq('id', session.user.id);
+        if (updateResult.error) {
+          var msg = updateResult.error.message.includes('unique') ? 'That username is already taken.' : updateResult.error.message;
+          showError(msg);
+          return;
+        }
+        window.location.href = '/app';
+      });
+    })();
+    </script>
+  </body>
+</html>

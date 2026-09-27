@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>FORGE — Workspace</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      const SUPABASE_URL = 'https://fsjppprwigmuypyzpbir.supabase.co';
+      const SUPABASE_ANON_KEY = 'sb_publishable_LNsNVlF7rOtKNShrC3qbVQ_D5_Mncx1';
+      const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      function _getAuthToken() {
+        return _sb.auth.getSession().then(({ data }) => data.session?.access_token || null);
+      }
+      window._sb = _sb;
+      window._getAuthToken = _getAuthToken;
+    </script>
+    <script type="speculationrules">
+    {
+      "prerender": [
+        { "urls": ["/app", "/app/scenarios-manager"], "eagerness": "moderate" }
+      ]
+    }
+    </script>
+    <link rel="prefetch" href="/app">
+    <link rel="prefetch" href="/app/scenarios-manager">
+  </head>
+  <body>
+    <script>
+    (function() {
+      window._authReady = _sb.auth.getSession().then(async function(result) {
+        var session = result.data.session;
+        if (!session) { window.location.href = '/'; return null; }
+        var profileResult = await _sb.from('profiles').select('*').eq('id', session.user.id).single();
+        if (profileResult.error || !(profileResult.data && profileResult.data.username)) {
+          window.location.href = '/login';
+          return null;
+        }
+        return { profile: profileResult.data, session: session };
+      });
+    })();
+    </script>
+
+    <!-- Custom Modal Dialog -->
+    <div id="modal-overlay" class="modal-overlay">
+      <div class="modal-dialog">
+        <div class="modal-title" id="modal-title">Confirm</div>
+        <div class="modal-message" id="modal-message">Are you sure?</div>
+        <div class="modal-buttons">
+          <button type="button" class="btn btn-secondary" id="modal-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary" id="modal-confirm">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <nav class="app-top-nav">
+      <a href="/app" class="app-top-nav-logo">FORGE</a>
+      <div class="app-top-nav-links">
+        <a href="/app" class="app-top-nav-link" data-nav="home">Home</a>
+        <a href="/app/workspace" class="app-top-nav-link active" data-nav="workspace">Workspace</a>
+        <a href="/app/scenarios-manager" class="app-top-nav-link" data-nav="scenarios">Scenarios</a>
+      </div>
+      <div class="app-top-nav-user">
+        <span class="forge-user-display"></span>
+        <button type="button" class="app-top-nav-logout" onclick="_sb.auth.signOut().then(function(){window.location.href='/';})">Log out</button>
+      </div>
+    </nav>
+
+    <div id="wizard-overlay" class="wizard-overlay" style="display:none;">
+      <div class="wizard-container">
+        <button type="button" class="wizard-close" onclick="hideWizard()">&times;</button>
+        <div id="wizard-content"></div>
+        <div id="wizard-nav" class="wizard-nav"></div>
+      </div>
+    </div>
+
+    <div class="scenario-bar" id="scenario-bar">
+      <span class="scenario-name" id="scenario-name-display" title="Click to rename"></span>
+      <span class="mod-dot" id="mod-dot" style="display:none;">●</span>
+      <div style="flex:1;"></div>
+      <div class="split-save" id="split-save">
+        <button type="button" class="split-save-main" id="split-save-main">Saved ✓</button>
+        <button type="button" class="split-save-drop" id="split-save-drop">▾</button>
+        <div class="split-save-menu" id="split-save-menu" style="display:none;">
+          <div class="split-menu-item" data-action="save">Save <span style="float:right;color:#aaa;font-size:0.7rem;">⌘S</span></div>
+          <div class="split-menu-item" data-action="save-copy">Save as Copy</div>
+          <div class="split-menu-item" data-action="rename">Rename</div>
+          <div class="split-menu-sep"></div>
+          <div class="split-menu-item" data-action="export-forge">Export .forge</div>
+          <div class="split-menu-item" data-action="export-csv">Export .csv</div>
+        </div>
+      </div>
+    </div>
+    <div class="context-bar" id="context-bar">
+      <div class="view-toggle" id="view-toggle">
+        <button type="button" class="view-toggle-btn active" data-view="inputs">Inputs</button>
+        <button type="button" class="view-toggle-btn" data-view="results">Results</button>
+        <button type="button" class="view-toggle-btn" data-view="sensitivity">Sensitivity</button>
+      </div>
+      <span class="header-breadcrumb" id="header-breadcrumb"></span>
+      <div style="flex:1;"></div>
+      <span class="calc-time" id="calc-time">Not calculated</span>
+      <button type="button" class="tour-help-btn" onclick="startPageTour()" title="Page tour">?</button>
+    </div>
+
+    <!-- Inputs Tab -->
+    <div class="main-tab-content active" id="main-tab-inputs">
+    <form id="demo-form" novalidate>
+      <div class="workspace-layout">
+        <div class="sidebar" id="sidebar">
+          <div class="sidebar-search">
+            <input type="text" id="sidebar-search-input" placeholder="Search fields...">
+          </div>
+          <div id="sidebar-tree"></div>
+        </div>
+        <div class="content-area">
+          <div class="content-header" id="content-header"></div>
+          <div id="content-panel">
+            <p id="load-status" style="margin: 0; font-size: 0.9rem; flex-shrink: 0;"></p>
+          </div>
+        </div>
+      </div>
+    </form>
+    </div>
+
+    <!-- Sensitivity Panel (placeholder) -->
+    <div id="sensitivity-panel" style="display:none; padding: 2rem; max-width: 40rem;">
+      <h2 style="margin: 0 0 0.75rem; font-size: 1.3rem; font-weight: 700;">Sensitivity Analysis</h2>
+      <p style="color: var(--color-text-secondary); line-height: 1.5; font-size: 0.9rem;">
+        Systematic sensitivity analysis tools for understanding which input parameters
+        most affect project economics.
+      </p>
+      <div style="margin-top: 1rem; padding: 1rem; background: var(--color-bg-subtle); border-radius: var(--radius-lg); font-size: var(--text-sm); color: var(--color-text-muted);">
+        Coming soon:
+        <ul style="margin: 0.5rem 0 0; padding-left: 1.25rem;">
+          <li>Tornado diagrams (one-at-a-time sensitivity)</li>
+          <li>Spider plots (multi-parameter sweeps)</li>
+          <li>Break-even analysis (threshold finding)</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Hidden legacy result sink (visible results render in #content-panel via sidebar) -->
+    <div id="result" hidden aria-hidden="true"></div>
+
+    <!-- Save Dialog Overlay -->
+    <div class="save-overlay" id="save-overlay">
+      <div class="save-dialog" style="position: relative;">
+        <h3 style="display: inline;">Save Scenario</h3>
+        <span id="save-status-indicator" style="position: absolute; top: 1.5rem; right: 1.5rem; font-size: 0.75rem; font-weight: 500;"></span>
+        <div style="margin-bottom: 0.75rem; margin-top: 1rem;">
+          <label style="font-size: 0.85rem; font-weight: 500; display: block; margin-bottom: 0.25rem;">Scenario name</label>
+          <input type="text" id="save-memory-name" placeholder="Scenario name" />
+        </div>
+        <div class="save-option" id="save-opt-memory" data-option="memory" style="position: relative;">
+          <div class="save-option-title">Save</div>
+          <div class="save-option-desc">Save scenario to database.</div>
+          <span id="save-saved-indicator" style="position: absolute; top: 0.5rem; right: 0.75rem; font-size: 0.75rem; font-weight: 500; color: #10b981;"></span>
+        </div>
+        <div class="save-option" id="save-opt-forge" data-option="forge">
+          <div class="save-option-title">Export as .forge</div>
+          <div class="save-option-desc">Download as a JSON file you can re-import later.</div>
+        </div>
+        <div class="save-option" id="save-opt-csv" data-option="csv">
+          <div class="save-option-title">Export as .csv</div>
+          <div class="save-option-desc">Download a human-readable CSV with inputs and results.</div>
+        </div>
+        <div class="save-actions">
+          <button type="button" class="btn btn-secondary" id="save-cancel-btn">Cancel</button>
+          <button type="button" class="btn btn-primary" id="save-confirm-btn">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <script>window.FORGE = {};</script>
+    <script>window._tourPage = 'workspace';</script>
+    <script src="/static/configs.js"></script>
+    <script src="/static/utils.js"></script>
+    <script src="/static/lookup-data.js"></script>
+    <script src="/static/scenario-data.js"></script>
+    <script src="/static/scenario-ui.js"></script>
+    <script src="/static/scenario-workspace.js"></script>
+    <script src="/static/sidebar.js"></script>
+    <script src="/static/sidebar-search.js"></script>
+    <script src="/static/workspace-header.js"></script>
+    <script src="/static/wizard.js"></script>
+    <script src="/static/tour-content.js"></script>
+    <script src="/static/tour.js"></script>
+    <script src="/static/assistant.js"></script>
+    <script src="/static/results-renderer.js"></script>
+    <script src="/static/input-renderer.js"></script>
+    <!-- hierarchy-engine.js deleted in Phase 4 — form rendering is C.taxonomy-driven -->
+    <script src="/static/tutorial-content.js"></script>
+    <script src="/static/tutorial.js"></script>
+    <script src="/static/workspace.js"></script>
+  </body>
+</html>

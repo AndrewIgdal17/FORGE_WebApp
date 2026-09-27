@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>FORGE — Home</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      const SUPABASE_URL = 'https://fsjppprwigmuypyzpbir.supabase.co';
+      const SUPABASE_ANON_KEY = 'sb_publishable_LNsNVlF7rOtKNShrC3qbVQ_D5_Mncx1';
+      const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      function _getAuthToken() {
+        return _sb.auth.getSession().then(function(r) { return r.data.session ? r.data.session.access_token : null; });
+      }
+      window._sb = _sb;
+      window._getAuthToken = _getAuthToken;
+    </script>
+    <script type="speculationrules">
+    {
+      "prerender": [
+        { "urls": ["/app/workspace", "/app/scenarios-manager"], "eagerness": "moderate" }
+      ]
+    }
+    </script>
+    <link rel="prefetch" href="/app/workspace">
+    <link rel="prefetch" href="/app/scenarios-manager">
+  </head>
+  <body>
+    <script>
+    (function() {
+      window._authReady = _sb.auth.getSession().then(async function(result) {
+        var session = result.data.session;
+        if (!session) { window.location.href = '/'; return null; }
+        var profileResult = await _sb.from('profiles').select('*').eq('id', session.user.id).single();
+        if (profileResult.error || !(profileResult.data && profileResult.data.username)) {
+          window.location.href = '/login';
+          return null;
+        }
+        return { profile: profileResult.data, session: session };
+      });
+    })();
+    </script>
+
+    <nav class="app-top-nav">
+      <a href="/app" class="app-top-nav-logo">FORGE</a>
+      <div class="app-top-nav-links">
+        <a href="/app" class="app-top-nav-link active" data-nav="home">Home</a>
+        <a href="/app/workspace" class="app-top-nav-link" data-nav="workspace">Workspace</a>
+        <a href="/app/scenarios-manager" class="app-top-nav-link" data-nav="scenarios">Scenarios</a>
+      </div>
+      <div class="app-top-nav-user">
+        <span class="forge-user-display"></span>
+        <button type="button" class="app-top-nav-logout" onclick="_sb.auth.signOut().then(function(){window.location.href='/';})">Log out</button>
+      </div>
+    </nav>
+
+    <div class="landing-page">
+      <div class="landing-title">FORGE</div>
+      <div class="landing-name">Comprehensive Transmission Cost Calculator</div>
+      <div class="landing-tagline">Full-cost benefit-cost analysis for transmission projects</div>
+      <div class="landing-buttons">
+        <button type="button" class="landing-btn landing-btn-primary" id="landing-new-scenario-btn">+ New Scenario</button>
+        <button type="button" class="landing-btn landing-btn-secondary" id="landing-load-file-btn">Load from File</button>
+        <button type="button" class="landing-btn landing-btn-secondary" id="landing-tour-btn">Guided Tour</button>
+        <button type="button" class="landing-btn landing-btn-secondary" id="landing-tutorial-btn">Learn with a Case Study</button>
+        <button type="button" class="landing-btn landing-btn-disabled" id="landing-goto-scenarios-btn" disabled>Go to Scenarios</button>
+      </div>
+    </div>
+
+    <script>window.FORGE = {};</script>
+    <script>window._tourPage = 'home';</script>
+    <script src="/static/scenario-data.js"></script>
+    <script src="/static/tour-content.js"></script>
+    <script src="/static/tour.js"></script>
+    <script src="/static/assistant.js"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('landing-new-scenario-btn').addEventListener('click', function() {
+          window.location.href = '/app/workspace?new=1';
+        });
+        document.getElementById('landing-load-file-btn').addEventListener('click', function() {
+          window.location.href = '/app/scenarios-manager?upload=1';
+        });
+        document.getElementById('landing-tour-btn').addEventListener('click', function() {
+          if (typeof startFullTour === 'function') startFullTour();
+        });
+        document.getElementById('landing-tutorial-btn').addEventListener('click', function() {
+          window.location.href = '/app/workspace?tutorial=sunzia';
+        });
+        document.getElementById('landing-goto-scenarios-btn').addEventListener('click', function() {
+          if (!this.disabled) window.location.href = '/app/scenarios-manager';
+        });
+
+        if (window._authReady) {
+          window._authReady.then(async function(auth) {
+            if (!auth) return;
+            var profile = auth.profile;
+            var session = auth.session;
+
+            window.FORGE.userProfile = profile;
+            window.FORGE.currentUserId = session.user.id;
+            document.querySelectorAll('.forge-user-display').forEach(function(el) {
+              el.textContent = profile.username || '';
+            });
+
+            await loadScenariosFromDB();
+
+            var gotoBtn = document.getElementById('landing-goto-scenarios-btn');
+            if (window.FORGE.sessionScenarios.length > 0 && gotoBtn) {
+              gotoBtn.disabled = false;
+              gotoBtn.classList.remove('landing-btn-disabled');
+              gotoBtn.classList.add('landing-btn-secondary');
+            }
+
+            if (typeof initAssistant === 'function') initAssistant();
+
+            if (!profile.has_done_tutorial) {
+              if (typeof showWelcomeBubble === 'function') {
+                setTimeout(showWelcomeBubble, 500);
+              }
+            }
+          });
+        }
+      });
+    </script>
+  </body>
+</html>

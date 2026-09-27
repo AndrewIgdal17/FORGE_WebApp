@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>FORGE — Comprehensive Transmission Cost Calculator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      const SUPABASE_URL = 'https://fsjppprwigmuypyzpbir.supabase.co';
+      const SUPABASE_ANON_KEY = 'sb_publishable_LNsNVlF7rOtKNShrC3qbVQ_D5_Mncx1';
+      const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      _sb.auth.getSession().then(function(result) {
+        if (result.data.session) window.location.href = '/app';
+      });
+    </script>
+  </head>
+  <body>
+    <div class="marketing-page">
+      <header class="marketing-header">
+        <div class="marketing-logo">FORGE</div>
+        <a href="/login" class="marketing-login-btn" style="text-decoration:none;">Log in</a>
+      </header>
+
+      <section class="marketing-hero">
+        <h1>Full-cost benefit-cost analysis for transmission projects</h1>
+        <p class="marketing-subtitle">
+          The Comprehensive Transmission Cost Calculator covers 24 cost and benefit categories
+          across capital, operational, delay, emissions, and risk.
+        </p>
+        <div class="marketing-cta">
+          <a href="/signup" class="marketing-btn-primary" style="text-decoration:none; text-align:center;">Get Started</a>
+          <a href="/login" class="marketing-btn-secondary" style="text-decoration:none; text-align:center;">Log in</a>
+        </div>
+      </section>
+
+      <section class="marketing-section">
+        <h3>Who it's for</h3>
+        <ul>
+          <li>Utilities</li>
+          <li>ISO/RTOs</li>
+          <li>Consultants</li>
+          <li>Academics</li>
+          <li>Regulators</li>
+        </ul>
+      </section>
+
+      <section class="marketing-section">
+        <h3>What it does</h3>
+        <ul>
+          <li>24 cost and benefit categories</li>
+          <li>4 BCR perspectives (societal, ratepayer, utility, custom)</li>
+          <li>Taxonomy-driven input forms</li>
+          <li>Auditable calculations and exports</li>
+        </ul>
+      </section>
+
+      <section class="marketing-section">
+        <h3>How it works</h3>
+        <ol>
+          <li>Define your project</li>
+          <li>See live results as you edit</li>
+          <li>Compare scenarios side by side</li>
+        </ol>
+      </section>
+
+      <footer class="marketing-footer">
+        <p>Built by Andrew Igdal, Webber Energy Group, The University of Texas at Austin &amp; Dane McFarlane, Horizon Climate Group</p>
+      </footer>
+    </div>
+  </body>
+</html>

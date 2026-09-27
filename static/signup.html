@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Create Account — FORGE</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      const SUPABASE_URL = 'https://fsjppprwigmuypyzpbir.supabase.co';
+      const SUPABASE_ANON_KEY = 'sb_publishable_LNsNVlF7rOtKNShrC3qbVQ_D5_Mncx1';
+      const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      _sb.auth.getSession().then(function(result) {
+        if (result.data.session) window.location.href = '/app';
+      });
+    </script>
+  </head>
+  <body>
+    <div class="signup-page">
+      <div class="signup-header">
+        <a href="/" class="signup-logo">FORGE</a>
+        <a href="/login" class="signup-login-link">Log in</a>
+      </div>
+      <div class="signup-card">
+        <div class="signup-title">Create Your Account</div>
+        <div id="signup-error" style="display:none; padding:0.5rem 0.75rem; margin-bottom:1rem; background:#fee; color:#c00; border-radius:6px; font-size:0.85rem;"></div>
+        <div id="signup-message" style="display:none; padding:0.5rem 0.75rem; margin-bottom:1rem; background:#efe; color:#060; border-radius:6px; font-size:0.85rem;"></div>
+        <form id="signup-form" onsubmit="return false;" style="display:flex; flex-direction:column; gap:0.75rem;">
+          <input id="signup-email" type="email" placeholder="Email *" required style="padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;" />
+          <input id="signup-password" type="password" placeholder="Password *" required minlength="6" style="padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;" />
+          <input id="signup-password-confirm" type="password" placeholder="Confirm password *" required minlength="6" style="padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;" />
+          <hr style="border:none; border-top:1px solid #eee; margin:0.25rem 0;" />
+          <input id="signup-username" type="text" placeholder="Username *" required maxlength="40" style="padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;" />
+          <div style="display:flex; gap:0.5rem;">
+            <input id="signup-first-name" type="text" placeholder="First name (optional)" maxlength="60" style="flex:1; padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;" />
+            <input id="signup-last-name" type="text" placeholder="Last name (optional)" maxlength="60" style="flex:1; padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;" />
+          </div>
+          <input id="signup-org" type="text" placeholder="Organization (optional)" maxlength="120" style="padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;" />
+          <select id="signup-org-type" required style="padding:0.6rem 0.75rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem; color:#333; background:#fff;">
+            <option value="" disabled selected>User type *</option>
+            <option value="utility">Utility</option>
+            <option value="iso_rto">ISO / RTO</option>
+            <option value="consultant">Consultant</option>
+            <option value="academic">Academic</option>
+            <option value="government">Government</option>
+            <option value="other">Other</option>
+          </select>
+          <button type="button" id="signup-submit-btn" style="padding:0.65rem; background:#2563eb; color:#fff; border:none; border-radius:6px; font-size:0.95rem; font-weight:600; cursor:pointer; margin-top:0.25rem;">Create Account</button>
+        </form>
+        <div style="text-align:center; margin-top:1rem; font-size:0.85rem; color:#666;">
+          Already have an account? <a href="/login" style="color:#2563eb; font-weight:600; text-decoration:none;">Log in</a>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    (function() {
+      var errEl = document.getElementById('signup-error');
+      var msgEl = document.getElementById('signup-message');
+      var form = document.getElementById('signup-form');
+
+      function showError(msg) { errEl.textContent = msg; errEl.style.display = 'block'; msgEl.style.display = 'none'; }
+      function showMsg(msg) { msgEl.textContent = msg; msgEl.style.display = 'block'; errEl.style.display = 'none'; }
+
+      document.getElementById('signup-submit-btn').addEventListener('click', async function() {
+        errEl.style.display = 'none';
+        msgEl.style.display = 'none';
+
+        var email = document.getElementById('signup-email').value.trim();
+        var password = document.getElementById('signup-password').value;
+        var passwordConfirm = document.getElementById('signup-password-confirm').value;
+        var username = document.getElementById('signup-username').value.trim();
+        var orgType = document.getElementById('signup-org-type').value;
+
+        if (!email) { showError('Email is required.'); return; }
+        if (password.length < 6) { showError('Password must be at least 6 characters.'); return; }
+        if (password !== passwordConfirm) { showError('Passwords do not match.'); return; }
+        if (!username) { showError('Username is required.'); return; }
+        if (!orgType) { showError('User type is required.'); return; }
+
+        var signUpResult = await _sb.auth.signUp({ email: email, password: password });
+        if (signUpResult.error) { showError(signUpResult.error.message); return; }
+
+        var session = signUpResult.data.session;
+        if (!session) {
+          showMsg('Check your email for a confirmation link. Once confirmed, log in at the main page.');
+          form.querySelectorAll('input, select, button').forEach(function(el) { el.disabled = true; });
+          return;
+        }
+
+        var updates = {
+          username: username,
+          first_name: document.getElementById('signup-first-name').value.trim() || null,
+          last_name: document.getElementById('signup-last-name').value.trim() || null,
+          org: document.getElementById('signup-org').value.trim() || null,
+          org_type: orgType
+        };
+        var profileResult = await _sb.from('profiles').update(updates).eq('id', session.user.id);
+        if (profileResult.error) {
+          var msg = profileResult.error.message.includes('unique') ? 'That username is already taken.' : profileResult.error.message;
+          showError(msg);
+          return;
+        }
+
+        window.location.href = '/app';
+      });
+    })();
+    </script>
+  </body>
+</html>

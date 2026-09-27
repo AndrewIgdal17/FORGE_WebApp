@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>FORGE — Scenario Manager</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/static/styles.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      const SUPABASE_URL = 'https://fsjppprwigmuypyzpbir.supabase.co';
+      const SUPABASE_ANON_KEY = 'sb_publishable_LNsNVlF7rOtKNShrC3qbVQ_D5_Mncx1';
+      const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      function _getAuthToken() {
+        return _sb.auth.getSession().then(function(r) { return r.data.session ? r.data.session.access_token : null; });
+      }
+      window._sb = _sb;
+      window._getAuthToken = _getAuthToken;
+    </script>
+    <script type="speculationrules">
+    {
+      "prerender": [
+        { "urls": ["/app", "/app/workspace"], "eagerness": "moderate" }
+      ]
+    }
+    </script>
+    <link rel="prefetch" href="/app">
+    <link rel="prefetch" href="/app/workspace">
+  </head>
+  <body>
+    <script>
+    (function() {
+      window._authReady = _sb.auth.getSession().then(async function(result) {
+        var session = result.data.session;
+        if (!session) { window.location.href = '/'; return null; }
+        var profileResult = await _sb.from('profiles').select('*').eq('id', session.user.id).single();
+        if (profileResult.error || !(profileResult.data && profileResult.data.username)) {
+          window.location.href = '/login';
+          return null;
+        }
+        return { profile: profileResult.data, session: session };
+      });
+    })();
+    </script>
+
+    <nav class="app-top-nav">
+      <a href="/app" class="app-top-nav-logo">FORGE</a>
+      <div class="app-top-nav-links">
+        <a href="/app" class="app-top-nav-link" data-nav="home">Home</a>
+        <a href="/app/workspace" class="app-top-nav-link" data-nav="workspace">Workspace</a>
+        <a href="/app/scenarios-manager" class="app-top-nav-link active" data-nav="scenarios">Scenarios</a>
+      </div>
+      <div class="app-top-nav-user">
+        <span class="forge-user-display"></span>
+        <button type="button" class="app-top-nav-logout" onclick="_sb.auth.signOut().then(function(){window.location.href='/';})">Log out</button>
+      </div>
+    </nav>
+
+    <div id="scenarios-manager-main" style="position:relative;">
+      <button type="button" class="tour-help-btn" onclick="startPageTour()" title="Page tour" style="position:absolute;top:1rem;right:1rem;">?</button>
+      <div class="pill-tabs" id="scenario-subtabs">
+        <button type="button" class="pill-tab active" data-scenario-tab="manage">Manage</button>
+        <button type="button" class="pill-tab" data-scenario-tab="compare">Compare</button>
+        <button type="button" class="pill-tab" data-scenario-tab="what-if">What-If</button>
+      </div>
+
+      <!-- Manage subtab -->
+      <div class="scenario-subtab-content active" id="scenario-subtab-manage">
+        <div class="scenario-toolbar">
+          <button type="button" class="btn btn-primary" id="new-scenario-btn">+ New Scenario</button>
+          <button type="button" class="btn btn-secondary" id="scenario-upload-btn">Load from file</button>
+          <input type="file" id="scenario-file-input" accept=".forge,.csv" multiple style="display:none;" />
+        </div>
+        <div class="scenario-list" id="scenario-list">
+          <div class="scenario-empty">No scenarios yet.</div>
+        </div>
+      </div>
+
+      <!-- Compare subtab -->
+      <div class="scenario-subtab-content" id="scenario-subtab-compare">
+        <div id="compare-scenario-selector"></div>
+        <div class="comparison-section" id="comparison-section">
+          <h3 style="margin: 0 0 var(--space-sm);">Compare Selected Scenarios</h3>
+          <div class="compare-toolbar">
+            <button type="button" id="compare-baseline-btn" class="btn btn-secondary btn-sm">Compare to Baseline ▾</button>
+            <span class="compare-delta-info" data-tooltip="Δ = scenario − baseline. Positive means higher (more expensive for costs, better for benefits).">ⓘ</span>
+            <div class="copy-table-split" style="position:relative;display:inline-flex;">
+              <button type="button" id="copy-table-btn" class="btn btn-secondary btn-sm" style="border-radius:var(--radius-md) 0 0 var(--radius-md);">Copy Table</button>
+              <button type="button" id="copy-table-drop" class="btn btn-secondary btn-sm" style="border-radius:0 var(--radius-md) var(--radius-md) 0;padding-left:0.3rem;padding-right:0.3rem;border-left:1px solid var(--color-border);">▾</button>
+              <div id="copy-table-menu" class="split-save-menu" style="display:none;min-width:160px;">
+                <div class="split-menu-item" data-copy-action="current">Copy current view</div>
+                <div class="split-menu-item" data-copy-action="all">Copy all columns</div>
+              </div>
+            </div>
+            <button type="button" id="export-png-btn" class="btn btn-secondary btn-sm">Export to PNG</button>
+            <label class="cmp-show-delta-label" style="margin-left: auto;">
+              <input type="checkbox" id="cmp-auto-sort-columns" />
+              Auto-sort Columns
+            </label>
+          </div>
+          <p id="cmp-delta-hint" class="cmp-delta-hint" style="display: none;"></p>
+          <div id="comparison-table-container"></div>
+        </div>
+      </div>
+
+      <!-- What-If subtab -->
+      <div class="scenario-subtab-content" id="scenario-subtab-what-if">
+        <div style="padding: 2rem; max-width: 40rem;">
+          <h2 style="margin: 0 0 0.75rem;">Design Comparison</h2>
+          <p style="color: rgba(0,0,0,0.55); line-height: 1.5; font-size: 0.9rem;">
+            Design comparison calculators are available in the Workspace where you can run live calculations.
+          </p>
+          <a href="/app/workspace" style="display:inline-block; margin-top:1rem; padding:0.5rem 1.25rem; background:#2563eb; color:#fff; text-decoration:none; border-radius:6px; font-size:0.9rem; font-weight:600;">Open Workspace</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom Modal Dialog -->
+    <div id="modal-overlay" class="modal-overlay">
+      <div class="modal-dialog">
+        <div class="modal-title" id="modal-title">Confirm</div>
+        <div class="modal-message" id="modal-message">Are you sure?</div>
+        <div class="modal-buttons">
+          <button type="button" class="btn btn-secondary" id="modal-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary" id="modal-confirm">Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <script>window.FORGE = {};</script>
+    <script>window._tourPage = 'scenarios';</script>
+    <script src="/static/configs.js"></script>
+    <script src="/static/utils.js"></script>
+    <script src="/static/scenario-data.js"></script>
+    <script src="/static/scenario-ui.js"></script>
+    <script src="/static/comparison.js"></script>
+    <script src="/static/tour-content.js"></script>
+    <script src="/static/tour.js"></script>
+    <script src="/static/assistant.js"></script>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        var C = window.FORGE;
+        C.sessionScenarios = [];
+        C.comparisonScenarioIds = new Set();
+        C.comparisonColumns = ['bcr_societal', 'grand_total_pv', 'total_capital_pv', 'total_benefits_pv'];
+        C.comparisonBaselineId = null;
+        C.showDeltaVsBaseline = false;
+        C.comparisonDeltaDisplayMode = 'values_plus_delta';
+        C.showComparisonPercentDelta = false;
+        C.comparisonAutoSort = false;
+
+        // Scenario subtab switching
+        var subtabButtons = document.querySelectorAll('#scenario-subtabs .pill-tab');
+        var subtabContents = document.querySelectorAll('.scenario-subtab-content');
+        subtabButtons.forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            subtabButtons.forEach(function(b) { b.classList.remove('active'); });
+            subtabContents.forEach(function(c) { c.classList.remove('active'); });
+            btn.classList.add('active');
+            var tabId = 'scenario-subtab-' + btn.dataset.scenarioTab;
+            var content = document.getElementById(tabId);
+            if (content) content.classList.add('active');
+            if (btn.dataset.scenarioTab === 'compare' && typeof renderCompareSelector === 'function') {
+              renderCompareSelector();
+            }
+          });
+        });
+
+        // Modal dialog (showModal/hideModal from utils.js)
+        var modalOverlay = document.getElementById('modal-overlay');
+        if (modalOverlay) {
+          modalOverlay.addEventListener('click', function(e) {
+            if (e.target === modalOverlay && typeof hideModal === 'function') hideModal();
+          });
+        }
+
+        // Manage toolbar — page navigation for actions that live in workspace
+        var newScenarioBtn = document.getElementById('new-scenario-btn');
+        if (newScenarioBtn) {
+          newScenarioBtn.addEventListener('click', function() {
+            window.location.href = '/app/workspace?new=1';
+          });
+        }
+        // Upload handlers
+        var uploadBtn = document.getElementById('scenario-upload-btn');
+        var fileInput = document.getElementById('scenario-file-input');
+        if (uploadBtn && fileInput) {
+          uploadBtn.addEventListener('click', function() { fileInput.click(); });
+          fileInput.addEventListener('change', function(e) {
+            var files = Array.from(e.target.files);
+            if (files.length === 0) return;
+            files.sort(function(a, b) {
+              return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+            });
+            var i = 0;
+            function loadNext() {
+              if (i >= files.length) return;
+              var file = files[i++];
+              var reader = new FileReader();
+              reader.onload = function(ev) {
+                var text = ev.target.result;
+                if (file.name.endsWith('.forge')) {
+                  loadForgeFile(text, file.name);
+                } else if (file.name.endsWith('.csv')) {
+                  loadCsvFile(text, file.name);
+                }
+                loadNext();
+              };
+              reader.readAsText(file);
+            }
+            loadNext();
+            e.target.value = '';
+          });
+        }
+
+        // Comparison toolbar (comparison.js exports initComparisonToolbar; does not self-init)
+        if (typeof initComparisonToolbar === 'function') initComparisonToolbar();
+
+        // Delta info tooltip
+        var deltaInfo = document.querySelector('.compare-delta-info');
+        if (deltaInfo) {
+          var tipText = deltaInfo.getAttribute('data-tooltip');
+          deltaInfo.addEventListener('mouseenter', function() {
+            if (deltaInfo.querySelector('.help-tooltip')) return;
+            var tip = document.createElement('div');
+            tip.className = 'help-tooltip';
+            tip.textContent = tipText;
+            deltaInfo.appendChild(tip);
+          });
+          deltaInfo.addEventListener('mouseleave', function() {
+            var tip = deltaInfo.querySelector('.help-tooltip');
+            if (tip) tip.remove();
+          });
+        }
+
+        // Copy Table dropdown
+        var copyTableDrop = document.getElementById('copy-table-drop');
+        var copyTableMenu = document.getElementById('copy-table-menu');
+        if (copyTableDrop && copyTableMenu) {
+          copyTableDrop.addEventListener('click', function(e) {
+            e.stopPropagation();
+            copyTableMenu.style.display = copyTableMenu.style.display === 'none' ? 'block' : 'none';
+          });
+          document.addEventListener('click', function(e) {
+            if (!copyTableMenu.contains(e.target) && e.target !== copyTableDrop) {
+              copyTableMenu.style.display = 'none';
+            }
+          });
+          copyTableMenu.addEventListener('click', function(e) {
+            var item = e.target.closest('.split-menu-item');
+            if (!item) return;
+            copyTableMenu.style.display = 'none';
+            if (item.dataset.copyAction === 'current') {
+              document.getElementById('copy-table-btn').click();
+            } else if (item.dataset.copyAction === 'all') {
+              copyAllColumns();
+            }
+          });
+        }
+
+        function copyAllColumns() {
+          var selectedScenarios = C.sessionScenarios.filter(function(s) { return C.comparisonScenarioIds.has(s.id); });
+          if (selectedScenarios.length === 0) { alert('No scenarios selected.'); return; }
+          var allKeys = [];
+          COMPARISON_METRICS.forEach(function(g) {
+            g.metrics.forEach(function(m) { allKeys.push(m.key); });
+          });
+          var headers = ['Scenario'].concat(allKeys.map(function(key) { return comparisonMetricLabel(key); }));
+          var rows = [];
+          selectedScenarios.forEach(function(s) {
+            var row = [s.customName];
+            allKeys.forEach(function(key) {
+              var cfg = getMetricConfig(key);
+              if (!cfg) { row.push(''); return; }
+              var val = getMetricValue(s, key);
+              row.push(typeof formatMetricValue === 'function' ? formatMetricValue(val, cfg.format) : (val != null ? String(val) : ''));
+            });
+            rows.push(row);
+          });
+          var tsv = [headers.join('\t')].concat(rows.map(function(r) { return r.join('\t'); })).join('\n');
+          navigator.clipboard.writeText(tsv).then(function() {
+            var btn = document.getElementById('copy-table-btn');
+            var orig = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(function() { btn.textContent = orig; }, 1500);
+          });
+        }
+
+        // Copy comparison table to clipboard
+        var copyTableBtn = document.getElementById('copy-table-btn');
+        if (copyTableBtn) {
+          copyTableBtn.addEventListener('click', function() {
+            var selectedScenarios = C.sessionScenarios.filter(function(s) { return C.comparisonScenarioIds.has(s.id); });
+            if (selectedScenarios.length === 0 || C.comparisonColumns.length === 0) {
+              alert('No scenarios or columns selected for comparison.');
+              return;
+            }
+            var baselineScenario = C.sessionScenarios.find(function(s) {
+              return s.id === C.comparisonBaselineId && C.comparisonScenarioIds.has(s.id);
+            }) || null;
+            var hasDelta = !!(C.showDeltaVsBaseline && baselineScenario);
+            var hasPercent = hasDelta && C.showComparisonPercentDelta;
+
+            var headers = ['Scenario'];
+            C.comparisonColumns.forEach(function(key) { headers.push(comparisonMetricLabel(key)); });
+
+            var rows = [];
+            selectedScenarios.forEach(function(s) {
+              var isBase = baselineScenario && s.id === baselineScenario.id;
+              var nameCell = s.customName;
+              if (hasDelta && isBase) nameCell += ' (Baseline)';
+
+              var valCells = [nameCell];
+              C.comparisonColumns.forEach(function(key) {
+                var cfg = getMetricConfig(key);
+                if (!cfg) { valCells.push(''); return; }
+                var parts = getDeltaDisplayParts(baselineScenario, s, key, hasPercent);
+                valCells.push(parts.absText || '');
+              });
+              rows.push(valCells);
+
+              if (hasDelta && !isBase) {
+                var deltaCells = ['Δ vs Baseline'];
+                C.comparisonColumns.forEach(function(key) {
+                  var cfg = getMetricConfig(key);
+                  if (!cfg) { deltaCells.push(''); return; }
+                  var deltaText = formatDeltaLine(baselineScenario, s, key) || '';
+                  deltaText = deltaText.replace(/^Δ\s*/, '');
+                  deltaCells.push(deltaText);
+                });
+                rows.push(deltaCells);
+              }
+
+              if (hasPercent && !isBase) {
+                var pctCells = ['% Δ vs Baseline'];
+                C.comparisonColumns.forEach(function(key) {
+                  var cfg = getMetricConfig(key);
+                  if (!cfg) { pctCells.push(''); return; }
+                  var pctText = formatPercentDeltaLine(baselineScenario, s, key) || '';
+                  var pctMatch = pctText.match(/^([+-]?\d+\.?\d*)%$/);
+                  if (pctMatch) {
+                    pctText = String(parseFloat(pctMatch[1]) / 100);
+                  }
+                  pctCells.push(pctText);
+                });
+                rows.push(pctCells);
+              }
+            });
+            var tsv = [headers.join('\t')].concat(rows.map(function(r) { return r.join('\t'); })).join('\n');
+            navigator.clipboard.writeText(tsv).then(function() {
+              var orig = copyTableBtn.textContent;
+              copyTableBtn.textContent = 'Copied!';
+              setTimeout(function() { copyTableBtn.textContent = orig; }, 1500);
+            });
+          });
+        }
+
+        // Export comparison table as PNG
+        var exportPngBtn = document.getElementById('export-png-btn');
+        if (exportPngBtn) {
+          exportPngBtn.addEventListener('click', function() {
+            var selectedScenarios = C.sessionScenarios.filter(function(s) { return C.comparisonScenarioIds.has(s.id); });
+            if (selectedScenarios.length === 0 || C.comparisonColumns.length === 0) {
+              alert('No scenarios or columns selected for comparison.');
+              return;
+            }
+            var baselineScenario = C.sessionScenarios.find(function(s) {
+              return s.id === C.comparisonBaselineId && C.comparisonScenarioIds.has(s.id);
+            }) || null;
+            var hasDelta = !!(C.showDeltaVsBaseline && baselineScenario);
+            var hasPercent = hasDelta && C.showComparisonPercentDelta;
+
+            var scale = 2;
+            var font = '13px system-ui, -apple-system, sans-serif';
+            var monoFont = '12px "SF Mono", Monaco, Consolas, monospace';
+            var deltaMonoFont = '11px "SF Mono", Monaco, Consolas, monospace';
+            var boldFont = 'bold 13px system-ui, -apple-system, sans-serif';
+            var titleFont = 'bold 16px system-ui, -apple-system, sans-serif';
+            var padX = 12;
+            var lineH = 15;
+            var headerH = 32;
+            var titleH = 36;
+            var cellPadY = 6;
+
+            var linesPerRow = 1 + (hasDelta ? 1 : 0) + (hasPercent ? 1 : 0);
+            var rowH = linesPerRow * lineH + cellPadY * 2;
+
+            var headers = ['Scenario'];
+            C.comparisonColumns.forEach(function(key) { headers.push(comparisonMetricLabel(key)); });
+
+            var mCtx = document.createElement('canvas').getContext('2d');
+            var colWidths = headers.map(function(h, i) {
+              mCtx.font = boldFont;
+              var w = mCtx.measureText(h).width;
+              selectedScenarios.forEach(function(s) {
+                if (i === 0) {
+                  mCtx.font = font;
+                  var nt = s.customName;
+                  if (hasDelta && baselineScenario && s.id === baselineScenario.id) nt += ' (Baseline)';
+                  w = Math.max(w, mCtx.measureText(nt).width);
+                } else {
+                  var key = C.comparisonColumns[i - 1];
+                  var cfg = getMetricConfig(key);
+                  if (!cfg) return;
+                  var parts = getDeltaDisplayParts(baselineScenario, s, key, hasPercent);
+                  mCtx.font = monoFont;
+                  w = Math.max(w, mCtx.measureText(parts.absText || '').width);
+                  if (hasDelta) {
+                    var dline = formatDeltaLine(baselineScenario, s, key);
+                    if (dline) { mCtx.font = deltaMonoFont; w = Math.max(w, mCtx.measureText(dline).width); }
+                  }
+                  if (hasPercent) {
+                    var pline = formatPercentDeltaLine(baselineScenario, s, key);
+                    if (pline) { mCtx.font = deltaMonoFont; w = Math.max(w, mCtx.measureText(pline).width); }
+                  }
+                }
+              });
+              return w + padX * 2 + 4;
+            });
+
+            var totalW = colWidths.reduce(function(a, b) { return a + b; }, 0);
+            var totalH = titleH + headerH + selectedScenarios.length * rowH;
+
+            var canvas = document.createElement('canvas');
+            canvas.width = totalW * scale;
+            canvas.height = totalH * scale;
+            var ctx = canvas.getContext('2d');
+            ctx.scale(scale, scale);
+
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, totalW, totalH);
+
+            ctx.font = titleFont;
+            ctx.fillStyle = '#000';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Scenario Comparison', padX, titleH / 2);
+
+            var y = titleH;
+            ctx.fillStyle = '#f8f9fa';
+            ctx.fillRect(0, y, totalW, headerH);
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, y + headerH); ctx.lineTo(totalW, y + headerH); ctx.stroke();
+            ctx.font = boldFont;
+            ctx.fillStyle = '#000';
+            var x = 0;
+            headers.forEach(function(h, i) {
+              ctx.textAlign = i === 0 ? 'left' : 'right';
+              var tx = i === 0 ? x + padX : x + colWidths[i] - padX;
+              ctx.fillText(h, tx, y + headerH / 2);
+              x += colWidths[i];
+            });
+
+            y += headerH;
+            selectedScenarios.forEach(function(s, ri) {
+              if (ri % 2 === 1) {
+                ctx.fillStyle = 'rgba(0,0,0,0.02)';
+                ctx.fillRect(0, y, totalW, rowH);
+              }
+              ctx.strokeStyle = '#eee';
+              ctx.lineWidth = 1;
+              ctx.beginPath(); ctx.moveTo(0, y + rowH); ctx.lineTo(totalW, y + rowH); ctx.stroke();
+
+              x = 0;
+              ctx.font = font;
+              ctx.fillStyle = '#000';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              var nameDraw = s.customName;
+              if (hasDelta && baselineScenario && s.id === baselineScenario.id) nameDraw += ' (Baseline)';
+              ctx.fillText(nameDraw, x + padX, y + rowH / 2);
+              x += colWidths[0];
+
+              var isBase = baselineScenario && s.id === baselineScenario.id;
+
+              for (var ci = 0; ci < C.comparisonColumns.length; ci++) {
+                var key = C.comparisonColumns[ci];
+                var cfg = getMetricConfig(key);
+                var colRight = x + colWidths[ci + 1] - padX;
+                ctx.textAlign = 'right';
+                if (!cfg) { x += colWidths[ci + 1]; continue; }
+
+                var parts = getDeltaDisplayParts(baselineScenario, s, key, hasPercent);
+                var lineY = y + cellPadY + lineH / 2;
+
+                ctx.font = monoFont;
+                ctx.fillStyle = '#000';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(parts.absText || '', colRight, lineY);
+                lineY += lineH;
+
+                if (hasDelta) {
+                  if (!isBase) {
+                    var dline = formatDeltaLine(baselineScenario, s, key);
+                    if (dline) {
+                      ctx.font = deltaMonoFont;
+                      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+                      ctx.fillText(dline, colRight, lineY);
+                    }
+                  }
+                  lineY += lineH;
+                }
+
+                if (hasPercent) {
+                  if (!isBase) {
+                    var pline = formatPercentDeltaLine(baselineScenario, s, key);
+                    if (pline) {
+                      ctx.font = deltaMonoFont;
+                      ctx.fillStyle = 'rgba(0,0,0,0.38)';
+                      ctx.fillText(pline, colRight, lineY);
+                    }
+                  }
+                }
+
+                x += colWidths[ci + 1];
+              }
+              y += rowH;
+            });
+
+            canvas.toBlob(function(blob) {
+              var a = document.createElement('a');
+              a.href = URL.createObjectURL(blob);
+              a.download = 'scenario_comparison.png';
+              a.click();
+              URL.revokeObjectURL(a.href);
+            });
+          });
+        }
+
+        // What-If collapsible header
+        var cfHeader = document.getElementById('cf-calc-lineloss-header');
+        if (cfHeader) {
+          cfHeader.addEventListener('click', function() {
+            this.classList.toggle('expanded');
+            var body = document.getElementById('cf-calc-lineloss-body');
+            if (body) body.classList.toggle('expanded');
+          });
+        }
+
+        // Auth + data load
+        if (window._authReady) {
+          window._authReady.then(async function(auth) {
+            if (!auth) return;
+            var profile = auth.profile;
+            var session = auth.session;
+
+            C.userProfile = profile;
+            C.currentUserId = session.user.id;
+            document.querySelectorAll('.forge-user-display').forEach(function(el) {
+              el.textContent = profile.username || '';
+            });
+
+            await loadScenariosFromDB();
+            if (typeof renderScenarioList === 'function') renderScenarioList();
+            if (typeof renderCompareSelector === 'function') renderCompareSelector();
+
+            if (typeof initAssistant === 'function') initAssistant();
+
+            var params = new URLSearchParams(window.location.search);
+            if (params.get('upload') === '1') {
+              var triggerUpload = document.getElementById('scenario-upload-btn');
+              if (triggerUpload) triggerUpload.click();
+            }
+          });
+        }
+      });
+    </script>
+  </body>
+</html>

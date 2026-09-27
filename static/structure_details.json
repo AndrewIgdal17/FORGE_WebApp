@@ -1,0 +1,22 @@
+{
+  "Overhead": {
+    "structures_per_mile_forested": 10,
+    "structures_per_mile_scrubbed_flat": 6,
+    "structures_per_mile_wetland": 6,
+    "structures_per_mile_farmland": 6,
+    "structures_per_mile_desert_barren": 6,
+    "structures_per_mile_urban": 10,
+    "structures_per_mile_rolling_hills": 8,
+    "structures_per_mile_mountain": 12,
+    "cost_per_structure_per_year": 1000
+  },
+  "Underground direct-buried": {
+    "variable_cost_per_mile_year": 0
+  },
+  "Underground tunnel": {
+    "variable_cost_per_mile_year": 0
+  },
+  "Subsea": {
+    "variable_cost_per_mile_year": 0
+  }
+}

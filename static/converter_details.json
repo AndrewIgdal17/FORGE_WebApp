@@ -1,0 +1,152 @@
+{
+  "Overhead/DC/500MW/Standard Aluminum Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 598
+  },
+  "Overhead/DC/500MW/Standard Aluminum Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 598
+  },
+  "Overhead/DC/500MW/Advanced Aluminum Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 595
+  },
+  "Overhead/DC/500MW/Advanced Aluminum Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 595
+  },
+  "Overhead/DC/1500MW/Standard Aluminum Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 1195
+  },
+  "Overhead/DC/1500MW/Standard Aluminum Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 1195
+  },
+  "Overhead/DC/1500MW/Advanced Aluminum Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 1189
+  },
+  "Overhead/DC/1500MW/Advanced Aluminum Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 1189
+  },
+  "Overhead/DC/2000MW/Standard Aluminum Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 1195
+  },
+  "Overhead/DC/2000MW/Standard Aluminum Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 1195
+  },
+  "Overhead/DC/2000MW/Advanced Aluminum Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 1189
+  },
+  "Overhead/DC/2000MW/Advanced Aluminum Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 1189
+  },
+  "Overhead/DC/2400MW/Standard Aluminum Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 1195
+  },
+  "Overhead/DC/2400MW/Standard Aluminum Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 1195
+  },
+  "Overhead/DC/2400MW/Advanced Aluminum Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 1189
+  },
+  "Overhead/DC/2400MW/Advanced Aluminum Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 1189
+  },
+  "Overhead/DC/6000MW/Standard Aluminum Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 1793
+  },
+  "Overhead/DC/6000MW/Standard Aluminum Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 1793
+  },
+  "Overhead/DC/6000MW/Advanced Aluminum Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 1851
+  },
+  "Overhead/DC/6000MW/Advanced Aluminum Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 1851
+  },
+  "Underground direct-buried/DC/500MW/Underground Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 667
+  },
+  "Underground direct-buried/DC/500MW/Underground Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 667
+  },
+  "Underground direct-buried/DC/1500MW/Underground Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 2225
+  },
+  "Underground direct-buried/DC/1500MW/Underground Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 2225
+  },
+  "Underground direct-buried/DC/2000MW/Underground Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 2225
+  },
+  "Underground direct-buried/DC/2000MW/Underground Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 2225
+  },
+  "Underground direct-buried/DC/2400MW/Underground Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 4384
+  },
+  "Underground direct-buried/DC/2400MW/Underground Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 4384
+  },
+  "Underground direct-buried/DC/6000MW/Underground Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 4384
+  },
+  "Underground direct-buried/DC/6000MW/Underground Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 4384
+  },
+  "Underground tunnel/DC/500MW/Underground Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 667
+  },
+  "Underground tunnel/DC/500MW/Underground Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 667
+  },
+  "Underground tunnel/DC/1500MW/Underground Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 2225
+  },
+  "Underground tunnel/DC/1500MW/Underground Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 2225
+  },
+  "Underground tunnel/DC/2000MW/Underground Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 2225
+  },
+  "Underground tunnel/DC/2000MW/Underground Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 2225
+  },
+  "Underground tunnel/DC/2400MW/Underground Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 4384
+  },
+  "Underground tunnel/DC/2400MW/Underground Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 4384
+  },
+  "Underground tunnel/DC/6000MW/Underground Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 4384
+  },
+  "Underground tunnel/DC/6000MW/Underground Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 4384
+  },
+  "Subsea/DC/500MW/Subsea Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 667
+  },
+  "Subsea/DC/500MW/Subsea Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 667
+  },
+  "Subsea/DC/1500MW/Subsea Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 2225
+  },
+  "Subsea/DC/1500MW/Subsea Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 2225
+  },
+  "Subsea/DC/2000MW/Subsea Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 2225
+  },
+  "Subsea/DC/2000MW/Subsea Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 2225
+  },
+  "Subsea/DC/2400MW/Subsea Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 4384
+  },
+  "Subsea/DC/2400MW/Subsea Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 4384
+  },
+  "Subsea/DC/6000MW/Subsea Copper Conductor/LCC Converter": {
+    "converter_om_cost_per_mile_year": 4384
+  },
+  "Subsea/DC/6000MW/Subsea Copper Conductor/VSC Converter": {
+    "converter_om_cost_per_mile_year": 4384
+  }
+}
