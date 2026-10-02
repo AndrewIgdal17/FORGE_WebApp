@@ -1177,7 +1177,8 @@ function updateDelayCostPanel(results) {
   const fmt = v => '$' + Math.round(v).toLocaleString();
 
   const base = byId['base_delay'];
-  const delayYears = parseInt(document.querySelector('[data-path*="delay_years"]')?.value) || 4;
+  const parsedDelayYears = parseInt(document.querySelector('[data-path*="delay_years"]')?.value);
+  const delayYears = Number.isFinite(parsedDelayYears) ? parsedDelayYears : null;
 
   if (base) {
     panel.querySelector('[data-delay-cost="base_nominal"]').textContent = fmt(base.value_nominal);
@@ -1185,7 +1186,7 @@ function updateDelayCostPanel(results) {
     const baseAnnualEl = panel.querySelector('[data-delay-cost="base_annual"]');
     if (baseAnnualEl) {
       const nominal = base.value_nominal || 0;
-      baseAnnualEl.textContent = fmt(nominal / delayYears);
+      baseAnnualEl.textContent = delayYears != null ? fmt(nominal / delayYears) : '\u2014';
     }
   }
   let baseCtx = document.querySelector('#dcp-base .period-context');
@@ -1195,7 +1196,7 @@ function updateDelayCostPanel(results) {
     baseCtx.style.cssText = 'font-size:0.75rem;color:#6b7280;margin-top:-0.25rem;padding-left:0;';
     document.querySelector('#dcp-base')?.appendChild(baseCtx);
   }
-  baseCtx.textContent = `(${delayYears} yr \u00d7 annual)`;
+  baseCtx.textContent = delayYears != null ? `(${delayYears} yr \u00d7 annual)` : '\u2014';
 
   const cong = byId['congestion_delay'];
   if (cong) {
@@ -1248,11 +1249,20 @@ function updateEmissionsImpactPanel(results) {
   const initialShares = readFuelShares('initial');
   const preCodRates = readFuelRates('rate_pre_cod');
   const postCodRates = readFuelRates('rate_post_cod');
-  const lifetime = parseFloat((document.querySelector('[data-path="01_project_technical_details.project.project_lifetime"]')?.value || '50').replace(/,/g, '')) || 50;
+  const lifetimeRaw = document.querySelector('[data-path="01_project_technical_details.project.project_lifetime"]')?.value;
+  const parsedLifetime = lifetimeRaw ? parseFloat(lifetimeRaw.replace(/,/g, '')) : NaN;
+  const lifetime = Number.isFinite(parsedLifetime) ? parsedLifetime : null;
 
   const setVal = (key, val) => { const el = panel.querySelector(`[data-emis-cost="${key}"]`); if (el) el.textContent = val; };
 
   ['co2', 'sox', 'nox'].forEach(p => {
+    if (lifetime == null) {
+      setVal(`${p}_project`, '\u2014');
+      setVal(`${p}_counterfact`, '\u2014');
+      setVal(`${p}_avoided`, '\u2014');
+      return;
+    }
+
     const intensities = {};
     C.FUEL_SOURCES.forEach(f => {
       const inp = document.querySelector(`[data-path*="${p}_intensity_kg_per_mwh.${f}"]`);
@@ -1488,6 +1498,13 @@ function renderFORGEResults(results) {
   metaLine.className = 'results-metadata-line';
   const parts = [];
   if (results.scenario_id) parts.push('Scenario: ' + results.scenario_id);
+  const provenance = results.provenance;
+  if (provenance) {
+    const shortDefaultsId = provenance.defaults_id
+      ? provenance.defaults_id.replace(/^sha256:/, '').slice(0, 12)
+      : '\u2014';
+    parts.push('Calculator v' + (provenance.version != null ? provenance.version : '\u2014') + ' \u00b7 ' + shortDefaultsId);
+  }
   const metaText = document.createElement('span');
   metaText.textContent = parts.join(' | ');
   metaLine.appendChild(metaText);

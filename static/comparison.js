@@ -533,6 +533,18 @@ function renderComparisonTable() {
       badge.textContent = 'Baseline';
       nameTd.appendChild(badge);
     }
+    // Mark this scenario's column if its results were produced by a
+    // different calculator defaults snapshot than the one currently loaded
+    // (`C.defaultsId`) — the comparison numbers may not be apples-to-apples.
+    const scenarioDefaultsId = scenario.results?.provenance?.defaults_id;
+    if (scenarioDefaultsId && C.defaultsId && scenarioDefaultsId !== C.defaultsId) {
+      const staleBadge = document.createElement('span');
+      staleBadge.className = 'stale-defaults-badge';
+      staleBadge.textContent = '\u26a0 Different defaults';
+      staleBadge.title = 'This scenario\u2019s results were calculated against a different calculator defaults snapshot than the one currently loaded (' +
+        scenarioDefaultsId + ' vs ' + C.defaultsId + ').';
+      nameTd.appendChild(staleBadge);
+    }
     row.appendChild(nameTd);
 
     C.comparisonColumns.forEach((colKey, colIdx) => {

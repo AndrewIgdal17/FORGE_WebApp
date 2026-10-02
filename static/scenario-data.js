@@ -355,18 +355,14 @@
       );
     }
 
-    const defaults = C.forgeJsonData;
-    const slimInputs = extractScenarioInputs(fullInputs);
-    const overrides = defaults ? computeOverrides(fullInputs, defaults) : {};
-
-    const data = {
-      version: '2.0',
-      customName: scenario.customName,
-      ref_version: C.refVersion || 'v1.0',
-      inputs: slimInputs,
-      overrides: overrides,
-      results: scenario.results
-    };
+    // Single source of truth: the .forge file records only what differs
+    // from the deployed calculator's defaults (`C.defaults`), plus which
+    // calculator (`C.calculatorInfo`) and which defaults snapshot
+    // (`C.defaultsId`) produced that diff. Re-deriving `inputs`/`overrides`
+    // against a locally-cached reference (`C.forgeJsonData`) is the retired
+    // v2.0 model.
+    const changes = C.diffChanges(C.defaults, fullInputs);
+    const data = C.forgeDocument(scenario.customName, C.calculatorInfo, C.defaultsId, changes, scenario.results);
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -398,7 +394,6 @@
     csv += '[METADATA]\n';
     csv += 'version,2.0\n';
     csv += 'customName,' + csvEscape(scenario.customName || '') + '\n';
-    csv += 'ref_version,' + csvEscape(C.refVersion || 'v1.0') + '\n';
     csv += 'timestamp,' + (scenario.metadata?.timestamp || new Date().toISOString()) + '\n';
     csv += '\n';
 
@@ -443,54 +438,53 @@
     URL.revokeObjectURL(url);
   }
 
-  function validateForgeFile(data) {
-    const errors = [];
-    if (!data || typeof data !== 'object') { errors.push('Invalid JSON structure'); return { valid: false, errors }; }
-    if (data.version === '2.0') {
-      if (!data.inputs || typeof data.inputs !== 'object') errors.push('Missing or invalid inputs field');
-      if (data.overrides !== undefined && typeof data.overrides !== 'object') errors.push('Overrides field must be an object');
-    } else {
-      if (!data.inputs || typeof data.inputs !== 'object') errors.push('Missing or invalid inputs field');
-      else if (!data.inputs['01_project_technical_details']) errors.push('Missing 01_project_technical_details in inputs');
+  /**
+   * Re-apply a `changes` map (dotted/bracketed paths, from `diffChanges`)
+   * onto a deep copy of `defaults`. Mirrors `setValueAtPath` but also
+   * understands the `[index]` array segments `diffChanges` emits.
+   */
+  function applyChangesToDefaults(defaults, changes) {
+    const result = JSON.parse(JSON.stringify(defaults));
+    for (const [path, value] of Object.entries(changes || {})) {
+      const segments = path.split(/\.|\[(\d+)\]\.?/).filter(s => s !== undefined && s !== '');
+      let current = result;
+      for (let i = 0; i < segments.length - 1; i++) {
+        const key = /^\d+$/.test(segments[i]) ? Number(segments[i]) : segments[i];
+        if (current[key] == null) current[key] = /^\d+$/.test(segments[i + 1]) ? [] : {};
+        current = current[key];
+      }
+      const lastKey = segments[segments.length - 1];
+      current[/^\d+$/.test(lastKey) ? Number(lastKey) : lastKey] = value;
     }
-    if (data.results && typeof data.results !== 'object') errors.push('Results field must be an object');
-    return { valid: errors.length === 0, errors };
+    return result;
   }
 
   function loadForgeFile(text, fileName) {
     try {
-      const data = JSON.parse(text);
-      const validation = validateForgeFile(data);
-      if (!validation.valid) {
-        alert('Invalid .forge file:\n' + validation.errors.join('\n'));
-        return;
-      }
+      const raw = JSON.parse(text);
+      const data = C.acceptedForge(raw);
       if (data.results && data.results.results && data.results.results.bcr) {
         data.results = data.results.results;
       }
 
-      const name = data.customName || fileName.replace('.forge', '');
-      let inputs;
+      if (!C.defaults) {
+        alert('Cannot import .forge file: reference data not loaded yet. Open the workspace first.');
+        return;
+      }
 
-      if (data.version === '2.0') {
-        const defaults = C.forgeJsonData;
-        if (!defaults) {
-          alert('Cannot import v2.0 .forge file: reference data not loaded yet. Open the workspace first.');
-          return;
-        }
-        inputs = assembleFullInputs(defaults, data.overrides || {}, data.inputs);
-        if (data.ref_version && data.ref_version !== (C.refVersion || 'v1.0')) {
-          console.info('Imported scenario built against ref ' + data.ref_version +
-            '; current is ' + (C.refVersion || 'v1.0'));
-        }
-      } else {
-        inputs = data.inputs;
+      const name = data.customName || fileName.replace('.forge', '');
+      const inputs = applyChangesToDefaults(C.defaults, data.changes);
+      if (data.defaults_id !== C.defaultsId) {
+        console.info('Imported scenario built against defaults ' + data.defaults_id +
+          '; current is ' + C.defaultsId + '. Changes re-applied onto the current defaults.');
       }
 
       addScenarioToSession(inputs, data.results || null,
-        { timestamp: data.metadata?.timestamp || new Date().toISOString(),
-          scenario_id: data.metadata?.scenario_id || '',
-          source: 'upload-forge' },
+        { timestamp: new Date().toISOString(),
+          scenario_id: '',
+          source: 'upload-forge',
+          imported_defaults_id: data.defaults_id,
+          imported_calculator: data.calculator || null },
         generateScenarioName(name));
     } catch (e) {
       alert('Failed to parse .forge file: ' + e.message);
@@ -562,10 +556,6 @@
           }
         }
         inputs = assembleFullInputs(defaults, overrides, scenarioInputs);
-        if (metadata.ref_version && metadata.ref_version !== (C.refVersion || 'v1.0')) {
-          console.info('Imported CSV built against ref ' + metadata.ref_version +
-            '; current is ' + (C.refVersion || 'v1.0'));
-        }
       } else {
         if (sections.INPUTS && sections.INPUTS.length > 1) {
           inputs = C.forgeJsonData ? JSON.parse(JSON.stringify(C.forgeJsonData)) : {};
@@ -617,13 +607,6 @@
           const [taxData, metaData] = await Promise.all([
             C.taxonomy ? Promise.resolve(C.taxonomy) : fetchTaxonomy(baseUrl),
             C.inputMetadata ? Promise.resolve(C.inputMetadata) : fetchInputMetadata(baseUrl),
-            fetchRowWidths(baseUrl),
-            fetchBuildCosts(baseUrl),
-            fetchCircuitDetails(baseUrl),
-            fetchStructureDetails(baseUrl),
-            fetchConverterDetails(baseUrl),
-            fetchConductorOm(baseUrl),
-            fetchVegetationManagement(baseUrl),
           ]);
           if (!C.taxonomy) {
             C.taxonomy = taxData;
@@ -641,8 +624,16 @@
           console.warn('Taxonomy/metadata pre-load failed, using legacy renderer:', err);
         }
       }
-      const data = await fetchFinalCombined(baseUrl);
-      renderJsonInputs(data);
+      // Single source of truth: the deployed calculator's defaults template.
+      // Replaces the old /static/*.json lookup tables and /api/final_combined.
+      const resp = await fetch(new URL("/api/defaults", baseUrl).toString());
+      if (!resp.ok) throw new Error("Failed to load defaults: " + resp.status);
+      const body = await resp.json();
+      C.defaultsId = body.calculator.defaults_id;
+      C.defaults = body.defaults;
+      C.calculatorInfo = body.calculator;
+      loadLookups(body.defaults);
+      renderJsonInputs(body.defaults);
     } catch (error) {
       const _ls = document.getElementById('load-status');
       if (_ls) { _ls.textContent = '✗ ' + error.message; _ls.style.color = '#b00020'; }
@@ -750,7 +741,6 @@
   window.computeOverrides = computeOverrides;
   window.exportAsForge = exportAsForge;
   window.exportAsCsv = exportAsCsv;
-  window.validateForgeFile = validateForgeFile;
   window.loadForgeFile = loadForgeFile;
   window.loadCsvFile = loadCsvFile;
   window.loadForgeJson = loadForgeJson;

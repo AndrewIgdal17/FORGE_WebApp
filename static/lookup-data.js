@@ -14,60 +14,29 @@ C.converterDetailsLookup = null;
 C.conductorOmLookup = null;
 C.vegetationManagementLookup = null;
 
-async function fetchRowWidths(baseUrl) {
-  if (C.rowWidthLookup) return C.rowWidthLookup;
-  const resp = await fetch(new URL("/static/row_widths.json", baseUrl).toString());
-  if (!resp.ok) throw new Error("Failed to load row_widths.json: " + resp.status);
-  C.rowWidthLookup = await resp.json();
-  return C.rowWidthLookup;
-}
+// loadLookups(defaults) populates the lookup caches above from the calculator's
+// defaults template (the `defaults` half of GET /api/defaults). No network
+// fetch is needed — the caller already has the full defaults object.
+//
+// Each calculator table is nested one level under a numbered section key, so
+// the category-keyed map lives at `defaults[section][tableKey]`, not at
+// `defaults[section]` directly (verified against `forge.get_defaults_template()`).
+// `20_project_category_row_widths` is the one exception: its per-category
+// value is a detail object (`{..., row_width_feet}`), not a bare number, so it
+// is unwrapped here to keep `getRowWidthFeet()` returning a number as before.
+function loadLookups(defaults) {
+  C.buildCostLookup = defaults["10_project_category_build_costs"]["project_categories_build_costs"];
 
-async function fetchBuildCosts(baseUrl) {
-  if (C.buildCostLookup) return C.buildCostLookup;
-  const resp = await fetch(new URL("/static/build_costs.json", baseUrl).toString());
-  if (!resp.ok) throw new Error("Failed to load build_costs.json: " + resp.status);
-  C.buildCostLookup = await resp.json();
-  return C.buildCostLookup;
-}
+  const rowWidthDetails = defaults["20_project_category_row_widths"]["project_categories_row_widths"];
+  C.rowWidthLookup = Object.fromEntries(
+    Object.entries(rowWidthDetails).map(([category, detail]) => [category, detail.row_width_feet])
+  );
 
-async function fetchCircuitDetails(baseUrl) {
-  if (C.circuitDetailsLookup) return C.circuitDetailsLookup;
-  const resp = await fetch(new URL("/static/circuit_details.json", baseUrl).toString());
-  if (!resp.ok) throw new Error("Failed to load circuit_details.json: " + resp.status);
-  C.circuitDetailsLookup = await resp.json();
-  return C.circuitDetailsLookup;
-}
-
-async function fetchStructureDetails(baseUrl) {
-  if (C.structureDetailsLookup) return C.structureDetailsLookup;
-  const resp = await fetch(new URL("/static/structure_details.json", baseUrl).toString());
-  if (!resp.ok) throw new Error("Failed to load structure_details.json: " + resp.status);
-  C.structureDetailsLookup = await resp.json();
-  return C.structureDetailsLookup;
-}
-
-async function fetchConverterDetails(baseUrl) {
-  if (C.converterDetailsLookup) return C.converterDetailsLookup;
-  const resp = await fetch(new URL("/static/converter_details.json", baseUrl).toString());
-  if (!resp.ok) throw new Error("Failed to load converter_details.json: " + resp.status);
-  C.converterDetailsLookup = await resp.json();
-  return C.converterDetailsLookup;
-}
-
-async function fetchConductorOm(baseUrl) {
-  if (C.conductorOmLookup) return C.conductorOmLookup;
-  const resp = await fetch(new URL("/static/conductor_om.json", baseUrl).toString());
-  if (!resp.ok) throw new Error("Failed to load conductor_om.json: " + resp.status);
-  C.conductorOmLookup = await resp.json();
-  return C.conductorOmLookup;
-}
-
-async function fetchVegetationManagement(baseUrl) {
-  if (C.vegetationManagementLookup) return C.vegetationManagementLookup;
-  const resp = await fetch(new URL("/static/vegetation_management.json", baseUrl).toString());
-  if (!resp.ok) throw new Error("Failed to load vegetation_management.json: " + resp.status);
-  C.vegetationManagementLookup = await resp.json();
-  return C.vegetationManagementLookup;
+  C.vegetationManagementLookup = defaults["12_project_om_vegetation_management"]["vegetation_management_om_costs"];
+  C.structureDetailsLookup = defaults["14_category_om_structures"]["project_categories_om_structures"];
+  C.converterDetailsLookup = defaults["15_category_om_converters"]["converter_om_rate"];
+  C.circuitDetailsLookup = defaults["21_project_category_circuit_and_resistance_detail"]["project_categories_circuit_and_resistance_details"];
+  C.conductorOmLookup = defaults["13_category_om_conductors"]["project_categories_om_conductors"];
 }
 
 function normalizeCT(ct) {
@@ -185,13 +154,7 @@ function buildOldCategoryString() {
 
 
   // Public API
-  window.fetchRowWidths = fetchRowWidths;
-  window.fetchBuildCosts = fetchBuildCosts;
-  window.fetchCircuitDetails = fetchCircuitDetails;
-  window.fetchStructureDetails = fetchStructureDetails;
-  window.fetchConverterDetails = fetchConverterDetails;
-  window.fetchConductorOm = fetchConductorOm;
-  window.fetchVegetationManagement = fetchVegetationManagement;
+  window.loadLookups = loadLookups;
   window.normalizeCT = normalizeCT;
   window.buildCategoryString = buildCategoryString;
   window.getRowWidthFeet = getRowWidthFeet;

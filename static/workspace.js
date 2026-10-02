@@ -8,7 +8,6 @@
       const loadStatus = document.getElementById("load-status");
 
       C.forgeJsonData = null;
-      C.refVersion = 'v1.0';
       /** Cached from GET /api/fuel_mix_presets for Fuel Mixes dropdown. */
       C.cachedFuelMixPresets = [];
 
@@ -43,33 +42,23 @@
       C.latestValidResults = null;
       C.autoCalcInFlight = false;
       C.autoCalcQueued = false;
+      /** Set on a 422 from /api/forge/calculate; cleared when the form changes. */
+      C.calculateBlocked = false;
 
       const autoCalculate = debounce(async function() {
         if (!C.activeScenarioId) return;
+        if (C.calculateBlocked) return;
+        if (!C.forgeJsonData) return;
         if (typeof hasRequiredFields === 'function' && !hasRequiredFields()) return;
         if (C.autoCalcInFlight) { C.autoCalcQueued = true; return; }
         C.autoCalcInFlight = true;
         const calcScenarioId = C.activeScenarioId;
         document.dispatchEvent(new CustomEvent('forge-calc-started'));
         try {
-          const baseUrl = C.apiBaseUrl;
-          const payload = {
-            mode: 'calculate',
-            input_mode: 'json',
-            output_mode: 'json',
-            scenario_id: C.activeScenarioId,
-            combined_data: collectJsonData()
-          };
-          const _authToken = await _getAuthToken();
-          const _calcHeaders = { 'Content-Type': 'application/json' };
-          if (_authToken) _calcHeaders['Authorization'] = 'Bearer ' + _authToken;
-          const resp = await fetch(
-            new URL('/api/forge/calculate', baseUrl).toString(),
-            { method: 'POST', headers: _calcHeaders,
-              body: JSON.stringify(payload) }
-          );
-          const json = await resp.json();
+          const result = await postCalculate(collectJsonData(), C.activeScenarioId);
           if (calcScenarioId !== C.activeScenarioId) return;
+          if (result.blocked) return;
+          const json = result.json;
           if (json.results) {
             C.latestValidResults = json.results;
             C.lastRunResults = json.results;
@@ -291,16 +280,6 @@
       }
 
 
-      async function fetchFinalCombined(baseUrl) {
-        const finalUrl = new URL("/api/final_combined", baseUrl).toString();
-        const response = await fetch(finalUrl);
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Failed to load final_combined.json: ${response.status} ${response.statusText} ${errorText}`);
-        }
-        return response.json();
-      }
-
       async function fetchTaxonomy(baseUrl) {
         const resp = await fetch(new URL("/api/taxonomy", baseUrl).toString());
         if (!resp.ok) throw new Error("Failed to load taxonomy: " + resp.status);
@@ -313,16 +292,91 @@
         return resp.json();
       }
 
-      async function fetchFuelMixPresets(baseUrl) {
-        const url = new URL("/api/fuel_mix_presets", baseUrl).toString();
-        const response = await fetch(url);
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Failed to load fuel_mix_presets: ${response.status} ${response.statusText} ${errorText}`);
-        }
-        return response.json();
+      /** Re-fetch /api/defaults after a 409 (calculator redeployed). Updates
+       * C.defaults/C.defaultsId only — does not re-render the form, so the
+       * user's current form values are kept. */
+      async function reloadCalculatorDefaults() {
+        const baseUrl = C.apiBaseUrl;
+        const resp = await fetch(new URL("/api/defaults", baseUrl).toString());
+        if (!resp.ok) throw new Error("Failed to reload defaults: " + resp.status);
+        const body = await resp.json();
+        C.defaultsId = body.calculator.defaults_id;
+        C.defaults = body.defaults;
       }
 
+      /**
+       * POST only the values that differ from the calculator defaults to
+       * /api/forge/calculate.
+       *
+       * `C.diffChanges` throws `ShapeMismatchError` (see static/changes.js)
+       * when `current`'s shape disagrees with `C.defaults` anywhere (a
+       * present value sitting where the template expects a dict/list, or a
+       * list whose length differs). That is never sent as a partial
+       * `changes` map — it blocks sending, sets C.calculateBlocked, and
+       * surfaces the offending path.
+       *
+       * On 409 (the deployed calculator's defaults changed since C.defaultsId
+       * was fetched), reloads the defaults, keeps the caller's `current` form
+       * values, recomputes the diff against the refreshed defaults, and
+       * retries once. If recomputing against the refreshed defaults itself
+       * throws `ShapeMismatchError` (the redeployed calculator's defaults no
+       * longer match the already-rendered form's shape), that retry is never
+       * sent either — the user is told to reload the workspace.
+       *
+       * On 422 (unknown/invalid input paths), sets C.calculateBlocked so
+       * neither autoCalculate nor the manual Run button will send again
+       * until the form changes, and returns `{ blocked: true, paths }`
+       * instead of throwing.
+       */
+      async function postCalculate(current, scenarioId) {
+        const baseUrl = C.apiBaseUrl;
+        const _authToken = await _getAuthToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (_authToken) headers['Authorization'] = 'Bearer ' + _authToken;
+        const endpoint = new URL('/api/forge/calculate', baseUrl).toString();
+        const send = () => fetch(endpoint, {
+          method: 'POST', headers,
+          body: JSON.stringify({
+            defaults_id: C.defaultsId,
+            changes: C.diffChanges(C.defaults, current),
+            scenario_id: scenarioId || null,
+          }),
+        });
+
+        let resp;
+        try {
+          resp = await send();
+        } catch (err) {
+          if (!(err instanceof C.ShapeMismatchError)) throw err;
+          C.calculateBlocked = true;
+          showToast('Cannot calculate \u2014 the form doesn\u2019t match the calculator at "' + err.path + '".');
+          return { blocked: true, paths: [err.path] };
+        }
+
+        if (resp.status === 409) {
+          await reloadCalculatorDefaults();
+          try {
+            resp = await send();
+          } catch (err) {
+            if (!(err instanceof C.ShapeMismatchError)) throw err;
+            C.calculateBlocked = true;
+            showToast('The calculator changed and no longer matches this form \u2014 reload the workspace to continue.');
+            return { blocked: true, paths: [err.path], reloadRequired: true };
+          }
+          showToast('The calculator changed \u2014 recalculating with your current inputs.');
+        }
+        if (resp.status === 422) {
+          const errJson = await resp.json();
+          C.calculateBlocked = true;
+          showToast('Invalid inputs: ' + (errJson.paths || []).join(', '));
+          return { blocked: true, paths: errJson.paths || [] };
+        }
+        if (!resp.ok) {
+          const errorText = await resp.text();
+          throw new Error(`${resp.status} ${resp.statusText}: ${errorText}`);
+        }
+        return { blocked: false, json: await resp.json() };
+      }
 
       function switchTab(index) {
         // Tab buttons/contents no longer exist — sidebar handles navigation.
@@ -337,10 +391,8 @@
       window.markResultsAvailable = markResultsAvailable;
       window.showCalculating = showCalculating;
       window.hideStatusBar = hideStatusBar;
-      window.fetchFinalCombined = fetchFinalCombined;
       window.fetchTaxonomy = fetchTaxonomy;
       window.fetchInputMetadata = fetchInputMetadata;
-      window.fetchFuelMixPresets = fetchFuelMixPresets;
 
       function collectJsonData() {
         if (!C.forgeJsonData) return null;
@@ -569,45 +621,28 @@
           return;
         }
 
+        if (C.calculateBlocked) {
+          showToast('Fix the invalid inputs before recalculating.');
+          return;
+        }
+
         const startTime = performance.now();
         showCalculating();
         resultEl.textContent = "";
 
         try {
-          const baseUrl = C.apiBaseUrl;
           const scenarioId = C.activeScenarioId;
 
-          const payload = {
-            mode: "calculate",
-            input_mode: "json",
-            output_mode: "json",
-            scenario_id: scenarioId,
-            combined_data: null
-          };
-
-          if (C.forgeJsonData) {
-            payload.combined_data = collectJsonData();
-          } else {
-            payload.combined_data = await fetchFinalCombined(baseUrl);
+          if (!C.forgeJsonData) {
+            throw new Error('Inputs have not finished loading yet.');
           }
 
-          const endpoint = new URL("/api/forge/calculate", baseUrl).toString();
-
-          const _fAuthToken = await _getAuthToken();
-          const _fHeaders = { "Content-Type": "application/json" };
-          if (_fAuthToken) _fHeaders["Authorization"] = "Bearer " + _fAuthToken;
-          const response = await fetch(endpoint, {
-            method: "POST",
-            headers: _fHeaders,
-            body: JSON.stringify(payload),
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`${response.status} ${response.statusText}: ${errorText}`);
+          const result = await postCalculate(collectJsonData(), scenarioId);
+          if (result.blocked) {
+            resultEl.textContent = 'Invalid inputs: ' + result.paths.join(', ');
+            return;
           }
-
-          const json = await response.json();
+          const json = result.json;
 
           if (json.results) {
             C.lastRunResults = json.results;
@@ -642,8 +677,8 @@
       });
 
       // Always-solving: auto-calculate on every input change
-      form.addEventListener('input', () => { autoCalculate(); updateFieldValidation(false); });
-      form.addEventListener('change', () => { autoCalculate(); updateFieldValidation(false); });
+      form.addEventListener('input', () => { C.calculateBlocked = false; autoCalculate(); updateFieldValidation(false); });
+      form.addEventListener('change', () => { C.calculateBlocked = false; autoCalculate(); updateFieldValidation(false); });
 
       // Initial calculation removed — gated on C.activeScenarioId (§13 Scenarios Tab)
 

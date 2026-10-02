@@ -1296,9 +1296,9 @@ function renderROWZonesTable(data) {
     const tdAcres = document.createElement('td');
     tdAcres.className = 'computed-cell';
     tdAcres.dataset.zoneAcres = z;
-    const rowW = getRowWidthFeet() || 150;
-    const acresVal = milesVal ? milesToAcres(Number(milesVal), rowW) : 0;
-    tdAcres.textContent = acresVal > 0 ? acresVal.toFixed(1) : '';
+    const rowW = getRowWidthFeet();
+    const acresVal = (milesVal && rowW != null) ? milesToAcres(Number(milesVal), rowW) : 0;
+    tdAcres.textContent = rowW == null ? '\u2014' : (acresVal > 0 ? acresVal.toFixed(1) : '');
     tdAcres.appendChild(makeEquationIcon({...EQ_ZONE_AREA, context: `Acres of ROW in Zone ${z}. Computed as miles × 5280 × ROW width / 43,560. Per-acre costs (holding, acquisition, rent) multiply this value.`}));
     tr.appendChild(tdAcres);
 
@@ -1349,20 +1349,20 @@ function renderROWZonesTable(data) {
   tbody.appendChild(totalRow);
 
   function updateZoneAcres() {
-    const rowW = getRowWidthFeet() || 150;
+    const rowW = getRowWidthFeet();
     let totalAcres = 0;
     for (let zz = 1; zz <= 15; zz++) {
       const mi = parseFloat((table.querySelector(`input[data-path$="zone_${zz}.miles"]`)?.value || '0').replace(/,/g, '')) || 0;
-      const ac = mi > 0 ? milesToAcres(mi, rowW) : 0;
+      const ac = (mi > 0 && rowW != null) ? milesToAcres(mi, rowW) : 0;
       const cell = table.querySelector(`[data-zone-acres="${zz}"]`);
       if (cell) {
         const eqIcon = cell.querySelector('.equation-icon');
-        cell.textContent = ac > 0 ? ac.toFixed(1) : '';
+        cell.textContent = rowW == null ? '\u2014' : (ac > 0 ? ac.toFixed(1) : '');
         if (eqIcon) cell.appendChild(eqIcon);
       }
       if (table.querySelector(`tr[data-zone="${zz}"]`)?.style.display !== 'none') totalAcres += ac;
     }
-    tdTotalAcresCell.textContent = totalAcres > 0 ? totalAcres.toFixed(1) : '';
+    tdTotalAcresCell.textContent = rowW == null ? '\u2014' : (totalAcres > 0 ? totalAcres.toFixed(1) : '');
   }
   setTimeout(updateZoneAcres, 0);
 
@@ -1651,7 +1651,13 @@ function updateFuelMixChart() {
   const gwh = getEnergyDeliveredGWh();
   const projShares = readFuelShares('initial');
   const projRates = readFuelRates('rate_post_cod');
-  const lifetime = parseFloat((document.querySelector('[data-path="01_project_technical_details.project.project_lifetime"]')?.value || '50').replace(/,/g, '')) || 50;
+  const lifetimeRaw = document.querySelector('[data-path="01_project_technical_details.project.project_lifetime"]')?.value;
+  const parsedLifetime = lifetimeRaw ? parseFloat(lifetimeRaw.replace(/,/g, '')) : NaN;
+  if (!Number.isFinite(parsedLifetime)) {
+    if (fuelMixChartInstance) { fuelMixChartInstance.destroy(); fuelMixChartInstance = null; }
+    return;
+  }
+  const lifetime = parsedLifetime;
   const step = Math.max(1, Math.round(lifetime / 10));
   const years = [];
   for (let y = 0; y <= lifetime; y += step) years.push(y);
@@ -1882,7 +1888,7 @@ function renderEnvBaseMitigationTable(data) {
   wrapper.id = 'env-base-mitigation-wrapper';
   const ctValue = getActiveConstructionType();
   const ctInfo = ENV_CONSTRUCTION_TYPES[ctValue] || ENV_CONSTRUCTION_TYPES['Overhead'];
-  const rowWidth = getRowWidthFeet() || 150;
+  const rowWidth = getRowWidthFeet();
 
   // Uplift factor
   const upliftDiv = document.createElement('div');
@@ -1975,16 +1981,16 @@ function renderEnvBaseMitigationTable(data) {
       const acresSpan = document.createElement('span');
       acresSpan.className = 'extra-terrain-acres-display';
       const uplift = getUpliftFactorFromDOM();
-      const initAcres = existingMiles > 0 ? milesToAcres(existingMiles, rowWidth) * uplift : 0;
-      acresSpan.textContent = initAcres > 0 ? initAcres.toLocaleString('en-US', {maximumFractionDigits: 1}) : '0';
+      const initAcres = (existingMiles > 0 && rowWidth != null) ? milesToAcres(existingMiles, rowWidth) * uplift : 0;
+      acresSpan.textContent = rowWidth == null ? '\u2014' : (initAcres > 0 ? initAcres.toLocaleString('en-US', {maximumFractionDigits: 1}) : '0');
 
       milesInput.addEventListener('input', () => {
         if (parseFloat(milesInput.value) < 0) milesInput.value = '0';
         const m = parseFloat(milesInput.value) || 0;
         const u = getUpliftFactorFromDOM();
-        const rw = getRowWidthFeet() || 150;
-        const a = m > 0 ? milesToAcres(m, rw) * u : 0;
-        acresSpan.textContent = a > 0 ? a.toLocaleString('en-US', {maximumFractionDigits: 1}) : '0';
+        const rw = getRowWidthFeet();
+        const a = (m > 0 && rw != null) ? milesToAcres(m, rw) * u : 0;
+        acresSpan.textContent = rw == null ? '\u2014' : (a > 0 ? a.toLocaleString('en-US', {maximumFractionDigits: 1}) : '0');
       });
 
       tdAcres.appendChild(milesInput);
@@ -1993,8 +1999,8 @@ function renderEnvBaseMitigationTable(data) {
     } else {
       const miles = getTerrainMilesFromDOM(t);
       const uplift = getUpliftFactorFromDOM();
-      const acres = miles > 0 ? milesToAcres(miles, rowWidth) * uplift : 0;
-      tdAcres.textContent = acres > 0 ? acres.toLocaleString('en-US', {maximumFractionDigits: 1}) : '0';
+      const acres = (miles > 0 && rowWidth != null) ? milesToAcres(miles, rowWidth) * uplift : 0;
+      tdAcres.textContent = rowWidth == null ? '\u2014' : (acres > 0 ? acres.toLocaleString('en-US', {maximumFractionDigits: 1}) : '0');
     }
     tr.appendChild(tdAcres);
 
@@ -2043,7 +2049,7 @@ function renderEnvCreditsTable(data) {
     { path: 'environmental_mitigation.habitat_credit_cost_per_acre.mountain', label: 'Habitat — Mountain', terrain: 'mountain', help: 'Per-acre habitat credit cost for mountain terrain' },
   ];
 
-  const rowWidth = getRowWidthFeet() || 150;
+  const rowWidth = getRowWidthFeet();
   const uplift = getUpliftFactorFromDOM();
 
   // Total Effective Acres
@@ -2090,8 +2096,8 @@ function renderEnvCreditsTable(data) {
     tdAcres.className = 'env-acres-cell';
     tdAcres.dataset.envAcresTerrain = c.terrain;
     const miles = getTerrainMilesFromDOM(c.terrain);
-    const acres = miles > 0 ? milesToAcres(miles, rowWidth) * uplift : 0;
-    tdAcres.textContent = acres > 0 ? acres.toLocaleString('en-US', {maximumFractionDigits: 1}) : '0';
+    const acres = (miles > 0 && rowWidth != null) ? milesToAcres(miles, rowWidth) * uplift : 0;
+    tdAcres.textContent = rowWidth == null ? '\u2014' : (acres > 0 ? acres.toLocaleString('en-US', {maximumFractionDigits: 1}) : '0');
     tr.appendChild(tdAcres);
 
     const tdCost = document.createElement('td');
@@ -2128,7 +2134,7 @@ function renderEnvCreditsTable(data) {
 }
 
 function updateEnvironmentalAcres() {
-  const rowWidth = getRowWidthFeet() || 150;
+  const rowWidth = getRowWidthFeet();
   const uplift = getUpliftFactorFromDOM();
 
   document.querySelectorAll('[data-env-acres-terrain]').forEach(cell => {
@@ -2136,15 +2142,20 @@ function updateEnvironmentalAcres() {
     const extraInput = cell.querySelector('.extra-terrain-miles');
     if (extraInput) {
       const m = parseFloat(extraInput.value) || 0;
-      const a = m > 0 ? milesToAcres(m, rowWidth) * uplift : 0;
+      const a = (m > 0 && rowWidth != null) ? milesToAcres(m, rowWidth) * uplift : 0;
       const span = cell.querySelector('.extra-terrain-acres-display');
-      if (span) span.textContent = a > 0 ? a.toLocaleString('en-US', {maximumFractionDigits: 1}) : '0';
+      if (span) span.textContent = rowWidth == null ? '\u2014' : (a > 0 ? a.toLocaleString('en-US', {maximumFractionDigits: 1}) : '0');
     } else {
       const miles = getTerrainMilesFromDOM(terrain);
-      const acres = miles > 0 ? milesToAcres(miles, rowWidth) * uplift : 0;
-      cell.textContent = acres > 0 ? acres.toLocaleString('en-US', {maximumFractionDigits: 1}) : '0';
+      const acres = (miles > 0 && rowWidth != null) ? milesToAcres(miles, rowWidth) * uplift : 0;
+      cell.textContent = rowWidth == null ? '\u2014' : (acres > 0 ? acres.toLocaleString('en-US', {maximumFractionDigits: 1}) : '0');
     }
   });
+
+  if (rowWidth == null) {
+    document.querySelectorAll('[data-env-total-acres]').forEach(el => { el.textContent = '\u2014'; });
+    return;
+  }
 
   let computedTotal = 0;
   STANDARD_TERRAINS.forEach(t => {
@@ -2340,17 +2351,13 @@ function renderStructureDetailsTable() {
   ctxDisplay.appendChild(ctxValue);
   wrapper.appendChild(ctxDisplay);
 
-  const ROWS = [
-    { key: 'structures_per_mile_forested', label: 'Forested', unit: '', tooltip: 'Higher density due to shorter span lengths in trees.' },
-    { key: 'structures_per_mile_scrubbed_flat', label: 'Scrubbed Flat', unit: '', tooltip: 'Standard flat-terrain structure density.' },
-    { key: 'structures_per_mile_wetland', label: 'Wetland', unit: '', tooltip: 'Standard density; foundations differ, not structure count.' },
-    { key: 'structures_per_mile_farmland', label: 'Farmland', unit: '', tooltip: 'Standard flat-terrain structure density.' },
-    { key: 'structures_per_mile_desert_barren', label: 'Desert / Barren', unit: '', tooltip: 'Standard flat-terrain structure density.' },
-    { key: 'structures_per_mile_urban', label: 'Urban', unit: '', tooltip: 'Higher density due to routing constraints in developed areas.' },
-    { key: 'structures_per_mile_rolling_hills', label: 'Rolling Hills', unit: '', tooltip: 'Moderate increase for elevation changes.' },
-    { key: 'structures_per_mile_mountain', label: 'Mountain', unit: '', tooltip: 'Highest density — short spans required by steep terrain.' },
-    { key: 'cost_per_structure_per_year', label: 'Maintenance Cost ($/structure/yr)', unit: '', tooltip: 'Annual O&M cost per structure for inspection and repair.', isCurrency: true },
-  ];
+  // The calculator's `14_category_om_structures` table has exactly one O&M
+  // field per construction type: Overhead carries a flat per-mile rate;
+  // every other construction type carries a percent-of-CAPEX rate. There
+  // is no per-terrain structure density or count in the calculator.
+  const ROWS = constructionType === 'Overhead'
+    ? [{ key: 'base_om_per_mile_year', label: 'Base O&M ($/mile/yr)', unit: '', tooltip: 'Annual overhead structure O&M cost per mile.', isCurrency: true }]
+    : [{ key: 'om_pct_of_line_capex', label: 'O&M (% of line CAPEX/yr)', unit: '', tooltip: 'Annual structure O&M as a percentage of line capital cost.', isPercent: true }];
 
   const paramsCard = document.createElement('div');
   paramsCard.className = 'forge-params-card';
@@ -2379,7 +2386,9 @@ function renderStructureDetailsTable() {
     if (entry && entry[row.key] != null) {
       valSpan.textContent = row.isCurrency
         ? '$' + Number(entry[row.key]).toLocaleString()
-        : entry[row.key] + row.unit;
+        : row.isPercent
+          ? (Number(entry[row.key]) * 100).toFixed(2) + '%'
+          : entry[row.key] + row.unit;
     } else {
       valSpan.textContent = '—';
     }
@@ -2405,12 +2414,10 @@ function renderConverterDetailsTable() {
   wrapper.id = 'converter-details-wrapper';
 
   const cat = buildCategoryString();
-  const entry = C.converterDetailsLookup ? (C.converterDetailsLookup[cat] ?? null) : null;
   const recon = isReconductoring();
   const oldAcDcEl = document.querySelector('[data-path="01_project_technical_details.project.old_ac_dc"]');
   const oldIsDC = recon && oldAcDcEl && oldAcDcEl.value === 'DC';
   const oldCat = oldIsDC ? buildOldCategoryString() : null;
-  const oldEntry = (oldIsDC && oldCat) ? (C.converterDetailsLookup?.[oldCat] ?? null) : null;
 
   const ctxDisplay = document.createElement('div');
   ctxDisplay.className = 'readonly-miles-display';
@@ -2455,11 +2462,18 @@ function renderConverterDetailsTable() {
   const oldConvType = oldConvTypeEl ? oldConvTypeEl.value : '';
   const oldConvLoss = oldConvType === 'LCC Converter' ? '0.75' : oldConvType === 'VSC Converter' ? '1.0' : '—';
 
+  // C.converterDetailsLookup is converter type -> converter_om_rate (a bare
+  // decimal rate), not keyed by the build-cost/circuit category string --
+  // there is one O&M rate per converter technology, not per project
+  // configuration.
+  const omRate = (C.converterDetailsLookup && convType) ? (C.converterDetailsLookup[convType] ?? null) : null;
+  const oldOmRate = (oldIsDC && C.converterDetailsLookup && oldConvType) ? (C.converterDetailsLookup[oldConvType] ?? null) : null;
+
   const ROWS = [
     { label: 'Converter Type', value: convTypeEl ? convTypeEl.value : '—', oldValue: oldConvType || '—', tooltip: 'AC-to-DC converter technology (LCC or VSC).' },
     { label: 'Number of Converters', value: convCountEl ? convCountEl.value : '—', oldValue: convCountEl ? convCountEl.value : '—', tooltip: 'Number of converter stations on the line.' },
     { label: 'Converter Loss (%)', value: convLoss, oldValue: oldConvLoss, tooltip: 'Electrical energy lost in AC/DC conversion. Fixed physical constant: 0.75% for LCC, 1.0% for VSC.' },
-    { label: 'O&M Rate (% of CAPEX/yr)', value: entry ? (entry.converter_type === 'VSC Converter' ? '0.7%' : '0.5%') : '—', oldValue: oldEntry ? (oldEntry.converter_type === 'VSC Converter' ? '0.7%' : '0.5%') : '—', tooltip: 'Annual converter O&M as percentage of station capital cost. LCC: 0.5%, VSC: 0.7% (Van Eeckhout et al. 2022, Kim et al. 2012).' },
+    { label: 'O&M Rate (% of CAPEX/yr)', value: omRate != null ? (omRate * 100).toFixed(2) + '%' : '—', oldValue: oldOmRate != null ? (oldOmRate * 100).toFixed(2) + '%' : '—', tooltip: 'Annual converter O&M as a percentage of station capital cost, by converter type (LCC/VSC).' },
   ];
 
   const cvParamsCard = document.createElement('div');
@@ -2514,14 +2528,16 @@ function renderConverterDetailsTable() {
 
 function rebuildStructureDetails() {
   const ctEl = document.querySelector('[data-path="01_project_technical_details.project.construction_type"]');
-  const constructionType = ctEl ? ctEl.value : '';
+  const constructionType = ctEl ? normalizeCT(ctEl.value) : '';
   const entry = C.structureDetailsLookup ? (C.structureDetailsLookup[constructionType] ?? null) : null;
 
   document.querySelectorAll('[data-structure-field]').forEach(cell => {
     const key = cell.dataset.structureField;
     if (!entry || entry[key] == null) { cell.textContent = '—'; return; }
-    if (key === 'cost_per_structure_per_year') {
+    if (key === 'base_om_per_mile_year') {
       cell.textContent = '$' + Number(entry[key]).toLocaleString();
+    } else if (key === 'om_pct_of_line_capex') {
+      cell.textContent = (Number(entry[key]) * 100).toFixed(2) + '%';
     } else {
       cell.textContent = entry[key];
     }
@@ -2633,78 +2649,58 @@ function renderStructureMaintenanceTable() {
   const wrapper = document.createElement('div');
   wrapper.id = 'structure-maintenance-wrapper';
   const ctEl = document.querySelector('[data-path="01_project_technical_details.project.construction_type"]');
-  const constructionType = ctEl ? ctEl.value : '';
+  const constructionType = ctEl ? normalizeCT(ctEl.value) : '';
   const entry = C.structureDetailsLookup ? (C.structureDetailsLookup[constructionType] ?? null) : null;
+
+  // Same calculator fields as `renderStructureDetailsTable`: the
+  // `14_category_om_structures` table has exactly one O&M field per
+  // construction type (`base_om_per_mile_year` for Overhead,
+  // `om_pct_of_line_capex` for everything else). There is no per-terrain
+  // structure density or count in the calculator.
+  const isOverhead = constructionType === 'Overhead';
+  const fieldKey = isOverhead ? 'base_om_per_mile_year' : 'om_pct_of_line_capex';
+  const fieldLabel = isOverhead ? 'Base O&M ($/mile/yr)' : 'O&M (% of line CAPEX/yr)';
 
   const table = document.createElement('table');
   table.className = 'forge-table capital-cost-table structure-maintenance-table';
   const smCaption = document.createElement('caption');
   smCaption.textContent = 'Structure Maintenance Costs';
-  smCaption.appendChild(makeHelpIcon('Annual per-structure maintenance cost by terrain from the NREL/DOE database.'));
+  smCaption.appendChild(makeHelpIcon('Annual structure O&M cost for the selected construction type.'));
   table.appendChild(smCaption);
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
   const thParam = document.createElement('th');
   thParam.textContent = 'Parameter';
-  thParam.appendChild(makeHelpIcon('Maintenance cost parameter'));
+  thParam.appendChild(makeHelpIcon('Structure O&M cost from the calculator defaults, determined by construction type.'));
   headerRow.appendChild(thParam);
-  const thTerrain = document.createElement('th');
-  thTerrain.textContent = 'Terrain';
-  thTerrain.appendChild(makeHelpIcon('Terrain type along the route'));
-  headerRow.appendChild(thTerrain);
   const thValue = document.createElement('th');
   thValue.textContent = 'Value';
-  thValue.appendChild(makeHelpIcon('Structure density and unit cost from the NREL/DOE database. Click the lock icon to override.'));
+  thValue.appendChild(makeHelpIcon('Annual structure O&M. Click the lock icon to override.'));
   headerRow.appendChild(thValue);
   thead.appendChild(headerRow);
   table.appendChild(thead);
 
-  const TERRAINS = ['forested', 'scrubbed_flat', 'wetland', 'farmland', 'desert_barren', 'urban', 'rolling_hills', 'mountain'];
-  const TERRAIN_LABELS = {forested:'Forested', scrubbed_flat:'Scrubbed Flat', wetland:'Wetland', farmland:'Farmland', desert_barren:'Desert/Barren', urban:'Urban', rolling_hills:'Rolling Hills', mountain:'Mountain'};
-
   const tbody = document.createElement('tbody');
   const inputs = [];
-  TERRAINS.forEach((t, i) => {
-    const tr = document.createElement('tr');
-    const tdParam = document.createElement('td');
-    tdParam.textContent = i === 0 ? 'Structures per Mile' : '';
-    tdParam.style.fontWeight = '500';
-    tr.appendChild(tdParam);
-    const tdTerrain = document.createElement('td');
-    tdTerrain.textContent = TERRAIN_LABELS[t] || t;
-    tr.appendChild(tdTerrain);
-    const tdVal = document.createElement('td');
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'currency-input locked-cell';
-    input.dataset.maintenanceField = 'structure_density_' + t;
-    input.readOnly = true;
-    input.value = entry ? String(entry['structures_per_mile_' + t] ?? 0) : '\u2014';
-    inputs.push(input);
-    tdVal.appendChild(input);
-    tr.appendChild(tdVal);
-    tbody.appendChild(tr);
-  });
-
-  const costTr = document.createElement('tr');
-  const costParamTd = document.createElement('td');
-  costParamTd.textContent = 'Cost per Structure ($/yr)';
-  costParamTd.style.fontWeight = '500';
-  costTr.appendChild(costParamTd);
-  const costTerrainTd = document.createElement('td');
-  costTerrainTd.textContent = '(all terrains)';
-  costTr.appendChild(costTerrainTd);
-  const costValTd = document.createElement('td');
-  const costInput = document.createElement('input');
-  costInput.type = 'text';
-  costInput.className = 'currency-input locked-cell';
-  costInput.dataset.maintenanceField = 'structure_cost_per_year';
-  costInput.readOnly = true;
-  costInput.value = entry ? '$' + Number(entry.cost_per_structure_per_year).toLocaleString() : '\u2014';
-  inputs.push(costInput);
-  costValTd.appendChild(costInput);
-  costTr.appendChild(costValTd);
-  tbody.appendChild(costTr);
+  const tr = document.createElement('tr');
+  const tdParam = document.createElement('td');
+  tdParam.textContent = fieldLabel;
+  tdParam.style.fontWeight = '500';
+  tr.appendChild(tdParam);
+  const tdVal = document.createElement('td');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'currency-input locked-cell';
+  input.dataset.maintenanceField = fieldKey;
+  input.readOnly = true;
+  const rawVal = entry ? entry[fieldKey] : null;
+  input.value = rawVal != null
+    ? (isOverhead ? '$' + Number(rawVal).toLocaleString() : (Number(rawVal) * 100).toFixed(2) + '%')
+    : '\u2014';
+  inputs.push(input);
+  tdVal.appendChild(input);
+  tr.appendChild(tdVal);
+  tbody.appendChild(tr);
   table.appendChild(tbody);
 
   const smCard = document.createElement('div');
@@ -2755,24 +2751,29 @@ function rebuildStructureMaintenance() {
 function renderConverterMaintenanceTable() {
   const wrapper = document.createElement('div');
   wrapper.id = 'converter-maintenance-wrapper';
-  const cat = buildCategoryString();
-  const entry = C.converterDetailsLookup ? (C.converterDetailsLookup[cat] ?? null) : null;
+  // C.converterDetailsLookup is converter type -> converter_om_rate (a bare
+  // decimal rate), not keyed by the build-cost/circuit category string --
+  // there is one O&M rate per converter technology, not per project
+  // configuration.
+  const convTypeEl = document.querySelector('[data-path="01_project_technical_details.project.converter_type"]');
+  const convType = convTypeEl ? convTypeEl.value : '';
+  const omRate = (C.converterDetailsLookup && convType) ? (C.converterDetailsLookup[convType] ?? null) : null;
 
   const table = document.createElement('table');
   table.className = 'forge-table capital-cost-table converter-maintenance-table';
   const cvmCaption = document.createElement('caption');
   cvmCaption.textContent = 'Converter Maintenance Costs';
-  cvmCaption.appendChild(makeHelpIcon('Annual converter O&M cost from the NREL/DOE database.'));
+  cvmCaption.appendChild(makeHelpIcon('Annual converter O&M cost from the calculator defaults.'));
   table.appendChild(cvmCaption);
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
   const thParam = document.createElement('th');
   thParam.textContent = 'Parameter';
-  thParam.appendChild(makeHelpIcon('Converter O&M cost from the NREL/DOE database, determined by project configuration.'));
+  thParam.appendChild(makeHelpIcon('Converter O&M cost from the calculator defaults, determined by converter type (LCC or VSC).'));
   headerRow.appendChild(thParam);
   const thValue = document.createElement('th');
-  thValue.textContent = 'Value ($/mi/yr)';
-  thValue.appendChild(makeHelpIcon('Annual converter maintenance cost per mile. Click the lock icon to override.'));
+  thValue.textContent = 'Value (% of Station CAPEX)';
+  thValue.appendChild(makeHelpIcon('Annual converter maintenance cost as a percent of station capital cost. Click the lock icon to override.'));
   headerRow.appendChild(thValue);
   thead.appendChild(headerRow);
   table.appendChild(thead);
@@ -2789,7 +2790,7 @@ function renderConverterMaintenanceTable() {
   input.className = 'currency-input locked-cell';
   input.dataset.maintenanceField = 'converter_om';
   input.readOnly = true;
-  input.value = entry ? (entry.converter_type === 'VSC Converter' ? '0.7%' : '0.5%') : '\u2014';
+  input.value = omRate != null ? (Number(omRate) * 100).toFixed(2) + '%' : '\u2014';
   tdVal.appendChild(input);
   tr.appendChild(tdVal);
   tbody.appendChild(tr);
@@ -3654,12 +3655,12 @@ function renderOutageRiskPanel(data) {
       rdDiv.className = 'env-uplift-row';
       rdDiv.style.marginTop = '0.75rem';
       const rdPath = '07_outage_costs.outage.redispatch_cost_per_mwh';
-      const rdVal = getValueAtFieldPath(data, '07_outage_costs', 'outage.redispatch_cost_per_mwh') ?? 20;
+      const rdVal = getValueAtFieldPath(data, '07_outage_costs', 'outage.redispatch_cost_per_mwh');
       rdDiv.innerHTML = '<span class="env-uplift-label">Redispatch Cost ($/MWh)</span> ';
       rdDiv.appendChild(makeHelpIcon('Congestion premium for rerouting power during an outage. LBNL empirical median.'));
       const rdInput = document.createElement('input');
       rdInput.type = 'text'; rdInput.className = 'number-input env-uplift-input'; rdInput.dataset.path = rdPath;
-      rdInput.value = String(rdVal);
+      rdInput.value = rdVal != null ? String(rdVal) : '\u2014';
       rdDiv.appendChild(rdInput);
       panel.appendChild(rdDiv);
     } else if (l4Id === 'out-outage-profile') {
@@ -4042,14 +4043,14 @@ function renderEconomicDetailsPanel(data) {
   const volDiv = document.createElement('div');
   volDiv.className = 'env-uplift-row';
   const volPath = '01_project_technical_details.project.value_of_load_per_mwh';
-  const volVal = getValueAtFieldPath(data, '01_project_technical_details', 'project.value_of_load_per_mwh') ?? 50;
+  const volVal = getValueAtFieldPath(data, '01_project_technical_details', 'project.value_of_load_per_mwh');
   volDiv.innerHTML = '<span class="env-uplift-label">Value of Load</span> ';
   volDiv.appendChild(makeHelpIcon('Demand-side marginal value of delivered energy ($/MWh). The value of electricity derives from the services load performs with it.'));
   const volInput = document.createElement('input');
   volInput.type = 'text';
   volInput.className = 'currency-input env-uplift-input';
   volInput.dataset.path = volPath;
-  volInput.value = volVal != null ? '$' + Number(volVal).toLocaleString() : '';
+  volInput.value = volVal != null ? '$' + Number(volVal).toLocaleString() : '\u2014';
   volInput.addEventListener('focus', () => { volInput.value = volInput.value.replace(/[$,]/g, ''); });
   volInput.addEventListener('blur', () => {
     const raw = parseFloat(volInput.value.replace(/[$,]/g, ''));
