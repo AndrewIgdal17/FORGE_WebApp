@@ -1915,7 +1915,15 @@ function renderEnvBaseMitigationTable(data) {
   const ctDisplay = document.createElement('div');
   ctDisplay.className = 'readonly-miles-display';
   ctDisplay.id = 'env-construction-type-display';
-  ctDisplay.innerHTML = `<span class="readonly-miles-label">Construction Type:</span> <span class="readonly-display-value">${ctValue}</span>`;
+  const ctLabel = document.createElement('span');
+  ctLabel.className = 'readonly-miles-label';
+  ctLabel.textContent = 'Construction Type:';
+  const ctValueSpan = document.createElement('span');
+  ctValueSpan.className = 'readonly-display-value';
+  ctValueSpan.textContent = ctValue;
+  ctDisplay.appendChild(ctLabel);
+  ctDisplay.appendChild(document.createTextNode(' '));
+  ctDisplay.appendChild(ctValueSpan);
   wrapper.appendChild(ctDisplay);
 
   // Total Effective Acres

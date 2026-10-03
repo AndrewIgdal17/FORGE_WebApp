@@ -52,8 +52,12 @@
       if (newName !== original) {
         C.activeScenarioName = newName;
         var s = C.sessionScenarios.find(function (sc) { return sc.id === C.activeScenarioId; });
-        if (s) s.customName = newName;
-        await _sb.from('scenario').update({ name: newName }).eq('id', C.activeScenarioId);
+        if (s) {
+          s.customName = newName;
+          var result = await patchScenarioApi(C.activeScenarioId, { name: newName, revision: s.revision });
+          if (result.error) console.error('Failed to rename:', result.error);
+          else if (result.data) s.revision = result.data.revision;
+        }
         if (typeof updateScenarioBreadcrumb === 'function') updateScenarioBreadcrumb();
       }
     }

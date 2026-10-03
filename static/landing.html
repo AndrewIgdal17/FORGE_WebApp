@@ -5,11 +5,10 @@
     <title>FORGE — Comprehensive Transmission Cost Calculator</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="/static/styles.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
+    <script src="/client-config.js"></script>
+    <script src="/static/supabase-client.js"></script>
     <script>
-      const SUPABASE_URL = 'https://fsjppprwigmuypyzpbir.supabase.co';
-      const SUPABASE_ANON_KEY = 'sb_publishable_LNsNVlF7rOtKNShrC3qbVQ_D5_Mncx1';
-      const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       _sb.auth.getSession().then(function(result) {
         if (result.data.session) window.location.href = '/app';
       });

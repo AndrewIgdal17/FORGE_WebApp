@@ -31,3 +31,17 @@ class CalculateRequest(BaseModel):
     defaults_id: str
     changes: Dict[str, Any]
     scenario_id: Optional[str] = None
+
+
+class ScenarioCreate(BaseModel):
+    name: str
+    source: str
+    defaults_id: str
+    changes: Dict[str, Any]
+
+
+class ScenarioUpdate(BaseModel):
+    revision: int
+    name: Optional[str] = None
+    defaults_id: Optional[str] = None
+    changes: Optional[Dict[str, Any]] = None

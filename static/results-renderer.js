@@ -795,7 +795,14 @@ function renderTaxonomyItem(item, result, showDetail) {
       const row = document.createElement('div');
       row.className = 'results-line-item';
       const detailLabel = DETAIL_LABELS[d.dimension_key] || `${d.dimension}: ${d.dimension_key}`;
-      row.innerHTML = `<span class="label">${detailLabel}</span><span class="value">${fmt}</span>`;
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'label';
+      labelSpan.textContent = detailLabel;
+      const valueSpan = document.createElement('span');
+      valueSpan.className = 'value';
+      valueSpan.textContent = fmt;
+      row.appendChild(labelSpan);
+      row.appendChild(valueSpan);
       detailDiv.appendChild(row);
     });
     container.appendChild(detailDiv);
@@ -1536,7 +1543,15 @@ function renderFORGEResults(results) {
     if (p.value) {
       const chip = document.createElement('span');
       chip.className = 'param-chip';
-      chip.innerHTML = `<span class="param-label">${p.label}</span> <span class="param-value">${p.value}</span>`;
+      const paramLabel = document.createElement('span');
+      paramLabel.className = 'param-label';
+      paramLabel.textContent = p.label;
+      const paramValue = document.createElement('span');
+      paramValue.className = 'param-value';
+      paramValue.textContent = p.value;
+      chip.appendChild(paramLabel);
+      chip.appendChild(document.createTextNode(' '));
+      chip.appendChild(paramValue);
       paramsBar.appendChild(chip);
     }
   });

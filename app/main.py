@@ -3,23 +3,26 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
 import forge
 import jwt
-from fastapi import Depends, FastAPI, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from forge.errors import UnknownInputPath
-from jwt import PyJWKClient
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 
+from . import auth as auth_module
+from . import db as db_module
+from . import scenarios as scenarios_module
 from .models import CalculateRequest, sanitize_for_json
 
 logger = logging.getLogger(__name__)
@@ -33,7 +36,25 @@ HOME_FILE = STATIC_DIR / "home.html"
 WORKSPACE_FILE = STATIC_DIR / "workspace.html"
 SCENARIOS_FILE = STATIC_DIR / "scenarios-manager.html"
 
-app = FastAPI(title="FORGE API Server")
+# Fail closed: refuse to start without SUPABASE_URL + FORGE_DATABASE_URL,
+# unless FORGE_AUTH_DISABLED=true is set explicitly for local dev.
+auth_module.assert_startup_credentials()
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    logger.info("FORGE calculator: %s", _CALCULATOR_INFO)
+    if _FORGE_DATABASE_URL:
+        await db_module.init_db_pool(_FORGE_DATABASE_URL)
+    elif not _AUTH_DISABLED:
+        # assert_startup_credentials() already enforced this at import time;
+        # this branch should be unreachable outside of FORGE_AUTH_DISABLED=true.
+        raise RuntimeError("FORGE_DATABASE_URL is not set.")
+    yield
+    await db_module.close_db_pool()
+
+
+app = FastAPI(title="FORGE API Server", lifespan=_lifespan)
 
 # Computed once at import time; the calculator defaults never change at runtime.
 _CALCULATOR_INFO = forge.calculator_info()
@@ -42,49 +63,45 @@ _DEFAULTS_ID = forge.get_defaults_id()
 
 # --- Supabase JWT auth ---
 _SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+_SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
+_FORGE_DATABASE_URL = os.environ.get("FORGE_DATABASE_URL", "")
+_AUTH_DISABLED = os.environ.get("FORGE_AUTH_DISABLED", "").strip().lower() == "true"
 _security = HTTPBearer(auto_error=False)
-_jwks_client: PyJWKClient | None = None
 
-def _get_jwks_client() -> PyJWKClient | None:
-    global _jwks_client
-    if _jwks_client is None and _SUPABASE_URL:
-        _jwks_client = PyJWKClient(
-            f"{_SUPABASE_URL}/auth/v1/.well-known/jwks.json",
-            cache_keys=True, lifespan=3600,
-        )
-    return _jwks_client
 
 async def require_auth(
     cred: HTTPAuthorizationCredentials | None = Depends(_security),
 ) -> dict:
-    """Verify Supabase JWT. Returns decoded token payload or raises 401."""
+    """Verify a Supabase JWT via `app.auth.verify_token`.
+
+    Returns the decoded payload, or `{}` when auth is explicitly disabled
+    for local dev (`FORGE_AUTH_DISABLED=true` and no `SUPABASE_URL`).
+    """
     if not _SUPABASE_URL:
-        return {}  # auth disabled when SUPABASE_URL is not set (local dev)
+        if _AUTH_DISABLED:
+            logger.warning("FORGE_AUTH_DISABLED=true: request served without auth.")
+            return {}
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Auth not configured")
     if cred is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
-    client = _get_jwks_client()
-    if client is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Auth not configured")
     try:
-        signing_key = client.get_signing_key_from_jwt(cred.credentials)
-        return jwt.decode(
-            cred.credentials,
-            signing_key.key,
-            algorithms=[signing_key.algorithm_name],
-            audience="authenticated",
-            options={"require": ["exp", "sub"]},
-            leeway=30,
-        )
+        return auth_module.verify_token(f"Bearer {cred.credentials}", supabase_url=_SUPABASE_URL)
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
 
 
-@app.on_event("startup")
-async def _log_calculator_info() -> None:
-    logger.info("FORGE calculator: %s", _CALCULATOR_INFO)
+def rate_limit_calculation(user: dict = Depends(require_auth)) -> dict:
+    """Enforce the 30-calculations-a-minute limit for the authenticated user."""
+    user_id = user.get("sub", "anonymous")
+    if not auth_module.rate_limiter.allow_calculation(user_id):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="rate_limited",
+            headers={"Retry-After": "60"},
+        )
+    return user
 
 
-# Allow frontend apps to reach the API locally or across origins.
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 
@@ -98,16 +115,66 @@ class CacheBustMiddleware(BaseHTTPMiddleware):
         return response
 
 
-app.add_middleware(CacheBustMiddleware)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+MAX_BODY_BYTES = 1 * 1024 * 1024  # 1 MB
 
+
+class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+    """Rejects requests whose body exceeds MAX_BODY_BYTES with 413 `too_large`.
+
+    Checks `Content-Length` first as a cheap fast path, then enforces the
+    same limit while streaming the body, so a request without a
+    `Content-Length` header can't bypass the check. The buffered body is
+    cached back onto the request so downstream handlers reading it again
+    (`await request.body()` / `.json()`) see the same bytes.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                if int(content_length) > MAX_BODY_BYTES:
+                    return JSONResponse(status_code=413, content={"error": "too_large"})
+            except ValueError:
+                pass
+
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > MAX_BODY_BYTES:
+                return JSONResponse(status_code=413, content={"error": "too_large"})
+            chunks.append(chunk)
+        request._body = b"".join(chunks)
+
+        return await call_next(request)
+
+
+app.add_middleware(CacheBustMiddleware)
+app.add_middleware(BodySizeLimitMiddleware)
+
+# No CORS middleware: the browser and the API are served from the same origin.
+
+app.include_router(scenarios_module.router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.exception_handler(scenarios_module.ScenarioAuthError)
+async def _scenario_auth_error_handler(_request: Request, exc: scenarios_module.ScenarioAuthError) -> JSONResponse:
+    """Format scenario-route auth failures in the `{"error": {...}}` envelope."""
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"error": {"code": "unauthenticated", "message": exc.message}},
+    )
+
+
+@app.get("/client-config.js")
+async def client_config() -> Response:
+    """Serve the browser's Supabase URL and publishable key from server env."""
+    body = (
+        f"window.FORGE_SUPABASE_URL = {json.dumps(_SUPABASE_URL)};\n"
+        f"window.FORGE_SUPABASE_KEY = {json.dumps(_SUPABASE_ANON_KEY)};\n"
+    )
+    return Response(content=body, media_type="application/javascript")
 
 
 @app.get("/", response_class=FileResponse)
@@ -184,7 +251,7 @@ async def get_input_metadata() -> JSONResponse:
 @app.post("/api/forge/calculate", response_class=JSONResponse)
 async def calculate_forge(
     payload: CalculateRequest,
-    _user: dict = Depends(require_auth),
+    _user: dict = Depends(rate_limit_calculation),
 ) -> JSONResponse:
     """
     Resolve a change map against the deployed defaults and run the calculator.

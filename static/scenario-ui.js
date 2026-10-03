@@ -20,8 +20,10 @@ function renameScenario(id, newName) {
   const scenario = C.sessionScenarios.find(s => s.id === id);
   if (scenario && newName.trim()) {
     scenario.customName = newName.trim();
-    _sb.from('scenario').update({ name: scenario.customName, updated_at: new Date().toISOString() })
-      .eq('id', id).then(({ error }) => { if (error) console.error('Failed to rename:', error); });
+    patchScenarioApi(id, { name: scenario.customName, revision: scenario.revision }).then(({ data, error }) => {
+      if (error) console.error('Failed to rename:', error);
+      else if (data) scenario.revision = data.revision;
+    });
     if (id === C.activeScenarioId) {
       C.activeScenarioName = scenario.customName;
       updateScenarioBreadcrumb();
@@ -34,16 +36,6 @@ function renameScenario(id, newName) {
 async function duplicateScenario(sourceScenario) {
   const newName = generateScenarioName(sourceScenario.customName + ' (copy)');
   let fullInputs = sourceScenario.inputs;
-  if (sourceScenario.ref_snapshot_id) {
-    const snap = await loadSnapshot(sourceScenario.ref_snapshot_id);
-    if (snap) {
-      fullInputs = assembleFullInputs(
-        snap,
-        sourceScenario.overrides,
-        sourceScenario.inputs || {}
-      );
-    }
-  }
   if (sourceScenario.id === C.activeScenarioId && typeof collectJsonData === 'function') {
     fullInputs = collectJsonData() || fullInputs;
   }

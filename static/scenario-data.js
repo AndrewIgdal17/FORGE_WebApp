@@ -8,8 +8,44 @@
 
   const C = window.FORGE;
 
-  let _snapshotCache = {};
+  // --- Scenario write API (POST/PATCH/DELETE /api/scenarios) -----------------
+  // Scenario writes go through the API, not direct Supabase calls, so the
+  // server can calculate `results` from `changes` and enforce RLS as the
+  // `forge_api` role. Reads (`_sb.from('scenario').select(...)`) stay direct
+  // Supabase calls — the browser's own `authenticated` role may read every
+  // scenario under RLS.
+  async function _scenarioApiFetch(path, options) {
+    const baseUrl = C.apiBaseUrl || window.location.origin;
+    const authToken = await _getAuthToken();
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, (options && options.headers) || {});
+    if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+    const resp = await fetch(new URL(path, baseUrl).toString(), Object.assign({}, options, { headers }));
+    if (resp.status === 204) return { data: null, error: null };
+    let body = null;
+    try { body = await resp.json(); } catch (e) { /* no JSON body */ }
+    if (!resp.ok) return { data: null, error: (body && body.error) || { message: resp.statusText } };
+    return { data: body, error: null };
+  }
 
+  function postScenarioApi(payload) {
+    return _scenarioApiFetch('/api/scenarios', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  function patchScenarioApi(id, payload) {
+    return _scenarioApiFetch('/api/scenarios/' + id, { method: 'PATCH', body: JSON.stringify(payload) });
+  }
+
+  function deleteScenarioApi(id) {
+    return _scenarioApiFetch('/api/scenarios/' + id, { method: 'DELETE' });
+  }
+
+  // --- Legacy CSV v2.0 import helpers -----------------------------------------
+  // `assembleFullInputs`/`extractScenarioInputs`/`computeOverrides` are pure
+  // functions (no Supabase/API calls) kept only for importing legacy v2.0 CSV
+  // exports (see `loadCsvFile`'s `isV2` branch), which still encode an
+  // overrides map against a reference template. New scenario persistence
+  // uses `changes` (via `C.diffChanges`/`applyChangesToDefaults`) against
+  // `C.defaults` instead — see `saveScenarioToDB`/`addScenarioToSession`.
   const SCENARIO_SPECIFIC_SECTIONS = new Set([
     '01_project_technical_details',
     '03_financing',
@@ -65,7 +101,47 @@
     { key: 'net_benefit_ratepayer_pv', path: 'bcr.net_benefit_ratepayer_pv' },
   ];
 
+  // `C.defaults` (the deployed calculator's defaults template) is normally
+  // loaded by `loadForgeJson` on the workspace page, which also renders the
+  // input form. Scenario reconstruction (`changes` -> full `inputs`) needs
+  // just the defaults, not the form render, and needs it on every page that
+  // lists scenarios (Home, Scenarios Manager), not only the workspace. This
+  // fetches `/api/defaults` directly — a no-op if `C.defaults` is already
+  // set (e.g. the workspace page already loaded it).
+  async function _ensureDefaultsLoaded() {
+    if (C.defaults) return;
+    try {
+      const baseUrl = C.apiBaseUrl || window.location.origin;
+      const resp = await fetch(new URL('/api/defaults', baseUrl).toString());
+      if (!resp.ok) throw new Error('Failed to load defaults: ' + resp.status);
+      const body = await resp.json();
+      if (!C.defaults) {
+        C.defaultsId = body.calculator.defaults_id;
+        C.defaults = body.defaults;
+        C.calculatorInfo = body.calculator;
+      }
+    } catch (err) {
+      console.error('Failed to load calculator defaults for scenario reconstruction:', err);
+    }
+  }
+
+  function _scenarioRowToClient(row, profileMap) {
+    return {
+      id: row.id,
+      user_id: row.user_id,
+      customName: row.name,
+      inputs: C.defaults ? applyChangesToDefaults(C.defaults, row.changes || {}) : {},
+      changes: row.changes || {},
+      results: row.results || null,
+      metadata: { timestamp: row.updated_at || row.created_at, source: row.source },
+      revision: row.revision,
+      defaults_id: row.defaults_id,
+      _owner: (profileMap && profileMap[row.user_id]) || null
+    };
+  }
+
   async function loadScenariosFromDB() {
+    await _ensureDefaultsLoaded();
     const [scenarioRes, profileRes] = await Promise.all([
       _sb.from('scenario').select('*').order('updated_at', { ascending: false }),
       _sb.from('profiles').select('id, username, org')
@@ -76,20 +152,11 @@
     }
     const profileMap = {};
     (profileRes.data || []).forEach(p => { profileMap[p.id] = p; });
-    C.sessionScenarios = scenarioRes.data.map(row => ({
-      id: row.id,
-      user_id: row.user_id,
-      customName: row.name,
-      inputs: row.inputs,
-      results: row.results,
-      metadata: row.metadata || {},
-      ref_snapshot_id: row.ref_snapshot_id,
-      overrides: row.overrides || {},
-      _owner: profileMap[row.user_id] || null
-    }));
-    const snapshotIds = [...new Set(C.sessionScenarios.map(s => s.ref_snapshot_id).filter(Boolean))];
-    await Promise.all(snapshotIds.map(id => loadSnapshot(id)));
-    window._latestSnapshot = snapshotIds.length > 0 ? _snapshotCache[snapshotIds[0]] : null;
+    C.sessionScenarios = scenarioRes.data.map(row => _scenarioRowToClient(row, profileMap));
+    // `window._latestSnapshot` is the base inputs template consumed by
+    // wizard.js's `completeWizard` — it is `C.defaults` itself now (the
+    // single source of truth), not a per-scenario `ref_snapshot` row.
+    window._latestSnapshot = C.defaults || null;
     const newBtn = document.getElementById('new-scenario-btn');
     if (newBtn) newBtn.removeAttribute('disabled');
   }
@@ -97,39 +164,25 @@
   async function saveScenarioToDB(scenario) {
     const userId = C.currentUserId;
     if (!userId) return;
-    const fullInputs = typeof collectJsonData === 'function' ? collectJsonData() : null;
-    const snap = scenario.ref_snapshot_id ? _snapshotCache[scenario.ref_snapshot_id] : null;
-    const slimInputs = (fullInputs && snap) ? extractScenarioInputs(fullInputs) : scenario.inputs;
-    const overrides = (fullInputs && snap) ? computeOverrides(fullInputs, snap) : (scenario.overrides || {});
-    const { error } = await _sb.from('scenario').upsert({
-      id: scenario.id,
-      user_id: userId,
+    await _ensureDefaultsLoaded();
+    const changes = C.diffChanges(C.defaults, scenario.inputs);
+    const { data, error } = await patchScenarioApi(scenario.id, {
+      revision: scenario.revision,
       name: scenario.customName,
-      inputs: slimInputs,
-      results: scenario.results,
-      metadata: scenario.metadata,
-      overrides: overrides,
-      ref_snapshot_id: scenario.ref_snapshot_id,
-      updated_at: new Date().toISOString()
+      defaults_id: C.defaultsId,
+      changes: changes
     });
-    if (error) console.error('Failed to save scenario:', error);
-    if (!error) C.unsavedChanges = false;
-    scenario.inputs = slimInputs;
-    scenario.overrides = overrides;
+    if (error) { console.error('Failed to save scenario:', error); return; }
+    scenario.changes = changes;
+    scenario.results = data.results;
+    scenario.revision = data.revision;
+    scenario.metadata.timestamp = data.updated_at;
+    C.unsavedChanges = false;
   }
 
   async function deleteScenarioFromDB(id) {
-    const { error } = await _sb.from('scenario').delete().eq('id', id);
+    const { error } = await deleteScenarioApi(id);
     if (error) console.error('Failed to delete scenario:', error);
-  }
-
-  async function loadSnapshot(snapshotId) {
-    if (_snapshotCache[snapshotId]) return _snapshotCache[snapshotId];
-    const { data, error } = await _sb.from('ref_snapshot')
-      .select('data').eq('id', snapshotId).single();
-    if (error) { console.error('Failed to load snapshot:', error); return null; }
-    _snapshotCache[snapshotId] = data.data;
-    return data.data;
   }
 
   function assembleFullInputs(snapshotData, overrides, scenarioInputs) {
@@ -219,23 +272,38 @@
   async function addScenarioToSession(inputs, results, metadata, customName) {
     const userId = C.currentUserId;
     const name = customName || generateScenarioName('Scenario');
-    const latestSnapshotId = Object.keys(_snapshotCache)[0] || null;
-    const row = {
-      user_id: userId || null,
+    const source = (metadata && metadata.source) || 'manual';
+    await _ensureDefaultsLoaded();
+    const changes = inputs ? C.diffChanges(C.defaults, inputs) : {};
+    const { data, error } = await postScenarioApi({
       name: name,
-      inputs: inputs ? extractScenarioInputs(inputs) : {},
-      results: results ? JSON.parse(JSON.stringify(results)) : null,
-      metadata: metadata || { timestamp: new Date().toISOString(), source: 'manual' },
-      updated_at: new Date().toISOString(),
-      ref_snapshot_id: latestSnapshotId,
-      overrides: (inputs && latestSnapshotId && _snapshotCache[latestSnapshotId])
-          ? computeOverrides(inputs, _snapshotCache[latestSnapshotId]) : {}
-    };
-    const { data, error } = await _sb.from('scenario').insert(row).select('id').single();
-    const id = (data && !error) ? data.id : crypto.randomUUID();
-    if (error) console.error('Failed to insert scenario:', error);
+      source: source,
+      defaults_id: C.defaultsId,
+      changes: changes
+    });
+    // The server always recalculates `results` from `changes` on create, so
+    // a caller-supplied `results` (e.g. a .forge file's cached results) is
+    // never persisted as-is — `data.results` is the single source of truth.
+    // On a failed request, fall back to a client-only scenario (not
+    // persisted) so the session doesn't lose the user's work entirely.
+    const row = error
+      ? {
+          id: crypto.randomUUID(), user_id: userId || null, name, revision: 1,
+          defaults_id: C.defaultsId, changes, results: results ? JSON.parse(JSON.stringify(results)) : null,
+          updated_at: new Date().toISOString()
+        }
+      : data;
+    if (error) console.error('Failed to create scenario:', error);
     const scenario = {
-      ...row, id, customName: name,
+      id: row.id,
+      user_id: row.user_id || userId || null,
+      customName: name,
+      inputs: inputs ? JSON.parse(JSON.stringify(inputs)) : (C.defaults ? applyChangesToDefaults(C.defaults, changes) : {}),
+      changes: row.changes || changes,
+      results: row.results,
+      metadata: { timestamp: row.updated_at, source: source },
+      revision: row.revision,
+      defaults_id: row.defaults_id,
       _owner: C.userProfile ? { username: C.userProfile.username, org: C.userProfile.org } : null
     };
     C.sessionScenarios.push(scenario);
@@ -347,12 +415,6 @@
     let fullInputs = scenario.inputs;
     if (scenario.id === C.activeScenarioId && typeof collectJsonData === 'function') {
       fullInputs = collectJsonData() || fullInputs;
-    } else if (scenario.ref_snapshot_id && _snapshotCache[scenario.ref_snapshot_id]) {
-      fullInputs = assembleFullInputs(
-        _snapshotCache[scenario.ref_snapshot_id],
-        scenario.overrides,
-        scenario.inputs || {}
-      );
     }
 
     // Single source of truth: the .forge file records only what differs
@@ -378,12 +440,6 @@
     let fullInputs = scenario.inputs;
     if (scenario.id === C.activeScenarioId && typeof collectJsonData === 'function') {
       fullInputs = collectJsonData() || fullInputs;
-    } else if (scenario.ref_snapshot_id && _snapshotCache[scenario.ref_snapshot_id]) {
-      fullInputs = assembleFullInputs(
-        _snapshotCache[scenario.ref_snapshot_id],
-        scenario.overrides,
-        scenario.inputs || {}
-      );
     }
 
     const defaults = C.forgeJsonData;
@@ -735,7 +791,6 @@
   window.hasRequiredFields = hasRequiredFields;
   window.getInvalidFields = getInvalidFields;
   window.clearResults = clearResults;
-  window.loadSnapshot = loadSnapshot;
   window.assembleFullInputs = assembleFullInputs;
   window.extractScenarioInputs = extractScenarioInputs;
   window.computeOverrides = computeOverrides;
@@ -748,5 +803,5 @@
   window.downloadCsvFile = downloadCsvFile;
   window.downloadAllCsvFiles = downloadAllCsvFiles;
   window.deleteScenarioFromDB = deleteScenarioFromDB;
-  window._snapshotCache = _snapshotCache;
+  window.patchScenarioApi = patchScenarioApi;
 })();
