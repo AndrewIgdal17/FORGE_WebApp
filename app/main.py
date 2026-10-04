@@ -6,6 +6,8 @@ import asyncio
 import json
 import logging
 import os
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +28,9 @@ from . import scenarios as scenarios_module
 from .models import CalculateRequest, sanitize_for_json
 
 logger = logging.getLogger(__name__)
+
+FORGE_CALC_WORKERS = int(os.environ.get("FORGE_CALC_WORKERS", "4"))
+_calc_pool = ThreadPoolExecutor(max_workers=FORGE_CALC_WORKERS)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -250,6 +255,7 @@ async def get_input_metadata() -> JSONResponse:
 
 @app.post("/api/forge/calculate", response_class=JSONResponse)
 async def calculate_forge(
+    request: Request,
     payload: CalculateRequest,
     _user: dict = Depends(rate_limit_calculation),
 ) -> JSONResponse:
@@ -259,31 +265,62 @@ async def calculate_forge(
     The client must send the `defaults_id` it last fetched; if the deployed
     calculator's defaults have since changed, this returns 409 along with the
     currently deployed `calculator_info()` so the client can refetch. Unknown
-    or non-scalar change paths return 422 with the offending paths.
+    or non-scalar change paths return 422 with the offending paths. User-fixable
+    calculator errors return 422; internal failures return 500 with a request id.
     """
+    request_id = str(uuid.uuid4())[:12]
+    logger.debug("calculate %s %s", request_id, request.url.path)
+
+    def _tagged(response: JSONResponse) -> JSONResponse:
+        response.headers["X-Request-ID"] = request_id
+        return response
+
     if payload.defaults_id != _DEFAULTS_ID:
-        return JSONResponse(status_code=409, content=sanitize_for_json(_CALCULATOR_INFO))
+        return _tagged(JSONResponse(status_code=409, content=sanitize_for_json(_CALCULATOR_INFO)))
 
     try:
         resolved_inputs = forge.resolve_inputs(payload.changes)
     except UnknownInputPath as exc:
-        return JSONResponse(status_code=422, content={"paths": exc.paths})
+        return _tagged(JSONResponse(status_code=422, content={"paths": exc.paths}))
 
     scenario_id = payload.scenario_id or datetime.now().strftime("%b %d %Y %H.%M.%S")
 
     loop = asyncio.get_event_loop()
-    results = await loop.run_in_executor(
-        None,
-        lambda: forge.run_calculation(resolved_inputs, scenario_id=scenario_id, quiet=True),
-    )
+    try:
+        results = await asyncio.wait_for(
+            loop.run_in_executor(
+                _calc_pool,
+                lambda: forge.run_calculation(resolved_inputs, scenario_id=scenario_id),
+            ),
+            timeout=30.0,
+        )
+    except asyncio.TimeoutError:
+        return _tagged(JSONResponse(
+            status_code=503,
+            content={"error": {"code": "busy", "message": "All calculator workers are busy."}},
+            headers={"Retry-After": "10"},
+        ))
+    except forge.InvalidInputs as exc:
+        return _tagged(JSONResponse(
+            status_code=422,
+            content={"error": {"code": "invalid_inputs", "message": str(exc)}},
+        ))
+    except forge.CalculationError as exc:
+        logger.error("CalculationError [%s]: %s", request_id, exc, exc_info=True)
+        return _tagged(JSONResponse(
+            status_code=500,
+            content={"error": {"code": "calculation_failed", "message": f"Calculation failed (ref: {request_id})."}},
+        ))
 
-    return JSONResponse(sanitize_for_json({
+    response = JSONResponse(sanitize_for_json({
         "success": True,
         "scenario_id": scenario_id,
         "timestamp": results.get("timestamp", datetime.now().isoformat()),
         "results": results,
         "error": None,
     }))
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 if __name__ == "__main__":

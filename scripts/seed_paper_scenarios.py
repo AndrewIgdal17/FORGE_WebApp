@@ -91,7 +91,7 @@ def _calculate(name: str, full_inputs: dict) -> tuple[dict[str, Any], dict[str, 
     changes = forge.diff_changes(full_inputs)
     resolved = forge.resolve_inputs(changes)
     try:
-        raw_results = forge.run_calculation(resolved, scenario_id=name, quiet=True)
+        raw_results = forge.run_calculation(resolved, scenario_id=name)
     except Exception as exc:  # noqa: BLE001 - the calculator's failure mode is unconstrained
         logger.warning("Scenario %r failed to calculate: %s", name, exc)
         return changes, {

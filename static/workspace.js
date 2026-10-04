@@ -65,17 +65,6 @@
             markResultsAvailable(0);
             document.dispatchEvent(new CustomEvent('forge-results-updated',
               { detail: { results: json.results } }));
-            if (json.results._partial) {
-              const warnings = json.results._warnings || [];
-              const banner = document.createElement('div');
-              banner.className = 'partial-results-banner';
-              banner.innerHTML = '\u26a0\ufe0f Partial results \u2014 some modules failed: ' +
-                  warnings.join(', ') +
-                  ' <button onclick="this.parentElement.remove()" style="margin-left:1rem;cursor:pointer;border:none;background:none;color:#856404;font-weight:600;">Dismiss</button>';
-              banner.style.cssText = 'background:#fff3cd;color:#856404;padding:0.75rem 1rem;border-radius:6px;margin-bottom:1rem;font-size:0.9rem;';
-              const resultEl = document.getElementById('result');
-              if (resultEl) resultEl.insertBefore(banner, resultEl.firstChild);
-            }
           } else {
             if (json.error) {
               console.warn('Calculator error:', json.error);

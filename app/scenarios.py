@@ -23,7 +23,7 @@ import jwt
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from forge.errors import UnknownInputPath
+from forge.errors import CalculationError, InvalidInputs, UnknownInputPath
 
 from . import auth as auth_module
 from . import db as db_module
@@ -169,9 +169,17 @@ def _calculate(name: str, changes: dict) -> tuple[Optional[dict], Optional[JSONR
         )
 
     try:
-        raw_results = forge.run_calculation(resolved, scenario_id=name, quiet=True)
-    except Exception as exc:  # noqa: BLE001 - the calculator's failure mode is unconstrained
-        logger.warning("Calculator failed for scenario %r: %s", name, exc)
+        raw_results = forge.run_calculation(resolved, scenario_id=name)
+    except InvalidInputs as exc:
+        return {
+            "results": None,
+            "calculator": None,
+            "inputs_id": None,
+            "computed_at": None,
+            "calc_error": str(exc),
+        }, None
+    except CalculationError as exc:
+        logger.warning("Calculator failed for scenario %r: %s", name, exc, exc_info=True)
         return {
             "results": None,
             "calculator": None,
