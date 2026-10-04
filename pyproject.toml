@@ -17,7 +17,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["httpx", "pytest"]
+dev = ["httpx", "pytest", "ruff"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI declares dependencies in argument defaults.
+extend-immutable-calls = ["fastapi.Depends", "Depends"]
 
 [tool.setuptools.packages.find]
 include = ["app*"]

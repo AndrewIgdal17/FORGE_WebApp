@@ -6,7 +6,7 @@ import logging
 import os
 import time
 from collections import defaultdict
-from typing import Mapping, Optional
+from collections.abc import Mapping
 
 import jwt
 from jwt import PyJWKClient
@@ -24,7 +24,7 @@ REQUIRED_ROLE = "authenticated"
 # --- Fail-closed startup check -----------------------------------------------
 
 
-def assert_startup_credentials(env: Optional[Mapping[str, str]] = None) -> None:
+def assert_startup_credentials(env: Mapping[str, str] | None = None) -> None:
     """Raise `RuntimeError` unless the server has what it needs to run safely.
 
     The server refuses to start without both `SUPABASE_URL` and
@@ -62,8 +62,8 @@ def assert_startup_credentials(env: Optional[Mapping[str, str]] = None) -> None:
 
 # --- Token verification -------------------------------------------------------
 
-_jwks_client: Optional[PyJWKClient] = None
-_jwks_client_url: Optional[str] = None
+_jwks_client: PyJWKClient | None = None
+_jwks_client_url: str | None = None
 
 
 def _get_jwks_client(supabase_url: str) -> PyJWKClient:
@@ -79,10 +79,10 @@ def _get_jwks_client(supabase_url: str) -> PyJWKClient:
 
 
 def verify_token(
-    authorization: Optional[str],
+    authorization: str | None,
     *,
     supabase_url: str,
-    jwks_client: Optional[PyJWKClient] = None,
+    jwks_client: PyJWKClient | None = None,
 ) -> dict:
     """Verify a Supabase access token from an `Authorization: Bearer <token>` header.
 
@@ -154,13 +154,13 @@ class RateLimiter:
         timestamps.append(now)
         return True
 
-    def allow_calculation(self, user_id: str, now: Optional[float] = None) -> bool:
+    def allow_calculation(self, user_id: str, now: float | None = None) -> bool:
         """Record and allow a calculation for `user_id`, or return False if over the limit."""
         return self._check(
             self._calculation_hits, user_id, self._calculation_limit, now if now is not None else time.monotonic()
         )
 
-    def allow_write(self, user_id: str, now: Optional[float] = None) -> bool:
+    def allow_write(self, user_id: str, now: float | None = None) -> bool:
         """Record and allow a write for `user_id`, or return False if over the limit."""
         return self._check(
             self._write_hits, user_id, self._write_limit, now if now is not None else time.monotonic()

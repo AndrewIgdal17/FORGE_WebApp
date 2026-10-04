@@ -17,7 +17,7 @@ from pathlib import Path
 import forge
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from app.models import sanitize_for_json  # noqa: E402
+from app.models import sanitize_for_json
 
 SCENARIO_ID = "AEP_LRGV_Laredo_NewBuild"
 

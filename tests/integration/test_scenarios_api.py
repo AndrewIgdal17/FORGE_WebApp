@@ -1,7 +1,7 @@
 """Integration tests for the scenario CRUD routes against the local Supabase stack.
 
 Skipped automatically if the local stack isn't reachable (e.g. CI without
-`supabase start`), mirroring tests/test_db.py. Test users are created
+`supabase start`), mirroring tests/integration/test_db.py. Test users are created
 through the local GoTrue admin API (`/auth/v1/admin/users`, confirmed
 immediately so no email round-trip is needed) and signed in through the
 password grant (`/auth/v1/token?grant_type=password`) to get a real,
@@ -26,9 +26,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import asyncpg
+import forge
 import httpx
 import pytest
-import forge
 
 from app import scenarios as scenarios_module
 from app.models import ScenarioUpdate
@@ -76,9 +76,9 @@ pytestmark = pytest.mark.skipif(
 
 # Safe to import unconditionally: app.main works fine with auth disabled
 # (whatever conftest.py or an earlier test module left it as).
-import app.main as app_main_module  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi.testclient import TestClient
 
+import app.main as app_main_module
 
 # --- Reload app.main against the real local stack --------------------------
 #

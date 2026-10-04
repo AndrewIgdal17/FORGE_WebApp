@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 import asyncpg
 
@@ -78,10 +78,9 @@ async def forge_api_transaction(user_id: str) -> AsyncIterator[asyncpg.Connectio
     only in rows the RLS policies allow for that specific user.
     """
     pool = get_db_pool()
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            await conn.execute(
-                "SELECT set_config('request.jwt.claim.sub', $1, true)",
-                str(user_id),
-            )
-            yield conn
+    async with pool.acquire() as conn, conn.transaction():
+        await conn.execute(
+            "SELECT set_config('request.jwt.claim.sub', $1, true)",
+            str(user_id),
+        )
+        yield conn

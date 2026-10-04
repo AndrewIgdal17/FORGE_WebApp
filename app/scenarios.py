@@ -14,8 +14,8 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 import forge
@@ -66,7 +66,7 @@ class ScenarioAuthError(Exception):
 
 
 async def require_user(
-    cred: Optional[HTTPAuthorizationCredentials] = Depends(_security),
+    cred: HTTPAuthorizationCredentials | None = Depends(_security),
 ) -> dict:
     """Verify a Supabase JWT via `app.auth.verify_token`. Raises on any failure."""
     supabase_url = os.environ.get("SUPABASE_URL", "")
@@ -85,9 +85,9 @@ def _error(
     status_code: int,
     code: str,
     message: str,
-    paths: Optional[list[str]] = None,
+    paths: list[str] | None = None,
     *,
-    headers: Optional[dict[str, str]] = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     body: dict[str, Any] = {"error": {"code": code, "message": message}}
     if paths is not None:
@@ -148,7 +148,7 @@ async def _fetch_scenario(conn, scenario_id: str):
 # --- Calculation ---------------------------------------------------------------
 
 
-def _calculate(name: str, changes: dict) -> tuple[Optional[dict], Optional[JSONResponse]]:
+def _calculate(name: str, changes: dict) -> tuple[dict | None, JSONResponse | None]:
     """Resolve `changes` against the deployed defaults and run the calculator.
 
     Returns `(calc_fields, None)` on success or calculator failure (both save
@@ -193,12 +193,12 @@ def _calculate(name: str, changes: dict) -> tuple[Optional[dict], Optional[JSONR
         "results": sanitize_for_json(raw_results),
         "calculator": _CALCULATOR_INFO,
         "inputs_id": inputs_id,
-        "computed_at": datetime.now(timezone.utc),
+        "computed_at": datetime.now(UTC),
         "calc_error": None,
     }, None
 
 
-def _jsonb_param(value: Any) -> Optional[str]:
+def _jsonb_param(value: Any) -> str | None:
     return json.dumps(value) if value is not None else None
 
 

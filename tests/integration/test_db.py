@@ -26,7 +26,7 @@ SUPERUSER_DATABASE_URL = os.environ.get(
 async def _stack_is_reachable() -> bool:
     try:
         conn = await asyncpg.connect(dsn=FORGE_DATABASE_URL, timeout=2)
-    except Exception:
+    except Exception:  # noqa: BLE001 — any connect failure means the local stack is down
         return False
     await conn.close()
     return True

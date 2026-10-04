@@ -5,14 +5,22 @@ import logging
 import threading
 import time
 
+import forge
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import FORGE_CALC_WORKERS, app
 
-import forge
-
 SCENARIOS_DIR = forge.get_scenarios_path()
+
+
+def _scenario_changes():
+    """Load case-study diffs outside the async test so file IO stays synchronous."""
+    cases = []
+    for forge_file in sorted(SCENARIOS_DIR.glob("*.forge")):
+        doc = json.loads(forge_file.read_text())
+        cases.append((forge_file.stem, forge.diff_changes(doc["inputs"])))
+    return cases
 
 
 @pytest.fixture
@@ -26,12 +34,9 @@ async def test_concurrent_calculations():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         tasks = []
-        for forge_file in sorted(SCENARIOS_DIR.glob("*.forge")):
-            with open(forge_file) as f:
-                doc = json.load(f)
-            changes = forge.diff_changes(doc["inputs"])
+        for name, changes in _scenario_changes():
 
-            async def do_request(ch=changes, name=forge_file.stem):
+            async def do_request(ch=changes, name=name):
                 resp = await client.post("/api/forge/calculate", json={
                     "defaults_id": forge.get_defaults_id(),
                     "changes": ch,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -29,19 +29,19 @@ def sanitize_for_json(obj: Any) -> Any:
 
 class CalculateRequest(BaseModel):
     defaults_id: str
-    changes: Dict[str, Any]
-    scenario_id: Optional[str] = None
+    changes: dict[str, Any]
+    scenario_id: str | None = None
 
 
 class ScenarioCreate(BaseModel):
     name: str
     source: str
     defaults_id: str
-    changes: Dict[str, Any]
+    changes: dict[str, Any]
 
 
 class ScenarioUpdate(BaseModel):
     revision: int
-    name: Optional[str] = None
-    defaults_id: Optional[str] = None
-    changes: Optional[Dict[str, Any]] = None
+    name: str | None = None
+    defaults_id: str | None = None
+    changes: dict[str, Any] | None = None

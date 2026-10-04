@@ -11,7 +11,7 @@ import uuid
 import weakref
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import forge
@@ -306,12 +306,12 @@ async def calculate_forge(
     except UnknownInputPath as exc:
         return _tagged(JSONResponse(status_code=422, content={"paths": exc.paths}))
 
-    scenario_id = payload.scenario_id or datetime.now().strftime("%b %d %Y %H.%M.%S")
+    scenario_id = payload.scenario_id or datetime.now(UTC).strftime("%b %d %Y %H.%M.%S")
 
     sem = _calc_semaphore()
     try:
         await asyncio.wait_for(sem.acquire(), timeout=_CALC_ACQUIRE_TIMEOUT)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return _tagged(JSONResponse(
             status_code=503,
             content={"error": {"code": "busy", "message": "All calculator workers are busy."}},
@@ -335,8 +335,8 @@ async def calculate_forge(
             status_code=422,
             content={"error": {"code": "invalid_inputs", "message": str(exc)}},
         ))
-    except forge.CalculationError as exc:
-        logger.error("CalculationError [%s]: %s", request_id, exc, exc_info=True)
+    except forge.CalculationError:
+        logger.exception("CalculationError [%s]", request_id)
         return _tagged(JSONResponse(
             status_code=500,
             content={"error": {"code": "calculation_failed", "message": f"Calculation failed (ref: {request_id})."}},
@@ -347,7 +347,7 @@ async def calculate_forge(
     response = JSONResponse(sanitize_for_json({
         "success": True,
         "scenario_id": scenario_id,
-        "timestamp": results.get("timestamp", datetime.now().isoformat()),
+        "timestamp": results.get("timestamp", datetime.now(UTC).isoformat()),
         "results": results,
         "error": None,
     }))

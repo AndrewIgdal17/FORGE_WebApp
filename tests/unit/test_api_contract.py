@@ -10,7 +10,7 @@ client = TestClient(app)
 
 
 def test_static_holds_no_parameter_tables():
-    static = Path(__file__).resolve().parents[1] / "static"
+    static = Path(__file__).resolve().parents[2] / "static"
     json_files = sorted(path.name for path in static.glob("*.json"))
     assert json_files == ["_function-map.json"]
 

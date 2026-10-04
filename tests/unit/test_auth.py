@@ -12,7 +12,6 @@ from cryptography.hazmat.primitives.asymmetric import ec
 
 from app import auth
 
-
 # --- assert_startup_credentials -----------------------------------------------
 
 
