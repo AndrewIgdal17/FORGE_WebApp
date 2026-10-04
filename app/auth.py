@@ -34,6 +34,14 @@ def assert_startup_credentials(env: Mapping[str, str] | None = None) -> None:
     """
     env = env if env is not None else os.environ
     auth_disabled = env.get("FORGE_AUTH_DISABLED", "").strip().lower() == "true"
+    on_render = env.get("RENDER", "").strip().lower() == "true"
+
+    if on_render and auth_disabled:
+        raise RuntimeError(
+            "FORGE_AUTH_DISABLED=true is forbidden when RENDER=true. "
+            "Set SUPABASE_URL and FORGE_DATABASE_URL instead."
+        )
+
     supabase_url = (env.get("SUPABASE_URL") or "").strip()
     database_url = (env.get("FORGE_DATABASE_URL") or "").strip()
 

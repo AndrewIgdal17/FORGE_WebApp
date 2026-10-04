@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import time
 import uuid
@@ -66,6 +67,44 @@ SCENARIOS_FILE = STATIC_DIR / "scenarios-manager.html"
 # unless FORGE_AUTH_DISABLED=true is set explicitly for local dev.
 auth_module.assert_startup_credentials()
 
+_health_ready = False
+_RENDER_GIT_COMMIT = os.environ.get("RENDER_GIT_COMMIT")
+
+
+def _load_self_test_scenario() -> dict:
+    """Load the Laredo case study used by the startup self-test."""
+    scenarios_dir = forge.get_scenarios_path()
+    laredo_path = scenarios_dir / "AEP_LRGV_Laredo_NewBuild.forge"
+    with open(laredo_path) as f:
+        return json.load(f)
+
+
+async def _startup_self_test() -> None:
+    """Run one case study and optionally ping the database. Sets _health_ready."""
+    global _health_ready
+    try:
+        doc = _load_self_test_scenario()
+        changes = forge.diff_changes(doc["inputs"])
+        resolved = forge.resolve_inputs(changes)
+        results = forge.run_calculation(resolved, scenario_id="self-test")
+        assert results.get("provenance"), "Self-test: missing provenance"
+        bcr = results.get("bcr", {})
+        assert any(
+            k.startswith("bcr_") and isinstance(v, (int, float)) and math.isfinite(v)
+            for k, v in bcr.items()
+        ), "Self-test: no finite BCR"
+
+        if _FORGE_DATABASE_URL:
+            pool = db_module.get_db_pool()
+            async with pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            logger.info("Self-test: database OK")
+
+        _health_ready = True
+        logger.info("Self-test: passed")
+    except Exception:
+        logger.exception("Self-test: FAILED — /api/health will return 503")
+
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
@@ -76,6 +115,7 @@ async def _lifespan(app: FastAPI):
         # assert_startup_credentials() already enforced this at import time;
         # this branch should be unreachable outside of FORGE_AUTH_DISABLED=true.
         raise RuntimeError("FORGE_DATABASE_URL is not set.")
+    await _startup_self_test()
     yield
     await db_module.close_db_pool()
 
@@ -237,6 +277,19 @@ async def serve_workspace() -> FileResponse:
 async def serve_scenarios_manager() -> FileResponse:
     """Serve the scenario manager."""
     return FileResponse(SCENARIOS_FILE)
+
+
+@app.get("/api/health", response_class=JSONResponse)
+async def health() -> JSONResponse:
+    """Health check for Render. 503 until the self-test passes."""
+    body = {
+        "status": "ok" if _health_ready else "starting",
+        "app_commit": _RENDER_GIT_COMMIT,
+        "calculator": _CALCULATOR_INFO,
+    }
+    if not _health_ready:
+        return JSONResponse(status_code=503, content=sanitize_for_json(body))
+    return JSONResponse(content=sanitize_for_json(body))
 
 
 @app.get("/api/calculator", response_class=JSONResponse)
