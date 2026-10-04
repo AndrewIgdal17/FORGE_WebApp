@@ -75,6 +75,18 @@ def test_all_scenarios_match_the_calculator():
         _assert_api_matches_calculator(scenario_file.stem, document)
 
 
+def test_invalid_inputs_returns_message():
+    response = client.post(
+        "/api/forge/calculate",
+        json={"defaults_id": forge.get_defaults_id(), "changes": {}},
+    )
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "invalid_inputs"
+    assert isinstance(body["error"]["message"], str) and body["error"]["message"]
+    assert response.headers["x-request-id"]
+
+
 def test_stale_defaults_and_unknown_paths():
     stale = client.post(
         "/api/forge/calculate", json={"defaults_id": "sha256:0", "changes": {}}

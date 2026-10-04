@@ -65,17 +65,29 @@
             markResultsAvailable(0);
             document.dispatchEvent(new CustomEvent('forge-results-updated',
               { detail: { results: json.results } }));
-          } else {
-            if (json.error) {
-              console.warn('Calculator error:', json.error);
-              clearResults();
-              const _re = document.getElementById('result');
-              if (_re) {
-                _re.innerHTML = '<div style="display:flex; align-items:center; justify-content:center; min-height:300px; color:#b00020; font-size:1.1rem; text-align:center;">' +
-                  '<div><div style="font-size:2rem; margin-bottom:0.5rem;">&#9888;</div>' +
-                  'Calculation error \u2014 check inputs and try again.<br>' +
-                  '<span style="font-size:0.85rem; color:#999;">' + (json.error || '') + '</span></div></div>';
-              }
+          } else if (json.error) {
+            console.warn('Calculator error:', json.error);
+            clearResults();
+            const _re = document.getElementById('result');
+            if (_re) {
+              const errText = (json.error && typeof json.error.message === 'string')
+                ? json.error.message
+                : String(json.error || '');
+              _re.replaceChildren();
+              const wrap = document.createElement('div');
+              wrap.style.cssText = 'display:flex; align-items:center; justify-content:center; min-height:300px; color:#b00020; font-size:1.1rem; text-align:center;';
+              const inner = document.createElement('div');
+              const icon = document.createElement('div');
+              icon.style.cssText = 'font-size:2rem; margin-bottom:0.5rem;';
+              icon.textContent = '\u26A0';
+              const headline = document.createElement('div');
+              headline.textContent = 'Calculation error \u2014 check inputs and try again.';
+              const detail = document.createElement('div');
+              detail.style.cssText = 'font-size:0.85rem; color:#999;';
+              detail.textContent = errText;
+              inner.append(icon, headline, detail);
+              wrap.appendChild(inner);
+              _re.appendChild(wrap);
             }
           }
         } catch (e) {
@@ -312,10 +324,12 @@
        * longer match the already-rendered form's shape), that retry is never
        * sent either — the user is told to reload the workspace.
        *
-       * On 422 (unknown/invalid input paths), sets C.calculateBlocked so
-       * neither autoCalculate nor the manual Run button will send again
-       * until the form changes, and returns `{ blocked: true, paths }`
-       * instead of throwing.
+       * On 422 with `error.code === "invalid_inputs"`, shows `error.message`
+       * and blocks until the form changes. On 422 with `paths` (unknown
+       * input paths), same block and the existing path toast. On 500 or
+       * 503, shows `error.message` or a short fallback and does not block.
+       * Server text is passed to showToast / textContent, never innerHTML.
+       * Returns `{ blocked: true, paths, message }` instead of throwing.
        */
       async function postCalculate(current, scenarioId) {
         const baseUrl = C.apiBaseUrl;
@@ -356,9 +370,39 @@
         }
         if (resp.status === 422) {
           const errJson = await resp.json();
+          if (errJson.error && errJson.error.code === 'invalid_inputs') {
+            C.calculateBlocked = true;
+            const message = (typeof errJson.error.message === 'string' && errJson.error.message)
+              ? errJson.error.message
+              : 'Invalid inputs.';
+            showToast(message);
+            return { blocked: true, paths: [], message: message };
+          }
+          if (Array.isArray(errJson.paths)) {
+            C.calculateBlocked = true;
+            showToast('Invalid inputs: ' + errJson.paths.join(', '));
+            return { blocked: true, paths: errJson.paths };
+          }
           C.calculateBlocked = true;
-          showToast('Invalid inputs: ' + (errJson.paths || []).join(', '));
-          return { blocked: true, paths: errJson.paths || [] };
+          showToast('Invalid inputs.');
+          return { blocked: true, paths: [], message: 'Invalid inputs.' };
+        }
+        if (resp.status === 500 || resp.status === 503) {
+          const fallback = resp.status === 503
+            ? 'The calculator is busy. Try again in a moment.'
+            : 'Calculation failed.';
+          let message = fallback;
+          try {
+            const errJson = await resp.json();
+            if (errJson.error && typeof errJson.error.message === 'string' && errJson.error.message) {
+              message = errJson.error.message;
+            }
+          } catch (e) {
+            // Non-JSON body: keep the fallback. The message is still textContent.
+            message = fallback;
+          }
+          showToast(message);
+          return { blocked: true, paths: [], message: message };
         }
         if (!resp.ok) {
           const errorText = await resp.text();
@@ -628,7 +672,8 @@
 
           const result = await postCalculate(collectJsonData(), scenarioId);
           if (result.blocked) {
-            resultEl.textContent = 'Invalid inputs: ' + result.paths.join(', ');
+            resultEl.textContent = result.message
+              || ('Invalid inputs: ' + (result.paths || []).join(', '));
             return;
           }
           const json = result.json;

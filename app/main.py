@@ -6,7 +6,9 @@ import asyncio
 import json
 import logging
 import os
+import time
 import uuid
+import weakref
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -30,7 +32,26 @@ from .models import CalculateRequest, sanitize_for_json
 logger = logging.getLogger(__name__)
 
 FORGE_CALC_WORKERS = int(os.environ.get("FORGE_CALC_WORKERS", "4"))
+_CALC_ACQUIRE_TIMEOUT = 30.0
+_SLOW_CALC_SECONDS = 10.0
 _calc_pool = ThreadPoolExecutor(max_workers=FORGE_CALC_WORKERS)
+# One semaphore per running loop. A module-level Semaphore binds to the first
+# loop that acquires it, and this process serves both TestClient and anyio.
+_calc_semaphores: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _calc_semaphore() -> asyncio.Semaphore:
+    """Gate of FORGE_CALC_WORKERS slots on the current event loop."""
+    loop = asyncio.get_running_loop()
+    try:
+        return _calc_semaphores[loop]
+    except KeyError:
+        sem = asyncio.Semaphore(FORGE_CALC_WORKERS)
+        _calc_semaphores[loop] = sem
+        return sem
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -267,6 +288,8 @@ async def calculate_forge(
     currently deployed `calculator_info()` so the client can refetch. Unknown
     or non-scalar change paths return 422 with the offending paths. User-fixable
     calculator errors return 422; internal failures return 500 with a request id.
+    A 503 means every worker stayed busy for 30 seconds. A calculation that
+    has taken a slot runs to completion.
     """
     request_id = str(uuid.uuid4())[:12]
     logger.debug("calculate %s %s", request_id, request.url.path)
@@ -285,21 +308,28 @@ async def calculate_forge(
 
     scenario_id = payload.scenario_id or datetime.now().strftime("%b %d %Y %H.%M.%S")
 
-    loop = asyncio.get_event_loop()
+    sem = _calc_semaphore()
     try:
-        results = await asyncio.wait_for(
-            loop.run_in_executor(
-                _calc_pool,
-                lambda: forge.run_calculation(resolved_inputs, scenario_id=scenario_id),
-            ),
-            timeout=30.0,
-        )
+        await asyncio.wait_for(sem.acquire(), timeout=_CALC_ACQUIRE_TIMEOUT)
     except asyncio.TimeoutError:
         return _tagged(JSONResponse(
             status_code=503,
             content={"error": {"code": "busy", "message": "All calculator workers are busy."}},
             headers={"Retry-After": "10"},
         ))
+
+    try:
+        loop = asyncio.get_running_loop()
+        t0 = time.monotonic()
+        try:
+            results = await loop.run_in_executor(
+                _calc_pool,
+                lambda: forge.run_calculation(resolved_inputs, scenario_id=scenario_id),
+            )
+        finally:
+            elapsed = time.monotonic() - t0
+            if elapsed > _SLOW_CALC_SECONDS:
+                logger.warning("Calculation took %.1fs [%s]", elapsed, request_id)
     except forge.InvalidInputs as exc:
         return _tagged(JSONResponse(
             status_code=422,
@@ -311,6 +341,8 @@ async def calculate_forge(
             status_code=500,
             content={"error": {"code": "calculation_failed", "message": f"Calculation failed (ref: {request_id})."}},
         ))
+    finally:
+        sem.release()
 
     response = JSONResponse(sanitize_for_json({
         "success": True,
