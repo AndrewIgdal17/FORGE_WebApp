@@ -168,6 +168,39 @@ def rate_limit_calculation(user: dict = Depends(require_auth)) -> dict:
     return user
 
 
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """Emit one JSON log line per request; set X-Request-ID on every response."""
+
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())[:12]
+        request.state.request_id = request_id
+        t0 = time.monotonic()
+
+        response = await call_next(request)
+
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        user_id = getattr(request.state, "user_id", None)
+        inputs_id = getattr(request.state, "inputs_id", None)
+        log_entry = {
+            "time": datetime.now(UTC).isoformat(),
+            "level": "INFO",
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status": response.status_code,
+            "duration_ms": round(elapsed_ms, 1),
+        }
+        if user_id:
+            log_entry["user_id"] = user_id
+        if inputs_id:
+            log_entry["inputs_id"] = inputs_id
+
+        logger.info(json.dumps(log_entry))
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+
+app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 
@@ -344,20 +377,19 @@ async def calculate_forge(
     A 503 means every worker stayed busy for 30 seconds. A calculation that
     has taken a slot runs to completion.
     """
-    request_id = str(uuid.uuid4())[:12]
+    request_id = request.state.request_id
+    user_id = _user.get("sub")
+    if user_id:
+        request.state.user_id = user_id
     logger.debug("calculate %s %s", request_id, request.url.path)
 
-    def _tagged(response: JSONResponse) -> JSONResponse:
-        response.headers["X-Request-ID"] = request_id
-        return response
-
     if payload.defaults_id != _DEFAULTS_ID:
-        return _tagged(JSONResponse(status_code=409, content=sanitize_for_json(_CALCULATOR_INFO)))
+        return JSONResponse(status_code=409, content=sanitize_for_json(_CALCULATOR_INFO))
 
     try:
         resolved_inputs = forge.resolve_inputs(payload.changes)
     except UnknownInputPath as exc:
-        return _tagged(JSONResponse(status_code=422, content={"paths": exc.paths}))
+        return JSONResponse(status_code=422, content={"paths": exc.paths})
 
     scenario_id = payload.scenario_id or datetime.now(UTC).strftime("%b %d %Y %H.%M.%S")
 
@@ -365,11 +397,11 @@ async def calculate_forge(
     try:
         await asyncio.wait_for(sem.acquire(), timeout=_CALC_ACQUIRE_TIMEOUT)
     except TimeoutError:
-        return _tagged(JSONResponse(
+        return JSONResponse(
             status_code=503,
             content={"error": {"code": "busy", "message": "All calculator workers are busy."}},
             headers={"Retry-After": "10"},
-        ))
+        )
 
     try:
         loop = asyncio.get_running_loop()
@@ -384,28 +416,30 @@ async def calculate_forge(
             if elapsed > _SLOW_CALC_SECONDS:
                 logger.warning("Calculation took %.1fs [%s]", elapsed, request_id)
     except forge.InvalidInputs as exc:
-        return _tagged(JSONResponse(
+        return JSONResponse(
             status_code=422,
             content={"error": {"code": "invalid_inputs", "message": str(exc)}},
-        ))
+        )
     except forge.CalculationError:
         logger.exception("CalculationError [%s]", request_id)
-        return _tagged(JSONResponse(
+        return JSONResponse(
             status_code=500,
             content={"error": {"code": "calculation_failed", "message": f"Calculation failed (ref: {request_id})."}},
-        ))
+        )
     finally:
         sem.release()
 
-    response = JSONResponse(sanitize_for_json({
+    inputs_id = (results.get("provenance") or {}).get("inputs_id")
+    if inputs_id:
+        request.state.inputs_id = inputs_id
+
+    return JSONResponse(sanitize_for_json({
         "success": True,
         "scenario_id": scenario_id,
         "timestamp": results.get("timestamp", datetime.now(UTC).isoformat()),
         "results": results,
         "error": None,
     }))
-    response.headers["X-Request-ID"] = request_id
-    return response
 
 
 if __name__ == "__main__":
