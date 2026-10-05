@@ -5,11 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PORT="${PORT:-8000}"
-HOST="${HOST:-127.0.0.1}"
-LOG_DIR="$SCRIPT_DIR/logs"
-mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/fastapi_$(date +%Y%m%d_%H%M%S).log"
+export PORT="${PORT:-8000}"
+export HOST="${HOST:-127.0.0.1}"
 
 # Ensure uv is available
 if ! command -v uv >/dev/null 2>&1; then
@@ -19,7 +16,6 @@ fi
 
 # Install / sync dependencies (pulls FORGE calculator from GitHub)
 uv sync --quiet
-VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python"
 
 LOCAL_ADDRESS="http://127.0.0.1:$PORT"
 
@@ -33,13 +29,10 @@ cat << 'EOF'
 EOF
 
 echo "Starting FORGE web app..."
-echo "Logging to $LOG_FILE"
 echo "  Local: $LOCAL_ADDRESS"
 echo "Press Ctrl+C to stop."
 echo
 
 (sleep 2 && open "$LOCAL_ADDRESS") &
 
-"$VENV_PYTHON" -m uvicorn app.main:app \
-  --host "$HOST" --port "$PORT" --reload --access-log \
-  2>&1 | tee -a "$LOG_FILE"
+make dev
