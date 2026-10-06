@@ -39,7 +39,10 @@ async def init_db_pool(dsn: str | None = None) -> asyncpg.Pool:
             "FORGE_DATABASE_URL is not set; cannot create the forge_api connection pool."
         )
 
-    _pool = await asyncpg.create_pool(dsn=dsn, min_size=1, max_size=10)
+    _pool = await asyncpg.create_pool(
+        dsn=dsn, min_size=1, max_size=10,
+        statement_cache_size=0,  # Supabase pooler uses pgbouncer (transaction mode)
+    )
     logger.info("forge_api database pool created.")
     return _pool
 
