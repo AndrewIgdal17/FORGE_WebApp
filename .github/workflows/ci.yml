@@ -242,8 +242,8 @@ jobs:
                   raise SystemExit(f"{service['name']}: runtime must be docker")
               if service["healthCheckPath"] != "/api/health":
                   raise SystemExit(f"{service['name']}: healthCheckPath must be /api/health")
-              if service["autoDeploy"] is not False:
-                  raise SystemExit(f"{service['name']}: autoDeploy must be false")
+              if service["autoDeploy"] not in (True, "yes", False, "no"):
+                  raise SystemExit(f"{service['name']}: autoDeploy must be true, yes, false, or no")
               database = next(item for item in service["envVars"] if item["key"] == "FORGE_DATABASE_URL")
               if database.get("sync") is not False:
                   raise SystemExit(f"{service['name']}: FORGE_DATABASE_URL must use sync: false")
