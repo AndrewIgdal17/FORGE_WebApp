@@ -84,7 +84,7 @@ jobs:
       - uses: astral-sh/setup-uv@c7f87aa956e4c323abf06d5dec078e358f6b4d04 # v5
         with:
           version: "0.12.23"
-      - uses: supabase/setup-cli@1bc5926e399e5c13e30e59e5f3dca8bf9ade6399 # v1
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1
         with:
           version: "2.90.0"
       - name: Start Supabase and apply migrations from scratch
@@ -139,7 +139,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: supabase/setup-cli@1bc5926e399e5c13e30e59e5f3dca8bf9ade6399 # v1
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1
         with:
           version: "2.90.0"
       - name: Build image
@@ -257,7 +257,7 @@ jobs:
     environment: staging
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: supabase/setup-cli@1bc5926e399e5c13e30e59e5f3dca8bf9ade6399 # v1
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1
         with:
           version: "2.90.0"
       - name: Push migrations to staging
@@ -277,7 +277,7 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: supabase/setup-cli@1bc5926e399e5c13e30e59e5f3dca8bf9ade6399 # v1
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1
         with:
           version: "2.90.0"
       - name: Push migrations to production
