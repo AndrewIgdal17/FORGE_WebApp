@@ -1,8 +1,13 @@
 import type { ReactElement } from 'react';
+import { NumberField } from '@/components/form/number-field';
+import { SelectField } from '@/components/form/select-field';
+import { CONVERTER_OPTIONS } from '@/data/technology-options';
 import { getConverterDetails } from '@/lib/lookups';
 import { useFormStore } from '@/stores/form-store';
 
 const PROJECT = '01_project_technical_details.project';
+const CONVERTER_TYPE_PATH = `${PROJECT}.converter_type`;
+const CONVERTER_COUNT_PATH = `${PROJECT}.number_of_converters`;
 
 const AC_MESSAGE = 'Converter details apply to DC projects.';
 const EMPTY_MESSAGE =
@@ -101,63 +106,72 @@ export function ConverterDetails(): ReactElement {
     state.getFieldValue(`${PROJECT}.old_converter_type`),
   );
 
-  if (acDc !== 'DC') {
-    return (
-      <section id="converter-details">
-        <p className="text-sm text-slate-600">{AC_MESSAGE}</p>
-      </section>
-    );
-  }
-
+  const isDc = acDc === 'DC';
   const typeName = readString(converterType);
-  const entry = lookups && typeName ? getConverterDetails(lookups, typeName) : null;
-  const omRate = omRateLabel(entry);
-  if (!omRate) {
-    return (
-      <section id="converter-details">
-        <p className="text-sm text-slate-600">{EMPTY_MESSAGE}</p>
-      </section>
-    );
-  }
-
-  const showOld = projectType === 'reconductoring' && oldAcDc === 'DC';
+  const entry = isDc && lookups && typeName ? getConverterDetails(lookups, typeName) : null;
+  const omRate = isDc ? omRateLabel(entry) : null;
+  const showOld = isDc && projectType === 'reconductoring' && oldAcDc === 'DC';
   const oldTypeName = readString(oldConverterType);
   const oldEntry =
     showOld && lookups && oldTypeName
       ? getConverterDetails(lookups, oldTypeName)
       : null;
   const oldOm = showOld ? (omRateLabel(oldEntry) ?? '—') : undefined;
-
-  const rows: SpecRow[] = [
-    {
-      label: 'Converter type',
-      value: typeName,
-      oldValue: showOld ? oldTypeName || '—' : undefined,
-    },
-    {
-      label: 'Number of converters',
-      value: readCount(converterCount),
-      oldValue: showOld ? readCount(converterCount) : undefined,
-    },
-    {
-      label: 'Converter loss',
-      value: converterLoss(typeName),
-      oldValue: showOld ? converterLoss(oldTypeName) : undefined,
-    },
-    {
-      label: 'O&M rate (% of CAPEX/yr)',
-      value: omRate,
-      oldValue: oldOm,
-    },
-  ];
+  const rows: SpecRow[] = omRate
+    ? [
+        {
+          label: 'Converter type',
+          value: typeName,
+          oldValue: showOld ? oldTypeName || '—' : undefined,
+        },
+        {
+          label: 'Number of converters',
+          value: readCount(converterCount),
+          oldValue: showOld ? readCount(converterCount) : undefined,
+        },
+        {
+          label: 'Converter loss',
+          value: converterLoss(typeName),
+          oldValue: showOld ? converterLoss(oldTypeName) : undefined,
+        },
+        {
+          label: 'O&M rate (% of CAPEX/yr)',
+          value: omRate,
+          oldValue: oldOm,
+        },
+      ]
+    : [];
 
   return (
     <section id="converter-details" className="grid max-w-3xl gap-3">
-      <p className="text-sm text-slate-600">
-        Configuration{' '}
-        <span className="font-medium text-slate-900">{typeName}</span>
-      </p>
-      <SpecTable rows={rows} showOld={showOld} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SelectField
+          path={CONVERTER_TYPE_PATH}
+          label="Converter type"
+          helpText="LCC or VSC converter station type."
+          options={CONVERTER_OPTIONS}
+        />
+        <NumberField
+          path={CONVERTER_COUNT_PATH}
+          label="Number of converters"
+          helpText="Number of converter stations."
+          min={0}
+          step={1}
+        />
+      </div>
+      {!isDc ? (
+        <p className="text-sm text-slate-600">{AC_MESSAGE}</p>
+      ) : !omRate ? (
+        <p className="text-sm text-slate-600">{EMPTY_MESSAGE}</p>
+      ) : (
+        <>
+          <p className="text-sm text-slate-600">
+            Configuration{' '}
+            <span className="font-medium text-slate-900">{typeName}</span>
+          </p>
+          <SpecTable rows={rows} showOld={showOld} />
+        </>
+      )}
     </section>
   );
 }

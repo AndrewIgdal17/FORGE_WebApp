@@ -1,9 +1,12 @@
 import type { ReactElement } from 'react';
+import { SelectField } from '@/components/form/select-field';
+import { conductorOptions } from '@/data/technology-options';
 import { buildCategoryKey, buildOldCategoryKey, getCircuitDetails } from '@/lib/lookups';
 import type { ProjectFields } from '@/lib/lookups';
 import { useFormStore } from '@/stores/form-store';
 
 const PROJECT = '01_project_technical_details.project';
+const CONDUCTOR_PATH = `${PROJECT}.conductor_type`;
 
 const EMPTY_MESSAGE =
   'Select a valid project configuration to see conductor details.';
@@ -170,34 +173,41 @@ export function ConductorDetails(): ReactElement {
   const categoryKey = buildCategoryKey(fields);
   const entry =
     lookups && categoryKey ? asRecord(getCircuitDetails(lookups, categoryKey)) : null;
-
-  if (!entry) {
-    return (
-      <section id="conductor-details">
-        <p className="text-sm text-slate-600">{EMPTY_MESSAGE}</p>
-      </section>
-    );
-  }
-
-  const oldKey = showOld ? buildOldCategoryKey(fields) : null;
+  const oldKey = showOld && entry ? buildOldCategoryKey(fields) : null;
   const oldEntry =
-    showOld && lookups && oldKey
+    showOld && entry && lookups && oldKey
       ? asRecord(getCircuitDetails(lookups, oldKey))
       : null;
-  const rows: SpecRow[] = CIRCUIT_ROWS.map((row) => ({
-    label: row.label,
-    value: formatSpec(entry[row.key], row.suffix),
-    oldValue: showOld ? formatSpec(oldEntry?.[row.key], row.suffix) : undefined,
-  }));
+  const rows: SpecRow[] = entry
+    ? CIRCUIT_ROWS.map((row) => ({
+        label: row.label,
+        value: formatSpec(entry[row.key], row.suffix),
+        oldValue: showOld ? formatSpec(oldEntry?.[row.key], row.suffix) : undefined,
+      }))
+    : [];
 
   return (
     <section id="conductor-details" className="grid max-w-3xl gap-3">
-      {categoryKey ? (
-        <p className="text-sm text-slate-600">
-          Configuration <span className="font-medium text-slate-900">{categoryKey}</span>
-        </p>
-      ) : null}
-      <SpecTable rows={rows} showOld={showOld} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SelectField
+          path={CONDUCTOR_PATH}
+          label="Conductor type"
+          helpText="Options follow the construction type."
+          options={conductorOptions(constructionType)}
+        />
+      </div>
+      {!entry ? (
+        <p className="text-sm text-slate-600">{EMPTY_MESSAGE}</p>
+      ) : (
+        <>
+          {categoryKey ? (
+            <p className="text-sm text-slate-600">
+              Configuration <span className="font-medium text-slate-900">{categoryKey}</span>
+            </p>
+          ) : null}
+          <SpecTable rows={rows} showOld={showOld} />
+        </>
+      )}
     </section>
   );
 }

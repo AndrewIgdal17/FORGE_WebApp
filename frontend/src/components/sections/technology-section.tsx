@@ -10,6 +10,12 @@ import {
   CAPACITY_OPTIONS_BY_AC_DC,
   CONDUCTOR_TYPE_BY_CONSTRUCTION,
 } from '@/data/configs';
+import {
+  CONVERTER_OPTIONS,
+  capacityOptions,
+  conductorOptions,
+  isAcDc,
+} from '@/data/technology-options';
 import { useFormStore } from '@/stores/form-store';
 
 const PROJECT = '01_project_technical_details.project';
@@ -47,15 +53,6 @@ const PROJECT_TYPE_OPTIONS: SelectOption[] = [
   { value: 'rebuild', label: 'Rebuild' },
 ];
 
-const CONVERTER_OPTIONS: SelectOption[] = [
-  { value: 'VSC Converter', label: 'VSC Converter' },
-  { value: 'LCC Converter', label: 'LCC Converter' },
-];
-
-function isAcDc(value: unknown): value is 'AC' | 'DC' {
-  return value === 'AC' || value === 'DC';
-}
-
 function readCapacity(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim() !== '') {
@@ -63,20 +60,6 @@ function readCapacity(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
-}
-
-function capacityOptions(acDc: unknown): SelectOption[] {
-  if (!isAcDc(acDc)) return [];
-  return CAPACITY_OPTIONS_BY_AC_DC[acDc].map((mw) => ({
-    value: String(mw),
-    label: `${mw.toLocaleString('en-US')} MW`,
-  }));
-}
-
-function conductorOptions(constructionType: unknown): SelectOption[] {
-  if (typeof constructionType !== 'string') return [];
-  const names = CONDUCTOR_TYPE_BY_CONSTRUCTION[constructionType] ?? [];
-  return names.map((name) => ({ value: name, label: name }));
 }
 
 /**
