@@ -1,9 +1,5 @@
-import { useState } from 'react';
 import type { ReactElement } from 'react';
-import { Lock, LockOpen } from 'lucide-react';
 import { NumberField } from '@/components/form/number-field';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { getValueAtPath } from '@/lib/path';
 import { useFormStore } from '@/stores/form-store';
 
@@ -67,15 +63,8 @@ function formatFixed(value: number): string {
   });
 }
 
-function formatMultiplier(value: unknown): string {
-  const parsed = readNumber(value);
-  if (value === undefined || value === null || value === '') return '';
-  return parsed.toLocaleString('en-US', { maximumFractionDigits: 10 });
-}
-
 interface TerrainRowProps {
   terrain: TerrainId;
-  locked: boolean;
 }
 
 function storedOrDefault(state: {
@@ -88,7 +77,7 @@ function storedOrDefault(state: {
   return getValueAtPath(state.defaults, path);
 }
 
-function TerrainRow({ terrain, locked }: TerrainRowProps): ReactElement {
+function TerrainRow({ terrain }: TerrainRowProps): ReactElement {
   const label = TERRAIN_LABELS[terrain];
   const milesPath = terrainMilesPath(terrain);
   const multPath = multiplierPath(terrain);
@@ -111,21 +100,12 @@ function TerrainRow({ terrain, locked }: TerrainRowProps): ReactElement {
         />
       </td>
       <td className={`px-2 py-1.5 ${cellFieldClass}`}>
-        {locked ? (
-          <Input
-            aria-label={`${label} multiplier`}
-            value={formatMultiplier(multiplier)}
-            disabled
-            readOnly
-          />
-        ) : (
-          <NumberField
-            path={multPath}
-            label={`${label} multiplier`}
-            min={0}
-            step={0.1}
-          />
-        )}
+        <NumberField
+          path={multPath}
+          label={`${label} multiplier`}
+          min={0}
+          step={0.1}
+        />
       </td>
       <td className="px-3 py-2 text-right text-sm tabular-nums text-slate-700">
         {formatFixed(weighted)}
@@ -138,7 +118,6 @@ export function TerrainMix(): ReactElement {
   const constructionType = useFormStore((state) =>
     state.getFieldValue(CONSTRUCTION_TYPE_PATH),
   );
-  const [locked, setLocked] = useState(true);
   const terrains = terrainsForConstruction(constructionType);
   const totalMiles = useFormStore((state) =>
     terrains.reduce(
@@ -154,23 +133,13 @@ export function TerrainMix(): ReactElement {
     }, 0),
   );
 
-  function toggleLock(): void {
-    setLocked((current) => !current);
-  }
-
   return (
     <section id="terrain-mix" className="grid max-w-4xl gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900">Terrain miles</h2>
-          <p className="text-sm text-slate-600">
-            Route miles by terrain. Miles should sum to the project length.
-          </p>
-        </div>
-        <Button type="button" variant="outline" size="sm" onClick={toggleLock}>
-          {locked ? <Lock /> : <LockOpen />}
-          {locked ? 'Locked — click to override' : 'Unlocked — editing'}
-        </Button>
+      <div>
+        <h2 className="text-base font-semibold text-slate-900">Terrain miles</h2>
+        <p className="text-sm text-slate-600">
+          Route miles by terrain. Miles should sum to the project length.
+        </p>
       </div>
       <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
         <table className="w-full min-w-[36rem] border-collapse">
@@ -185,7 +154,7 @@ export function TerrainMix(): ReactElement {
           </thead>
           <tbody>
             {terrains.map((terrain) => (
-              <TerrainRow key={terrain} terrain={terrain} locked={locked} />
+              <TerrainRow key={terrain} terrain={terrain} />
             ))}
           </tbody>
           <tfoot>

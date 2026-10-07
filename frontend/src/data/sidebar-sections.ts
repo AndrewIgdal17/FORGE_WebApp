@@ -46,10 +46,10 @@ export const SIDEBAR_SECTIONS: SidebarSections = {
     },
     {
       id: 'benefits',
-      label: 'Benefits',
+      label: 'System Economics',
       color: '#10b981',
       subItems: [
-        { id: 'economic-details', label: 'Economic Details' },
+        { id: 'economic-details', label: 'Value of Energy' },
         { id: 'system-constraints', label: 'System Constraints' },
       ],
     },
@@ -68,8 +68,8 @@ export const SIDEBAR_SECTIONS: SidebarSections = {
       color: '#ef4444',
       subItems: [
         { id: 'conductor', label: 'Contingencies' },
-        { id: 'base-mitigation', label: 'Base Mitigation' },
-        { id: 'credits', label: 'Credits' },
+        { id: 'base-mitigation', label: 'Restoration Costs' },
+        { id: 'credits', label: 'Mitigation Credits' },
       ],
     },
     {
