@@ -3,9 +3,6 @@
 # migrate-production runs only on a push to release, in the production
 # environment (required reviewer is configured on that environment, not here).
 #
-# ESLint (`npm run lint`) is omitted. static/ has pre-existing
-# no-unsanitized/property errors, and this workflow should not block on them.
-#
 # Secrets:
 #   SUPABASE_ACCESS_TOKEN          repository secret (migration jobs)
 #   SUPABASE_PROJECT_REF           environment secret (staging, production)
@@ -30,16 +27,10 @@ jobs:
       - uses: astral-sh/setup-uv@c7f87aa956e4c323abf06d5dec078e358f6b4d04 # v5
         with:
           version: "0.12.23"
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "22"
-          cache: npm
-      - name: Check lockfiles and lint Python
+      - name: Check lockfile and lint Python
         run: |
           set -euo pipefail
           uv lock --check
-          npm ci
-          npm ls --all >/dev/null
           uv sync --frozen --extra dev
           uv run ruff check app/ tests/
 
@@ -58,20 +49,6 @@ jobs:
           set -euo pipefail
           uv sync --frozen --extra dev
           uv run pytest tests/unit/ -v
-
-  browser:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "22"
-          cache: npm
-      - name: Browser tests
-        run: |
-          set -euo pipefail
-          npm ci
-          npm test
 
   database:
     runs-on: ubuntu-latest
@@ -252,7 +229,7 @@ jobs:
 
   migrate-staging:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [lint, unit, browser, database, container, blueprint]
+    needs: [lint, unit, database, container, blueprint]
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -272,7 +249,7 @@ jobs:
 
   migrate-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/release'
-    needs: [lint, unit, browser, database, container, blueprint]
+    needs: [lint, unit, database, container, blueprint]
     runs-on: ubuntu-latest
     environment: production
     steps:

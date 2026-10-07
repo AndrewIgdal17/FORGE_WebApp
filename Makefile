@@ -1,8 +1,7 @@
-.PHONY: setup dev check db-reset lint lint-js test-unit test-browser test-integration test-db
+.PHONY: setup dev check db-reset lint lint-frontend build-frontend test-unit test-integration test-db
 
 setup:
 	uv sync
-	npm ci
 	supabase start || true
 
 dev:
@@ -12,21 +11,20 @@ dev:
 	@echo "FORGE_AUTH_DISABLED=true" >> .env.local
 	uv run uvicorn app.main:app --host $${HOST:-127.0.0.1} --port $${PORT:-8000} --reload --env-file .env.local
 
-check: lint test-unit test-browser
+check: lint test-unit
 
 lint:
 	uv lock --check
-	npm ls --all >/dev/null
 	uv run ruff check app/ tests/
 
-lint-js:
-	npm run lint
+lint-frontend:
+	cd frontend && npx tsc --noEmit
+
+build-frontend:
+	cd frontend && npm run build
 
 test-unit:
 	uv run pytest tests/unit/ -v
-
-test-browser:
-	npm test
 
 test-integration:
 	uv run pytest tests/integration/ -v

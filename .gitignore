@@ -22,7 +22,7 @@ venv/
 .env
 .env.local
 
-# Node (eslint devDependencies for static/)
+# Node
 node_modules/
 
 # IDE

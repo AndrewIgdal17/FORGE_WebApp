@@ -21,9 +21,9 @@ Staging is branch `main` (Render service `forge-staging`, Supabase project `forg
 From `FORGE_WebApp`:
 
 ```bash
-make setup    # uv sync, npm ci, supabase start
+make setup    # uv sync, supabase start
 make dev      # write .env.local, then uvicorn with reload
-make check    # lockfile, Ruff, unit tests, browser tests
+make check    # lockfile, Ruff, unit tests
 make db-reset # rebuild the local database from supabase/migrations
 ```
 
@@ -44,7 +44,7 @@ Calculator checks, from a clone of `AndrewIgdal17/FORGE`: `uv sync`, then `uv ru
 
 | Variable | Where it is set | What it does |
 |---|---|---|
-| `SUPABASE_URL` | `.env.local`; Render env (plain value in `render.yaml`) | Supabase API URL. Required at startup unless auth is disabled. The browser receives it from `GET /client-config.js`. |
+| `SUPABASE_URL` | `.env.local`; Render env (plain value in `render.yaml`) | Supabase API URL. Required at startup unless auth is disabled. The React build reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. |
 | `SUPABASE_ANON_KEY` | `.env.local`; Render env (plain value) | Supabase anon key for the browser. Not a secret. |
 | `FORGE_DATABASE_URL` | `.env.local`; Render secret (`sync: false`) | Postgres URI for the `forge_api` role. When set, the startup self-test runs `SELECT 1`. |
 | `FORGE_AUTH_DISABLED` | `.env.local` only (`make dev` sets `true`) | Local dev. Allows startup without `SUPABASE_URL` and `FORGE_DATABASE_URL`, and serves requests without a token. |
