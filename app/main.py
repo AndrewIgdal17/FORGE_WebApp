@@ -18,7 +18,7 @@ from pathlib import Path
 import forge
 import jwt
 from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from forge.errors import UnknownInputPath
@@ -126,7 +126,6 @@ _DEFAULTS_ID = forge.get_defaults_id()
 
 # --- Supabase JWT auth ---
 _SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-_SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 _FORGE_DATABASE_URL = os.environ.get("FORGE_DATABASE_URL", "")
 _AUTH_DISABLED = os.environ.get("FORGE_AUTH_DISABLED", "").strip().lower() == "true"
 _security = HTTPBearer(auto_error=False)
@@ -200,17 +199,6 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
-
-class CacheBustMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        response = await call_next(request)
-        if request.url.path.startswith("/static/") and request.url.path.endswith(
-            (".js", ".css")
-        ):
-            response.headers["Cache-Control"] = "no-cache, must-revalidate"
-        return response
-
-
 MAX_BODY_BYTES = 1 * 1024 * 1024  # 1 MB
 
 
@@ -245,14 +233,9 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-app.add_middleware(CacheBustMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
 
 # No CORS middleware: the browser and the API are served from the same origin.
-# Phase 1 note: if the React frontend is served from a different origin,
-# add CORSMiddleware with allow_origins=[<react_app_url>],
-# allow_methods=["GET","POST","PATCH","DELETE"],
-# allow_headers=["Authorization","Content-Type"].
 
 app.include_router(scenarios_module.router)
 
@@ -268,18 +251,6 @@ async def _scenario_auth_error_handler(_request: Request, exc: scenarios_module.
         status_code=status.HTTP_401_UNAUTHORIZED,
         content={"error": {"code": "unauthenticated", "message": exc.message}},
     )
-
-
-# Phase 1: replaced by VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
-# environment variables at React build time.
-@app.get("/client-config.js")
-async def client_config() -> Response:
-    """Serve the browser's Supabase URL and publishable key from server env."""
-    body = (
-        f"window.FORGE_SUPABASE_URL = {json.dumps(_SUPABASE_URL)};\n"
-        f"window.FORGE_SUPABASE_KEY = {json.dumps(_SUPABASE_ANON_KEY)};\n"
-    )
-    return Response(content=body, media_type="application/javascript")
 
 
 def _serve_react() -> FileResponse:
