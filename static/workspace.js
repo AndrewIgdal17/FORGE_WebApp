@@ -8,8 +8,6 @@
       const loadStatus = document.getElementById("load-status");
 
       C.forgeJsonData = null;
-      /** Cached from GET /api/fuel_mix_presets for Fuel Mixes dropdown. */
-      C.cachedFuelMixPresets = [];
 
       // Taxonomy state (loaded once from GET /api/C.taxonomy)
       C.taxonomy = null;
@@ -19,25 +17,18 @@
 
       // Input metadata state (loaded once from GET /api/input_metadata)
       C.inputMetadata = null;
-      C.activeTabIndex = 0;
 
       // Scenario management state
       C.sessionScenarios = [];
       C.activeScenarioId = null;
       C.activeScenarioName = '';
       C.lastRunResults = null;
-      C.scenarioCounter = 0;
       C.comparisonScenarioIds = new Set();
       C.comparisonBaselineId = null;
       C.showDeltaVsBaseline = false;
-      /** @type {'values_plus_delta'|'delta_only'} */
-      C.comparisonDeltaDisplayMode = 'values_plus_delta';
       C.showComparisonPercentDelta = false;
       C.comparisonAutoSort = false;
       C.comparisonColumns = ['bcr_societal', 'grand_total_pv', 'total_capital_pv', 'total_benefits_pv'];
-
-      C.routingValid = true;
-
 
       C.latestValidResults = null;
       C.autoCalcInFlight = false;
@@ -263,10 +254,6 @@
         if (resultsBtn) resultsBtn.classList.add('results-available');
       }
 
-      function hideStatusBar() {
-        if (typeof updateCalcTime === 'function') updateCalcTime('Not calculated');
-      }
-
       const DEFAULT_PORT = 8000;
 
       function initialiseApiBase() {
@@ -410,19 +397,12 @@
         return { blocked: false, json: await resp.json() };
       }
 
-      function switchTab(index) {
-        // Tab buttons/contents no longer exist — sidebar handles navigation.
-        C.activeTabIndex = index;
-      }
-
       // Expose closure-scoped functions for external modules
       window.autoCalculate = autoCalculate;
       window.updateFieldValidation = updateFieldValidation;
-      window.switchTab = switchTab;
       window.collectJsonData = collectJsonData;
       window.markResultsAvailable = markResultsAvailable;
       window.showCalculating = showCalculating;
-      window.hideStatusBar = hideStatusBar;
       window.fetchTaxonomy = fetchTaxonomy;
       window.fetchInputMetadata = fetchInputMetadata;
 
@@ -523,13 +503,6 @@
       // ===== Taxonomy-Driven Input Form Renderer (Phase 4) =====
 
       C.INPUT_TAB_ORDER = ['project-identity', 'equipment', 'routing', 'benefits', 'financial', 'capital-costs', 'operating', 'risk', 'emissions', 'energy-mix'];
-      C.INPUT_TAB_LABELS = {
-        'project-identity': 'Project Identity', 'equipment': 'Equipment',
-        'routing': 'Routing & Terrain', 'benefits': 'Benefits',
-        'financial': 'Financial', 'capital-costs': 'Capital Costs',
-        'operating': 'Operating Costs', 'risk': 'Risk',
-        'emissions': 'Emissions', 'energy-mix': 'Energy Mix',
-      };
       C.SUB_TAB_LABELS = {
         'terrain-mix': 'Terrain Mix',
         'rights-of-way': 'Rights of Way',
@@ -648,11 +621,6 @@
           return;
         }
 
-        if (!C.routingValid) {
-          showToast('Cannot run — terrain and zone miles don\'t match');
-          return;
-        }
-
         if (C.calculateBlocked) {
           showToast('Fix the invalid inputs before recalculating.');
           return;
@@ -754,9 +722,6 @@
 
           await loadScenariosFromDB();
           if (typeof renderScenarioList === 'function') renderScenarioList();
-
-          _sb.from('ref_snapshot').select('id').order('created_at', { ascending: false }).limit(1).single()
-            .then(function(res) { if (res.data) loadSnapshot(res.data.id); });
 
           if (typeof initAssistant === 'function') initAssistant();
 

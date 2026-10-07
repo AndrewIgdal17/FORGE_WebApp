@@ -75,26 +75,9 @@ function comparisonDelta(baselineValue, scenarioValue, metricKey) {
     : (scenarioValue - baselineValue);
 }
 
-function getExcludedCosts(scenario) {
-  if (!scenario.results) return 0;
-  const bcr = scenario.results.bcr || {};
-  let excluded = 0;
-  if (document.getElementById('cmp-exc-emissions')?.checked) excluded += (bcr.emissions_comp_cost_pv || 0);
-  if (document.getElementById('cmp-exc-linelosses')?.checked) excluded += (bcr.energy_losses_pv || 0);
-  if (document.getElementById('cmp-exc-wildfire')?.checked) excluded += (bcr.wildfire_pv || 0);
-  if (document.getElementById('cmp-exc-outage')?.checked) excluded += (bcr.outage_pv || 0);
-  return excluded;
-}
-
-const MAIN_EXCLUSION_KEYS = new Set(['bcr_societal', 'grand_total_pv', 'net_benefit_pv']);
-
 function getMetricValue(scenario, metricKey) {
   if (metricKey === 'custom_bcr' || metricKey === 'custom_nb') {
     return computeCustomMetric(scenario, metricKey);
-  }
-  // Apply exclusions to main columns if checkbox is checked
-  if (MAIN_EXCLUSION_KEYS.has(metricKey) && document.getElementById('cmp-exc-apply-main')?.checked) {
-    return computeMainWithExclusions(scenario, metricKey);
   }
   const config = getMetricConfig(metricKey);
   if (!config || !scenario.results) return undefined;
@@ -105,22 +88,11 @@ function getMetricValue(scenario, metricKey) {
   return raw;
 }
 
-function computeMainWithExclusions(scenario, metricKey) {
-  if (!scenario.results) return undefined;
-  const bcr = scenario.results.bcr || {};
-  const totalBenefitsPV = bcr.total_benefits_pv || 0;
-  const totalCostsPV = (bcr.total_costs_pv || 0) - getExcludedCosts(scenario);
-  if (metricKey === 'bcr_societal') return totalCostsPV > 0 ? totalBenefitsPV / totalCostsPV : 0;
-  if (metricKey === 'grand_total_pv') return totalCostsPV;
-  if (metricKey === 'net_benefit_pv') return totalBenefitsPV - totalCostsPV;
-  return undefined;
-}
-
 function computeCustomMetric(scenario, metricKey) {
   if (!scenario.results) return undefined;
   const bcr = scenario.results.bcr || {};
   const totalBenefitsPV = bcr.total_benefits_pv || 0;
-  const totalCostsPV = (bcr.total_costs_pv || 0) - getExcludedCosts(scenario);
+  const totalCostsPV = bcr.total_costs_pv || 0;
   if (metricKey === 'custom_bcr') return totalCostsPV > 0 ? totalBenefitsPV / totalCostsPV : 0;
   return totalBenefitsPV - totalCostsPV;
 }
@@ -172,10 +144,6 @@ function metricSupportsComparisonDelta(metricKey) {
   if (!cfg) return false;
   if (cfg.format === 'text' || cfg.format === 'boolean') return false;
   return true;
-}
-
-function cmpPickerSlug(s) {
-  return String(s).replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '') || 'x';
 }
 
 function loadCmpPickerOpenState() {
@@ -404,10 +372,6 @@ function openComparisonMetricPicker(anchorEl, excludeKeys) {
   document.addEventListener('keydown', cmpMetricPickerKeyHandler, true);
 }
 
-function updateComparisonDeltaControlState() {
-  // No-op: delta controls are now in the popover and recreated each open.
-}
-
 function renderComparisonTable() {
   const container = document.getElementById('comparison-table-container');
   if (!container) return;
@@ -446,7 +410,6 @@ function renderComparisonTable() {
         <div class="compare-empty-subtext">Check 2+ scenarios above to see a side-by-side comparison table</div>
       </div>
     `;
-    updateComparisonDeltaControlState();
     return;
   }
 
@@ -701,7 +664,6 @@ function renderComparisonTable() {
       openComparisonMetricPicker(wrapEl, new Set(C.comparisonColumns));
     }
   }
-  updateComparisonDeltaControlState();
   updateBaselineButtonState();
 }
 
@@ -783,16 +745,9 @@ function initComparisonToolbar() {
     });
   }
 
-  // Custom BCR exclusion checkbox listeners
-  ['cmp-exc-emissions', 'cmp-exc-linelosses', 'cmp-exc-wildfire', 'cmp-exc-outage', 'cmp-exc-apply-main'].forEach(function(id) {
-    const cb = document.getElementById(id);
-    if (cb) cb.addEventListener('change', function() { renderComparisonTable(); });
-  });
-
   const cmpDeltaModeEl = document.getElementById('cmp-delta-display-mode');
   if (cmpDeltaModeEl) {
     cmpDeltaModeEl.addEventListener('change', function() {
-      C.comparisonDeltaDisplayMode = cmpDeltaModeEl.value === 'delta_only' ? 'delta_only' : 'values_plus_delta';
       renderComparisonTable();
     });
   }
@@ -878,7 +833,6 @@ function comparisonMetricLabel(metricKey) {
   window.syncComparisonSelectAllCheckbox = syncComparisonSelectAllCheckbox;
   window.sortComparisonColumnsByCatalog = sortComparisonColumnsByCatalog;
   window.initComparisonToolbar = initComparisonToolbar;
-  window.updateComparisonDeltaControlState = updateComparisonDeltaControlState;
   window.updateBaselineButtonState = updateBaselineButtonState;
   window.comparisonMetricLabel = comparisonMetricLabel;
   window.getMetricConfig = getMetricConfig;
