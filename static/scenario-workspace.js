@@ -1,7 +1,7 @@
 // FORGE Scenario Workspace UI
 // Extracted from scenarios.js — loaded only on workspace.html
 // Depends on: scenario-data.js, scenario-ui.js, workspace inline globals
-// (autoCalculate, switchTab, renderJsonInputs, renderFORGEResults,
+// (autoCalculate, renderJsonInputs,
 //  markResultsAvailable, setSnapshotOriginalData)
 
 (function() {

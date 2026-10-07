@@ -637,7 +637,6 @@
     const scenario = await addScenarioToSession(fullInputs, null, metadata, name);
     setActiveScenario(scenario);
     if (typeof switchSidebarView === 'function') switchSidebarView('inputs');
-    switchTab(0);
   }
 
   function showWizard() {
