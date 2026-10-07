@@ -10,7 +10,7 @@ import { terrainsForConstruction, terrainMilesPath } from '@/components/sections
 import { ContentHeader } from '@/components/sidebar/content-header';
 import { Sidebar } from '@/components/sidebar/sidebar';
 import type { SubItemValidation } from '@/components/sidebar/sidebar-item';
-import { LiveCostPanels } from '@/components/workspace/live-cost-panels';
+import { ContributionStrip } from '@/components/workspace/contribution-strip';
 import { WorkspaceHeader } from '@/components/workspace/workspace-header';
 import { SIDEBAR_SECTIONS } from '@/data/sidebar-sections';
 import { useNavigation } from '@/hooks/use-navigation';
@@ -162,7 +162,7 @@ export default function WorkspacePage(): ReactElement {
 }
 
 function WorkspaceBody(): ReactElement {
-  const { view, subItemId, selectSubItem } = useNavigation();
+  const { view, subItemId, setView, selectSubItem } = useNavigation();
 
   const data = useFormStore((state) => state.data);
   const defaults = useFormStore((state) => state.defaults);
@@ -179,6 +179,7 @@ function WorkspaceBody(): ReactElement {
   const saveScenario = useScenarioStore((state) => state.saveScenario);
   const renameScenario = useScenarioStore((state) => state.renameScenario);
   const setUnsavedChanges = useScenarioStore((state) => state.setUnsavedChanges);
+  const savedResults = useScenarioStore((state) => state.savedResults);
 
   const [ready, setReady] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -424,6 +425,16 @@ function WorkspaceBody(): ReactElement {
     }
   }
 
+  function handleStripNavigate(resultsSubItemId: string): void {
+    const section = SIDEBAR_SECTIONS.results.find((item) =>
+      item.subItems.some((subItem) => subItem.id === resultsSubItemId),
+    );
+    if (section) {
+      setView('results');
+      selectSubItem(section.id, resultsSubItemId);
+    }
+  }
+
   const taxonomy = isRecord(taxonomyState) ? taxonomyState : undefined;
   const projectFields = useFormStore.getState().getProjectFields();
   const reconductoring = useFormStore.getState().isReconductoring();
@@ -451,7 +462,11 @@ function WorkspaceBody(): ReactElement {
               <ContentHeader />
               {view === 'inputs' ? (
                 <>
-                  <LiveCostPanels results={activeScenario?.results ?? null} />
+                  <ContributionStrip
+                    results={activeScenario?.results ?? null}
+                    savedResults={savedResults}
+                    onNavigateResults={handleStripNavigate}
+                  />
                   {subItemId ? <SectionDispatcher subItemId={subItemId} /> : null}
                 </>
               ) : null}
