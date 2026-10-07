@@ -63,7 +63,7 @@ HOME_FILE = STATIC_DIR / "home.html"
 WORKSPACE_FILE = STATIC_DIR / "workspace.html"
 SCENARIOS_FILE = STATIC_DIR / "scenarios-manager.html"
 
-# React frontend (Phase 1: serves /, /signup, /login)
+# React frontend (Phase 1: /, /signup, /login; Phase 2b: /app, /app/scenarios-manager)
 REACT_DIST = BASE_DIR / "frontend" / "dist"
 REACT_INDEX = REACT_DIST / "index.html"
 
@@ -319,7 +319,9 @@ async def serve_login() -> FileResponse:
 
 @app.get("/app", response_class=FileResponse)
 async def serve_home() -> FileResponse:
-    """Serve the FORGE home page."""
+    """Serve the FORGE home page (React if built, vanilla fallback)."""
+    if REACT_INDEX.exists():
+        return FileResponse(REACT_INDEX)
     return FileResponse(HOME_FILE)
 
 
@@ -331,7 +333,9 @@ async def serve_workspace() -> FileResponse:
 
 @app.get("/app/scenarios-manager", response_class=FileResponse)
 async def serve_scenarios_manager() -> FileResponse:
-    """Serve the scenario manager."""
+    """Serve the scenario manager (React if built, vanilla fallback)."""
+    if REACT_INDEX.exists():
+        return FileResponse(REACT_INDEX)
     return FileResponse(SCENARIOS_FILE)
 
 
