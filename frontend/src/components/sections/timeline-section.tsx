@@ -22,7 +22,7 @@ export function TimelineSection(): ReactElement {
       />
       <NumberField
         path={`${TIMELINE}.project_lifetime`}
-        label="Project lifetime"
+        label="Project lifetime (years)"
         helpText="Operating years after the line is in service."
         min={1}
         step={1}

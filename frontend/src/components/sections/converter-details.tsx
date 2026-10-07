@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { NumberField } from '@/components/form/number-field';
+import { PercentageField } from '@/components/form/percentage-field';
 import { SelectField } from '@/components/form/select-field';
 import { CONVERTER_OPTIONS } from '@/data/technology-options';
 import { getConverterDetails } from '@/lib/lookups';
@@ -8,6 +9,7 @@ import { useFormStore } from '@/stores/form-store';
 const PROJECT = '01_project_technical_details.project';
 const CONVERTER_TYPE_PATH = `${PROJECT}.converter_type`;
 const CONVERTER_COUNT_PATH = `${PROJECT}.number_of_converters`;
+const CONVERTER_LOSS_PATH = `${PROJECT}.converter_loss_percentage`;
 
 const AC_MESSAGE = 'Converter details apply to DC projects.';
 const EMPTY_MESSAGE =
@@ -161,6 +163,11 @@ export function ConverterDetails(): ReactElement {
               helpText="Number of converter stations."
               min={0}
               step={1}
+            />
+            <PercentageField
+              path={CONVERTER_LOSS_PATH}
+              label="Converter loss (%)"
+              helpText="Station loss as a percent of utilized capacity. Blank uses 0.75% LCC / 1.0% VSC."
             />
           </div>
         </>

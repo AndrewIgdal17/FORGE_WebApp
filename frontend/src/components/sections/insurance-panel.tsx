@@ -33,8 +33,8 @@ export function InsurancePanel(): ReactElement {
       </div>
       <PercentageField
         path={`${INSURANCE}.premium_rate_default`}
-        label="Premium rate (%)"
-        helpText="Annual insurance premium as a percent of insurable asset value."
+        label="Fallback premium rate (%)"
+        helpText="Used only when the construction type has no specific rate. All default construction types have specific rates."
       />
       {COMPONENTS.map((component) => (
         <CheckboxField
