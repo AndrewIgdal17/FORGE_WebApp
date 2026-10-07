@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { CurrencyField } from '@/components/form/currency-field';
 import { terrainMilesPath } from '@/components/sections/terrain-mix';
 import type { TerrainId } from '@/components/sections/terrain-mix';
@@ -85,13 +86,15 @@ export function EnvCredits(): ReactElement {
   );
   const upliftRaw = useFormStore((state) => state.getFieldValue(UPLIFT_PATH));
   const uplift = upliftRaw === undefined || upliftRaw === null ? 1 : readNumber(upliftRaw);
-  const milesByTerrain = useFormStore((state) => {
-    const miles: Partial<Record<TerrainId, number>> = {};
-    for (const credit of CREDITS) {
-      miles[credit.terrain] = readNumber(state.getFieldValue(terrainMilesPath(credit.terrain)));
-    }
-    return miles;
-  });
+  const milesByTerrain = useFormStore(
+    useShallow((state) => {
+      const miles: Partial<Record<TerrainId, number>> = {};
+      for (const credit of CREDITS) {
+        miles[credit.terrain] = readNumber(state.getFieldValue(terrainMilesPath(credit.terrain)));
+      }
+      return miles;
+    }),
+  );
 
   const fields: ProjectFields = {
     constructionType: readString(constructionType),
@@ -130,7 +133,7 @@ export function EnvCredits(): ReactElement {
         <table className="w-full min-w-[36rem] border-collapse">
           <caption className="sr-only">Habitat and wetland credit cost per acre</caption>
           <thead>
-            <tr className="border-b text-left text-xs font-medium text-slate-500">
+            <tr className="border-b-2 border-slate-200 bg-slate-50 text-left text-xs font-semibold text-slate-500">
               <th className="px-3 py-2">Credit type</th>
               <th className="px-3 py-2">Acres impacted</th>
               <th className="px-3 py-2">Cost ($/acre)</th>

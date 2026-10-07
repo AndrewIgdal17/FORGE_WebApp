@@ -1,4 +1,6 @@
+import { useRef, useState } from 'react';
 import type { ReactElement } from 'react';
+import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -31,6 +33,71 @@ function lockedReason(isSystem: boolean, action: 'rename' | 'delete'): string {
     : 'Only the owner can delete this scenario';
 }
 
+function ExportMenu({
+  scenario,
+  onExportForge,
+  onExportCsv,
+}: {
+  scenario: Scenario;
+  onExportForge: (s: Scenario) => void;
+  onExportCsv: (s: Scenario) => void;
+}): ReactElement {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  function handleBlur(event: React.FocusEvent): void {
+    if (menuRef.current && !menuRef.current.contains(event.relatedTarget as Node)) {
+      setOpen(false);
+    }
+  }
+
+  return (
+    <div className="relative" ref={menuRef} onBlur={handleBlur}>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="gap-1"
+      >
+        <Download className="size-3.5" />
+        Export
+      </Button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 z-10 mt-1 min-w-[140px] rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+        >
+          <button
+            role="menuitem"
+            type="button"
+            className="w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100"
+            onClick={() => {
+              onExportForge(scenario);
+              setOpen(false);
+            }}
+          >
+            .forge (JSON)
+          </button>
+          <button
+            role="menuitem"
+            type="button"
+            className="w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100"
+            onClick={() => {
+              onExportCsv(scenario);
+              setOpen(false);
+            }}
+          >
+            .csv
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ScenarioCard({
   scenario,
   currentUserId,
@@ -46,16 +113,16 @@ export function ScenarioCard({
   const canRenameOrDelete = isOwner && !isSystem;
 
   return (
-    <Card size="sm">
-      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
+    <Card size="sm" className="overflow-visible">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 py-4">
         <div className="min-w-0">
           <CardTitle className="font-bold">{scenario.name}</CardTitle>
-          <CardDescription>{formatTimestamp(scenario.updated_at)}</CardDescription>
-          {scenario.ownerUsername ? (
-            <p className="text-xs text-muted-foreground">{scenario.ownerUsername}</p>
-          ) : null}
+          <CardDescription className="text-xs opacity-60">
+            {formatTimestamp(scenario.updated_at)}
+            {scenario.ownerUsername ? ` · ${scenario.ownerUsername}` : ''}
+          </CardDescription>
         </div>
-        <div className="flex flex-wrap justify-end gap-1">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           {isSystem ? (
             <Button type="button" size="sm" onClick={() => onDuplicate(scenario)}>
               Duplicate & Edit
@@ -95,22 +162,11 @@ export function ScenarioCard({
               Delete
             </Button>
           </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => onExportForge(scenario)}
-          >
-            Export (.forge)
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => onExportCsv(scenario)}
-          >
-            Export (CSV)
-          </Button>
+          <ExportMenu
+            scenario={scenario}
+            onExportForge={onExportForge}
+            onExportCsv={onExportCsv}
+          />
         </div>
       </CardHeader>
     </Card>

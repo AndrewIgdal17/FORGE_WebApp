@@ -1,15 +1,16 @@
 import { useEffect } from 'react';
 import type { ReactElement } from 'react';
-import { Link, Navigate } from 'react-router';
+import { Navigate, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { MarketingHeader } from '@/components/layout/marketing-header';
 import { useAuth } from '@/hooks/use-auth';
 
 export default function LandingPage(): ReactElement {
   const { session, loading } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    document.title = 'FORGE — Comprehensive Transmission Cost Calculator';
+    document.title = 'FORGE — Framework for Open Reproducible Grid Economics';
   }, []);
 
   if (session && !loading) {
@@ -26,24 +27,24 @@ export default function LandingPage(): ReactElement {
             Full-cost benefit-cost analysis for transmission projects
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-slate-600">
-            The Comprehensive Transmission Cost Calculator covers 24 cost and benefit
+            The Framework for Open Reproducible Grid Economics covers 24 cost and benefit
             categories across capital, operational, delay, emissions, and risk.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button
-              nativeButton={false}
-              render={<Link to="/signup" />}
+              type="button"
               size="lg"
               className="h-11 bg-forge-primary px-8 text-base text-white hover:bg-forge-primary-hover"
+              onClick={() => navigate('/signup')}
             >
               Get Started
             </Button>
             <Button
-              nativeButton={false}
-              render={<Link to="/login" />}
+              type="button"
               variant="outline"
               size="lg"
               className="h-11 border-forge-primary bg-white px-8 text-base text-forge-primary hover:bg-forge-primary-light hover:text-forge-primary"
+              onClick={() => navigate('/login')}
             >
               Log in
             </Button>

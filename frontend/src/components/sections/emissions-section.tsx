@@ -68,7 +68,7 @@ export function EmissionsSection(): ReactElement {
         <table className="w-full min-w-[36rem] border-collapse">
           <caption className="sr-only">Emission intensity by fuel and pollutant</caption>
           <thead>
-            <tr className="border-b text-left text-xs font-medium text-slate-500">
+            <tr className="border-b-2 border-slate-200 bg-slate-50 text-left text-xs font-semibold text-slate-500">
               <th className="px-3 py-2">Fuel source</th>
               {POLLUTANTS.map((pollutant) => (
                 <th key={pollutant.key} className="px-3 py-2">
@@ -102,7 +102,7 @@ export function EmissionsSection(): ReactElement {
         <table className="w-full min-w-[24rem] border-collapse">
           <caption className="sr-only">Externality cost per kilogram</caption>
           <thead>
-            <tr className="border-b text-left text-xs font-medium text-slate-500">
+            <tr className="border-b-2 border-slate-200 bg-slate-50 text-left text-xs font-semibold text-slate-500">
               <th className="px-3 py-2">Pollutant</th>
               <th className="px-3 py-2">Externality ($/kg)</th>
             </tr>

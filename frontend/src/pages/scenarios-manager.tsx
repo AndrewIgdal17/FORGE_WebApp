@@ -6,6 +6,7 @@ import { ComparisonTable } from '@/components/comparison/comparison-table';
 import { AppNav } from '@/components/layout/app-nav';
 import { CompareSelector } from '@/components/scenarios/compare-selector';
 import { ScenarioList } from '@/components/scenarios/scenario-list';
+import { Plus, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/hooks/use-toast';
@@ -132,7 +133,31 @@ export default function ScenariosManagerPage(): ReactElement {
       <div className="flex min-h-screen flex-col bg-slate-50">
         <AppNav />
         <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-6 py-8">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Scenarios</h1>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Scenarios</h1>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => fileInputRef.current?.click()}
+                className="gap-1.5 text-slate-600"
+              >
+                <Upload className="size-3.5" />
+                Upload
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={openNewScenario}
+                className="gap-1.5 bg-forge-primary text-white hover:bg-forge-primary-hover"
+              >
+                <Plus className="size-3.5" />
+                New Scenario
+              </Button>
+            </div>
+          </div>
           <div role="tablist" aria-label="Scenario manager" className="flex gap-2">
             <button
               type="button"
@@ -175,17 +200,7 @@ export default function ScenariosManagerPage(): ReactElement {
               aria-labelledby="scenarios-tab-manage"
               className="flex flex-col gap-4"
             >
-              <div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  Upload Scenario
-                </Button>
-              </div>
-              <ScenarioList onOpen={openWorkspace} onNewScenario={openNewScenario} />
+              <ScenarioList onOpen={openWorkspace} />
             </div>
           ) : (
             <div

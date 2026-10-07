@@ -191,9 +191,14 @@ export default function SignupPage(): ReactElement {
               </Alert>
             )}
 
-            <form className="flex flex-col gap-3" noValidate onSubmit={handleSubmit}>
+            <form className="flex flex-col gap-4" noValidate onSubmit={handleSubmit}>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Account
+              </p>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="signup-email">Email</Label>
+                <Label htmlFor="signup-email">
+                  Email <span className="text-red-400">*</span>
+                </Label>
                 <Input
                   id="signup-email"
                   type="email"
@@ -208,7 +213,9 @@ export default function SignupPage(): ReactElement {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="signup-password">Password</Label>
+                <Label htmlFor="signup-password">
+                  Password <span className="text-red-400">*</span>
+                </Label>
                 <Input
                   id="signup-password"
                   type="password"
@@ -224,7 +231,9 @@ export default function SignupPage(): ReactElement {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="signup-password-confirm">Confirm password</Label>
+                <Label htmlFor="signup-password-confirm">
+                  Confirm password <span className="text-red-400">*</span>
+                </Label>
                 <Input
                   id="signup-password-confirm"
                   type="password"
@@ -239,10 +248,15 @@ export default function SignupPage(): ReactElement {
                 />
               </div>
 
-              <hr className="border-0 border-t border-[#eee]" />
+              <hr className="my-1 border-0 border-t border-slate-200" />
 
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Profile
+              </p>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="signup-username">Username</Label>
+                <Label htmlFor="signup-username">
+                  Username <span className="text-red-400">*</span>
+                </Label>
                 <Input
                   id="signup-username"
                   type="text"
@@ -304,7 +318,9 @@ export default function SignupPage(): ReactElement {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="signup-org-type">User type</Label>
+                <Label htmlFor="signup-org-type">
+                  User type <span className="text-red-400">*</span>
+                </Label>
                 <Select
                   value={orgType === '' ? null : orgType}
                   onValueChange={(value) => {

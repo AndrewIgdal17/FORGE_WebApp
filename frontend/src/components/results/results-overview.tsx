@@ -181,11 +181,19 @@ export function ResultsOverview({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {BCR_HEADLINE.map((metric) => {
             const value = readFinite(bcr, metric.key);
+            const bg =
+              value == null
+                ? ''
+                : value >= 1
+                  ? 'bg-green-50 ring-1 ring-green-200/60'
+                  : 'bg-red-50 ring-1 ring-red-200/60';
             return (
-              <Card key={metric.key}>
+              <Card key={metric.key} className={bg}>
                 <CardHeader>
-                  <CardDescription>{metric.label}</CardDescription>
-                  <CardTitle className={cn('text-3xl tabular-nums', bcrTone(value))}>
+                  <CardDescription className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {metric.label}
+                  </CardDescription>
+                  <CardTitle className={cn('text-3xl font-bold tabular-nums', bcrTone(value))}>
                     {formatNumber(value, 3)}
                   </CardTitle>
                 </CardHeader>

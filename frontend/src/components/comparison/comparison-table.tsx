@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactElement } from 'react';
+import { Columns3 } from 'lucide-react';
 import { ComparisonColumnPicker, readStoredComparisonKeys, writeStoredComparisonKeys } from '@/components/comparison/comparison-column-picker';
 import { ComparisonHeader } from '@/components/comparison/comparison-header';
 import { DeltaDisplay, formatComparisonValue } from '@/components/comparison/delta-display';
@@ -196,8 +197,18 @@ export function ComparisonTable({
           <tbody>
             {visibleScenarios.length === 0 ? (
               <tr>
-                <td colSpan={columnCount} className="p-6 text-center text-muted-foreground">
-                  Select scenarios to compare.
+                <td colSpan={columnCount} className="py-16 text-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="rounded-full bg-slate-100 p-3">
+                      <Columns3 className="size-6 text-slate-400" />
+                    </div>
+                    <p className="text-base font-medium text-slate-500">
+                      Select at least 2 scenarios to compare
+                    </p>
+                    <p className="text-sm text-slate-400">
+                      Use the checkboxes above to pick scenarios
+                    </p>
+                  </div>
                 </td>
               </tr>
             ) : null}

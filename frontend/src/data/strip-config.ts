@@ -54,9 +54,9 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   'converter-details': {
     title: 'Converters contribute to capital',
     figures: [
-      { label: 'Converter Capital PV', path: 'costs.build.converter_pv', format: 'currency' },
-      { label: 'Converter Loss PV', path: 'bcr.converter_loss_pv', format: 'currency' },
       { label: 'Build Cost PV', path: 'bcr.build_cost_pv', format: 'currency' },
+      { label: 'Converter Loss PV', path: 'bcr.converter_loss_pv', format: 'currency' },
+      { label: 'Total Capital PV', path: 'summary.total_capital_pv', format: 'currency' },
     ],
     resultsView: 'r-capital',
   },

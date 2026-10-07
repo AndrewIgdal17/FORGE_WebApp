@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { FormEvent, ReactElement } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
@@ -24,7 +25,6 @@ import { ScenarioCard } from '@/components/scenarios/scenario-card';
 
 export interface ScenarioListProps {
   onOpen: (scenario: Scenario) => void;
-  onNewScenario: () => void;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -33,7 +33,6 @@ function errorMessage(error: unknown, fallback: string): string {
 
 export function ScenarioList({
   onOpen,
-  onNewScenario,
 }: ScenarioListProps): ReactElement {
   const scenarios = useScenarioStore((state) => state.scenarios);
   const loading = useScenarioStore((state) => state.loading);
@@ -114,67 +113,99 @@ export function ScenarioList({
 
   const renameTrimmed = renameValue.trim();
 
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <Button type="button" onClick={onNewScenario}>
-          New Scenario
-        </Button>
-      </div>
+  const [examplesOpen, setExamplesOpen] = useState(true);
+  const [yoursOpen, setYoursOpen] = useState(true);
 
+  const toggleExamples = useCallback(() => setExamplesOpen((v) => !v), []);
+  const toggleYours = useCallback(() => setYoursOpen((v) => !v), []);
+
+  return (
+    <div className="flex flex-col gap-8">
       {examples.length > 0 ? (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-semibold">Examples</h2>
-          {examples.map((scenario) => (
-            <ScenarioCard
-              key={scenario.id}
-              scenario={scenario}
-              currentUserId={currentUserId}
-              onOpen={onOpen}
-              onRename={startRename}
-              onDuplicate={(item) => {
-                void handleDuplicate(item);
-              }}
-              onDelete={setPendingDelete}
-              onExportForge={(item) => {
-                void handleExportForge(item);
-              }}
-              onExportCsv={(item) => {
-                void handleExportCsv(item);
-              }}
+        <section>
+          <button
+            type="button"
+            onClick={toggleExamples}
+            className="flex w-full items-center gap-2 rounded-lg px-1 py-1 text-left transition-colors hover:bg-slate-100"
+          >
+            <ChevronDown
+              className={`size-4 text-slate-400 transition-transform ${examplesOpen ? '' : '-rotate-90'}`}
             />
-          ))}
+            <h2 className="text-base font-bold text-slate-900">
+              Examples
+            </h2>
+            <span className="text-xs text-slate-400">{examples.length}</span>
+          </button>
+          {examplesOpen && (
+            <div className="mt-2 flex flex-col gap-2 border-l-2 border-slate-200 pl-3">
+              {examples.map((scenario) => (
+                <ScenarioCard
+                  key={scenario.id}
+                  scenario={scenario}
+                  currentUserId={currentUserId}
+                  onOpen={onOpen}
+                  onRename={startRename}
+                  onDuplicate={(item) => {
+                    void handleDuplicate(item);
+                  }}
+                  onDelete={setPendingDelete}
+                  onExportForge={(item) => {
+                    void handleExportForge(item);
+                  }}
+                  onExportCsv={(item) => {
+                    void handleExportCsv(item);
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </section>
       ) : null}
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold">Your Scenarios</h2>
-        {yours.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {loading
-              ? 'Loading scenarios…'
-              : 'No scenarios yet. Create one to get started.'}
-          </p>
-        ) : (
-          yours.map((scenario) => (
-            <ScenarioCard
-              key={scenario.id}
-              scenario={scenario}
-              currentUserId={currentUserId}
-              onOpen={onOpen}
-              onRename={startRename}
-              onDuplicate={(item) => {
-                void handleDuplicate(item);
-              }}
-              onDelete={setPendingDelete}
-              onExportForge={(item) => {
-                void handleExportForge(item);
-              }}
-              onExportCsv={(item) => {
-                void handleExportCsv(item);
-              }}
-            />
-          ))
+      <section>
+        <button
+          type="button"
+          onClick={toggleYours}
+          className="flex w-full items-center gap-2 rounded-lg px-1 py-1 text-left transition-colors hover:bg-slate-100"
+        >
+          <ChevronDown
+            className={`size-4 text-slate-400 transition-transform ${yoursOpen ? '' : '-rotate-90'}`}
+          />
+          <h2 className="text-base font-bold text-slate-900">
+            Your Scenarios
+          </h2>
+          <span className="text-xs text-slate-400">{yours.length}</span>
+        </button>
+        {yoursOpen && (
+          <div className="mt-2 flex flex-col gap-2 border-l-2 border-slate-200 pl-3">
+            {yours.length === 0 ? (
+              <p className="py-2 text-sm text-muted-foreground">
+                {loading
+                  ? 'Loading scenarios…'
+                  : 'No scenarios yet. Create one to get started.'}
+              </p>
+            ) : (
+              yours.map((scenario) => (
+                <ScenarioCard
+                  key={scenario.id}
+                  scenario={scenario}
+                  currentUserId={currentUserId}
+                  onOpen={onOpen}
+                  onRename={startRename}
+                  onDuplicate={(item) => {
+                    void handleDuplicate(item);
+                  }}
+                  onDelete={setPendingDelete}
+                  onExportForge={(item) => {
+                    void handleExportForge(item);
+                  }}
+                  onExportCsv={(item) => {
+                    void handleExportCsv(item);
+                  }}
+                />
+              ))
+            )}
+          </div>
         )}
       </section>
 

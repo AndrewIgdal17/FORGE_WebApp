@@ -46,7 +46,7 @@ export function EconomicDetails(): ReactElement {
         <table className="w-full min-w-[32rem] border-collapse">
           <caption className="sr-only">Value of lost load by outage duration tier</caption>
           <thead>
-            <tr className="border-b text-left text-xs font-medium text-slate-500">
+            <tr className="border-b-2 border-slate-200 bg-slate-50 text-left text-xs font-semibold text-slate-500">
               <th className="px-3 py-2">Duration tier</th>
               <th className="px-3 py-2">Max hours</th>
               <th className="px-3 py-2">Value ($/MWh)</th>

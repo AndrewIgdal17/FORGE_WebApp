@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { NumberField } from '@/components/form/number-field';
 import { PercentageField } from '@/components/form/percentage-field';
 import { FuelMixChart } from '@/components/results/fuel-mix-chart';
@@ -62,13 +63,15 @@ export function EnergyMixSection(): ReactElement {
   const [presets, setPresets] = useState<GridMixPreset[]>([]);
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
   const setFieldValue = useFormStore((state) => state.setFieldValue);
-  const shares = useFormStore((state) => {
-    const next: Record<string, number> = {};
-    for (const fuel of FUELS) {
-      next[fuel] = readNumber(state.getFieldValue(mixPath('initial', fuel)));
-    }
-    return next;
-  });
+  const shares = useFormStore(
+    useShallow((state) => {
+      const next: Record<string, number> = {};
+      for (const fuel of FUELS) {
+        next[fuel] = readNumber(state.getFieldValue(mixPath('initial', fuel)));
+      }
+      return next;
+    }),
+  );
   const initialTotal = FUELS.reduce((sum, fuel) => sum + (shares[fuel] ?? 0), 0);
 
   useEffect(() => {
@@ -143,7 +146,7 @@ export function EnergyMixSection(): ReactElement {
         <table className="w-full min-w-[44rem] border-collapse">
           <caption className="sr-only">Fuel source initial share and growth rates</caption>
           <thead>
-            <tr className="border-b text-left text-xs font-medium text-slate-500">
+            <tr className="border-b-2 border-slate-200 bg-slate-50 text-left text-xs font-semibold text-slate-500">
               <th className="px-3 py-2">Fuel source</th>
               <th className="px-3 py-2">Initial share (%)</th>
               <th className="px-3 py-2">Pre-COD rate (%)</th>

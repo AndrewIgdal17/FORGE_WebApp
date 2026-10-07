@@ -47,17 +47,37 @@ function delayAnnual(results: Record<string, unknown> | null): string {
 }
 
 function Panel({ title, lines }: { title: string; lines: Line[] }): ReactElement {
+  const detail = lines.slice(0, -1);
+  const summary = lines[lines.length - 1];
+
   return (
-    <section className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-      <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{title}</h3>
-      <dl className="mt-1.5 grid gap-1">
-        {lines.map((line) => (
-          <div key={line.label} className="flex items-baseline justify-between gap-3 text-sm">
-            <dt className="text-slate-600">{line.label}</dt>
-            <dd className="font-medium text-slate-900 tabular-nums">{line.value}</dd>
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="border-b border-slate-100 bg-slate-50 px-3 py-2">
+        <h3 className="text-[0.7rem] font-bold tracking-widest text-slate-400 uppercase">
+          {title}
+        </h3>
+      </div>
+      <div className="px-3 py-2.5">
+        {detail.length > 0 && (
+          <dl className="grid gap-1">
+            {detail.map((line) => (
+              <div
+                key={line.label}
+                className="flex items-baseline justify-between gap-3 text-xs"
+              >
+                <dt className="text-slate-400">{line.label}</dt>
+                <dd className="font-medium text-slate-700 tabular-nums">{line.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {summary && (
+          <div className={`flex items-baseline justify-between gap-3 ${detail.length > 0 ? 'mt-2 border-t border-slate-100 pt-2' : ''}`}>
+            <dt className="text-xs font-medium text-slate-500">{summary.label}</dt>
+            <dd className="text-base font-bold text-slate-900 tabular-nums">{summary.value}</dd>
           </div>
-        ))}
-      </dl>
+        )}
+      </div>
     </section>
   );
 }

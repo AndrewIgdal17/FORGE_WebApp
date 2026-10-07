@@ -239,7 +239,7 @@ export function RightsOfWay(): ReactElement {
         <table className="w-full min-w-[44rem] border-collapse">
           <caption className="sr-only">Right-of-way zones</caption>
           <thead>
-            <tr className="border-b text-left text-xs font-medium text-slate-500">
+            <tr className="border-b-2 border-slate-200 bg-slate-50 text-left text-xs font-semibold text-slate-500">
               <th className="px-3 py-2">Zone</th>
               <th className="px-3 py-2">Miles</th>
               <th className="px-3 py-2 text-right">Acres</th>
@@ -264,7 +264,7 @@ export function RightsOfWay(): ReactElement {
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t bg-slate-50 text-sm font-semibold text-slate-900">
+            <tr className="border-t-2 border-slate-300 bg-slate-100 text-sm font-bold text-slate-900">
               <th scope="row" className="px-3 py-2 text-left">
                 Total
               </th>

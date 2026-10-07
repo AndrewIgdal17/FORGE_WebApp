@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { CurrencyField } from '@/components/form/currency-field';
 import { NumberField } from '@/components/form/number-field';
 import { TERRAIN_IDS, terrainMilesPath } from '@/components/sections/terrain-mix';
@@ -108,13 +109,15 @@ export function BaseMitigation(): ReactElement {
     state.getFieldValue(`${PROJECT}.converter_type`),
   );
   const uplift = useFormStore((state) => readNumber(state.getFieldValue(UPLIFT_PATH)) || 1);
-  const milesByTerrain = useFormStore((state) => {
-    const miles: Record<string, number> = {};
-    for (const terrain of TERRAIN_IDS) {
-      miles[terrain] = readNumber(state.getFieldValue(terrainMilesPath(terrain)));
-    }
-    return miles;
-  });
+  const milesByTerrain = useFormStore(
+    useShallow((state) => {
+      const miles: Record<string, number> = {};
+      for (const terrain of TERRAIN_IDS) {
+        miles[terrain] = readNumber(state.getFieldValue(terrainMilesPath(terrain)));
+      }
+      return miles;
+    }),
+  );
 
   const ctLabel = readString(constructionType) || 'Overhead';
   const ctInfo = ENV_TERRAINS[ctLabel] ?? ENV_TERRAINS.Overhead;
@@ -157,7 +160,7 @@ export function BaseMitigation(): ReactElement {
         <table className="w-full min-w-[36rem] border-collapse">
           <caption className="sr-only">Base mitigation cost per acre by terrain</caption>
           <thead>
-            <tr className="border-b text-left text-xs font-medium text-slate-500">
+            <tr className="border-b-2 border-slate-200 bg-slate-50 text-left text-xs font-semibold text-slate-500">
               <th className="px-3 py-2">Terrain</th>
               <th className="px-3 py-2">Acres impacted</th>
               <th className="px-3 py-2">Cost ($/acre)</th>
