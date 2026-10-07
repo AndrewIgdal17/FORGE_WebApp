@@ -12,7 +12,7 @@ client = TestClient(app)
 def test_static_holds_no_parameter_tables():
     static = Path(__file__).resolve().parents[2] / "static"
     json_files = sorted(path.name for path in static.glob("*.json"))
-    assert json_files == ["_function-map.json"]
+    assert json_files == []
 
 SCENARIO_FILES = sorted(Path(forge.get_scenarios_path()).glob("*.forge"))
 
