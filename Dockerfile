@@ -1,3 +1,13 @@
+# --- Node build stage (React frontend) ---
+FROM node:20-slim AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ .
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+RUN npm run build
+
 # --- Base image (pinned by digest) ---
 # python:3.12-slim manifest list, Docker Hub tag digest looked up 2026-10-04.
 FROM python:3.12-slim@sha256:02108f5d322dd89f1c9e552442c25acb0543dfdbc455693a5599624f20d9155d AS base
@@ -19,6 +29,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 # --- Application layer ---
 COPY . .
+COPY --from=frontend /frontend/dist /app/frontend/dist
 RUN uv sync --frozen --no-dev
 
 # --- Non-root user ---

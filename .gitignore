@@ -35,3 +35,7 @@ node_modules/
 
 # macOS
 .DS_Store
+
+# React frontend build artifacts
+frontend/dist/
+frontend/node_modules/
