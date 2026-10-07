@@ -41,6 +41,7 @@ interface ScenarioStore {
   activeScenarioId: string | null;
   unsavedChanges: boolean;
   loading: boolean;
+  savedResults: Record<string, unknown> | null;
 
   loadScenarios: () => Promise<void>;
   setActiveScenario: (id: string) => void;
@@ -555,6 +556,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
   activeScenarioId: null,
   unsavedChanges: false,
   loading: false,
+  savedResults: null,
 
   loadScenarios: async () => {
     set({ loading: true });
@@ -590,7 +592,12 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
   },
 
   setActiveScenario: (id) => {
-    set({ activeScenarioId: id, unsavedChanges: false });
+    const scenario = get().scenarios.find((item) => item.id === id);
+    set({
+      activeScenarioId: id,
+      unsavedChanges: false,
+      savedResults: scenario?.results ?? null,
+    });
   },
 
   createScenario: async (name, source, changes) => {
@@ -622,6 +629,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
     set((state) => ({
       scenarios: upsertScenario(state.scenarios, scenario),
       unsavedChanges: false,
+      savedResults: scenario.results,
     }));
     return scenario;
   },
