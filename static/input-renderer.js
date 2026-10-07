@@ -10,66 +10,6 @@ const UNLOCK_SVG = '<svg width="11" height="11" viewBox="0 0 16 16"><rect x="3" 
 const SOURCE_ICON_SVG = '<svg width="10" height="10" viewBox="0 0 16 16"><path d="M13 1H3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V3a2 2 0 00-2-2zM5 4h6v1H5V4zm0 3h6v1H5V7zm0 3h4v1H5v-1z" fill="currentColor"/></svg>';
 
 // Field type detection and formatting
-function isCurrencyField(path) {
-  const lowerPath = path.toLowerCase();
-
-  // Exclude non-currency fields that happen to contain "cost" in their section path
-  const excludePatterns = [
-    'ignition_rate', 'outage_duration', 'outage_rates',
-    'ignition_rate_multiplier', 'outage_duration_multiplier',
-    'discount_rate', 'risk_growth_rate',
-    'capacity_at_risk_factor',
-    'mitigation_uplift_factor'
-  ];
-  if (excludePatterns.some(pattern => lowerPath.includes(pattern))) {
-    return false;
-  }
-
-  const currencyPatterns = [
-    'severity_per_event',
-    'value_of_lost_load',
-    'acquisition_cost', 'rent_cost', 'hold_cost',
-    '_cost_per_acre',
-    'cost_per_kg',
-    '_price',
-    'annual_delay_costs.',
-    'vegetation_management_om_costs.'
-  ];
-
-  // Delay cost sub-fields (only match when inside annual_delay_costs)
-  if (lowerPath.includes('annual_delay_costs.')) {
-    return true;
-  }
-
-  return currencyPatterns.some(pattern => lowerPath.includes(pattern));
-}
-
-function isPercentageField(path) {
-  const lowerPath = path.toLowerCase();
-  const percentPatterns = [
-    'percent', '_rate', 'rate_', 'contingency', 'factor',
-    'utilization',
-    'inflation', 'wacc', 'discount', 'return_rate',
-    'premium_rate', 'compensation_percent',
-    'during_delay', 'during_construction', 'rate_of_change',
-    'premium_by_construction_type'
-  ];
-  // Exclude fields that have "rate" or "percent" but aren't decimal percentages
-  const excludePatterns = ['ignition_rate', 'outage_rate'];
-  // grid_mix.initial.* is stored as whole numbers (10 = 10%), not decimals
-  if (lowerPath.includes('grid_mix.initial.')) {
-    return false;
-  }
-  // Legacy: energy_source_mix.*.percentage is stored as whole numbers (10 = 10%), not decimals
-  if (lowerPath.includes('energy_source_mix') && lowerPath.endsWith('.percentage')) {
-    return false;
-  }
-  if (excludePatterns.some(pattern => lowerPath.includes(pattern))) {
-    return false;
-  }
-  return percentPatterns.some(pattern => lowerPath.includes(pattern));
-}
-
 function formatCurrencyInput(value) {
   if (value === null || value === undefined || value === '') return '';
   const num = typeof value === 'string' ? parseFloat(value.replace(/[$,]/g, '')) : value;
@@ -1425,10 +1365,6 @@ function renderROWZonesTable(data) {
   return wrapper;
 }
 
-function renderROWZoneTable(data) {
-  return renderROWZonesTable(data);
-}
-
 function isGreenfieldROW() {
   const recon = document.querySelector('[data-path="01_project_technical_details.project.reconductoring"]');
   const existingROW = document.querySelector('[data-path="01_project_technical_details.project.uses_existing_row"]');
@@ -2177,21 +2113,6 @@ function updateEnvironmentalAcres() {
 
   const totalStr = computedTotal > 0 ? computedTotal.toLocaleString('en-US', {maximumFractionDigits: 1}) : '0';
   document.querySelectorAll('[data-env-total-acres]').forEach(el => { el.textContent = totalStr; });
-}
-
-function rebuildEnvBaseMitigation(data, fromConfigChange) {
-  const oldWrapper = document.getElementById('env-base-mitigation-wrapper');
-  if (!oldWrapper) return;
-
-  const parent = oldWrapper.parentNode;
-  const newWrapper = renderEnvBaseMitigationTable(data);
-  parent.replaceChild(newWrapper, oldWrapper);
-
-  updateEnvironmentalAcres();
-
-  if (fromConfigChange) {
-    showToast('Environmental costs reset to defaults for new configuration');
-  }
 }
 
 function showBuildCostConfirmDialog(component, onConfirm) {
@@ -3480,16 +3401,6 @@ function renderExternalityCostTable(data) {
   return wrapper;
 }
 
-function getTerrainMiles() {
-  const miles = {};
-  const TERRAINS_LIST = ['forested', 'scrubbed_flat', 'wetland', 'farmland', 'desert_barren', 'urban', 'rolling_hills', 'mountain', 'subsea'];
-  TERRAINS_LIST.forEach(t => {
-    const el = document.querySelector(`[data-path="02_project_physical_details.terrain.terrain_miles.${t}"]`);
-    miles[t] = el ? (parseFloat(String(el.value).replace(/,/g, '')) || 0) : 0;
-  });
-  return miles;
-}
-
 function renderWildfireRiskPanel(data) {
   const wrapper = document.createElement('div');
   wrapper.id = 'wildfire-risk-wrapper';
@@ -4436,66 +4347,6 @@ function updateProjectTechnicalSubTabVisibility() {
   }
 }
 
-function updateCapitalCostSubTabVisibility() {
-  var reconEl = document.querySelector('[data-path="01_project_technical_details.project.reconductoring"]');
-  var acDcEl = document.querySelector('[data-path="01_project_technical_details.project.ac_dc"]');
-  var ctEl = document.querySelector('[data-path="01_project_technical_details.project.construction_type"]');
-  var isRecon = reconEl && reconEl.checked === true;
-  var isAC = acDcEl && acDcEl.value === 'AC';
-  var isOverhead = ctEl && ctEl.value === 'Overhead';
-
-  // Hide structure contingency field if not overhead greenfield
-  var structField = document.querySelector('[data-path*="structure_contingency"]');
-  if (structField) {
-    var row = structField.closest('.field-row') || structField.closest('.slider-row') || structField.parentElement;
-    if (row) row.style.display = (isOverhead && !isRecon) ? '' : 'none';
-  }
-
-  // Hide converter contingency field if AC
-  var convField = document.querySelector('[data-path*="converter_contingency"]');
-  if (convField) {
-    var row = convField.closest('.field-row') || convField.closest('.slider-row') || convField.parentElement;
-    if (row) row.style.display = isAC ? 'none' : '';
-  }
-}
-
-function rebuildCapitalCosts(fromConfigChange) {
-  const entry = getBuildCostEntry();
-  // Query across all sub-item containers (content-panel + offscreen holder)
-  const searchRoot = document.querySelector('[data-tab-id="capital-costs"]') || document;
-
-  searchRoot.querySelectorAll('.capital-cost-table input[data-cost-key]').forEach(input => {
-    const val = entry ? (entry[input.dataset.costKey] ?? 0) : 0;
-    input.value = formatCurrencyInput(val);
-    input.readOnly = true;
-    input.classList.add('locked-cell');
-  });
-
-  searchRoot.querySelectorAll('.capital-cost-table').forEach(table => {
-    const card = table.closest('.forge-table-card');
-    if (card) {
-      const pill = card.querySelector('.lock-pill');
-      if (pill) {
-        pill.className = 'lock-pill';
-        pill.innerHTML = LOCK_SVG + ' Locked \u2014 click to override';
-      }
-    }
-  });
-
-  // Update context displays
-  searchRoot.querySelectorAll('[data-capital-context-value]').forEach(el => {
-    const path = el.dataset.capitalContextValue;
-    const src = document.querySelector(`[data-path="${path}"]`);
-    el.textContent = src ? src.value : '—';
-  });
-
-  updateCapitalCostSubTabVisibility();
-
-  if (fromConfigChange) {
-    showToast('Build costs reset to defaults for new configuration');
-  }
-}
-
 function renderInputsFromTaxonomy(data, taxonomyData, metadataList) {
   if (!taxonomyData || !metadataList) {
     console.error('Taxonomy or input metadata not loaded — cannot render inputs');
@@ -5239,27 +5090,6 @@ function resetSectionToDefaults(sectionPath) {
 
 }
 
-// Shared utility: get terrain names with non-zero miles
-function getActiveTerrains() {
-  const terrains = ['forested', 'scrubbed_flat', 'wetland', 'farmland', 'desert_barren', 'urban', 'rolling_hills', 'mountain', 'subsea'];
-  return terrains.filter(t => {
-    const input = document.querySelector(`input[data-path="02_project_physical_details.terrain.terrain_miles.${t}"]`);
-    if (!input) return false;
-    const val = parseNumberInput(input.value);
-    return val !== null && val > 0;
-  });
-}
-
-// Update locked discount rate when social discount rate changes
-function updateLockedDiscountRate() {
-  const socialRateInput = document.querySelector('input[data-path="03_financing.financial.social_discount_rate"]');
-  const display = document.getElementById('locked-discount-rate-display');
-  if (!socialRateInput || !display) return;
-  // slider-pct inputs already store as %, read directly
-  const val = parseFloat(socialRateInput.value) || 0;
-  display.value = val.toFixed(2) + '%';
-}
-
 const FUEL_MIX_SOURCE_KEYS = ['coal', 'oil', 'natural_gas', 'solar', 'wind', 'hydro', 'nuclear', 'other'];
 const GRID_MIX_GROUPS = ['initial', 'rate_pre_cod', 'rate_post_cod'];
 
@@ -5292,61 +5122,6 @@ function applyGridMixPreset(gridMix) {
       }
       inp.dispatchEvent(new Event('input', { bubbles: true }));
     });
-  });
-}
-
-/** @deprecated Use applyGridMixPreset — accepts legacy energy_source_mix shape for compatibility. */
-function applyEnergySourceMixPreset(mix) {
-  if (!mix) return;
-  if (mix.initial || mix.rate_pre_cod || mix.rate_post_cod) {
-    applyGridMixPreset(mix);
-    return;
-  }
-  const gridMix = {
-    initial: {},
-    rate_pre_cod: {},
-    rate_post_cod: {},
-  };
-  FUEL_MIX_SOURCE_KEYS.forEach(src => {
-    const block = mix[src];
-    if (!block || typeof block !== 'object') return;
-    gridMix.initial[src] = Number(block.percentage) || 0;
-    const rate = typeof block.rate_of_change === 'number' ? block.rate_of_change : 0;
-    gridMix.rate_pre_cod[src] = rate;
-    gridMix.rate_post_cod[src] = rate;
-  });
-  applyGridMixPreset(gridMix);
-}
-
-function makeEmissionIntensitiesCollapsible() {
-  const emissionsTab = (C._renderedSubItems && C._renderedSubItems['energy-emissions-emissions']) ||
-    document.querySelector('[data-tab-id="emissions"]') ||
-    document.querySelector('[data-sub-tab="energy-emissions-emissions"]');
-  if (!emissionsTab) return;
-  emissionsTab.querySelectorAll('.subsection-header, .section-header').forEach(h => {
-    const text = h.textContent.trim().toLowerCase();
-    if (text.includes('emission intensities') || text.includes('emission_intensities')) {
-      h.classList.add('collapsible-header');
-      h.textContent = 'Advanced: Emission Intensities (kg/MWh)';
-      const headerRow = h.closest('.section-header-row') || h;
-      const wrapper = document.createElement('div');
-      wrapper.className = 'collapsible-content';
-      let sibling = headerRow.nextElementSibling;
-      const toWrap = [];
-      while (sibling && !sibling.classList.contains('section-header-row')
-             && !sibling.classList.contains('tab-section-header')) {
-        toWrap.push(sibling);
-        sibling = sibling.nextElementSibling;
-      }
-      if (toWrap.length > 0) {
-        headerRow.parentNode.insertBefore(wrapper, toWrap[0]);
-        toWrap.forEach(el => wrapper.appendChild(el));
-      }
-      h.addEventListener('click', () => {
-        h.classList.toggle('expanded');
-        wrapper.classList.toggle('expanded');
-      });
-    }
   });
 }
 
@@ -5481,7 +5256,6 @@ window.setSnapshotOriginalData = function(data) {
 };
 window.syncFuelMixPresetBarVisibility = syncFuelMixPresetBarVisibility;
 window.applyGridMixPreset = applyGridMixPreset;
-window.applyEnergySourceMixPreset = applyEnergySourceMixPreset;
 window.updateFuelMixChart = updateFuelMixChart;
 window.validateCostTimingPatterns = validateCostTimingPatterns;
 })();
