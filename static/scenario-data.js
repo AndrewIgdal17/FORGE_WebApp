@@ -265,10 +265,6 @@
     return `${baseName} (${counter})`;
   }
 
-  function updateScenarioBadge() {
-    // No-op: badge removed by design
-  }
-
   async function addScenarioToSession(inputs, results, metadata, customName) {
     const userId = C.currentUserId;
     const name = customName || generateScenarioName('Scenario');
@@ -696,97 +692,9 @@
     }
   }
 
-  async function displayCsvFiles(apiResponse, baseUrl) {
-    try {
-      const csvFiles = apiResponse.csv_files || [];
-      const outputDir = apiResponse.output_dir || '../outputs';
-
-      if (csvFiles.length === 0) {
-        document.getElementById('result').textContent = "No CSV files generated.";
-        document.getElementById('status').textContent = "Success (no CSV files)";
-        return;
-      }
-
-      let html = '<div style="font-family: monospace; white-space: pre-wrap;">';
-      html += `<h3>Generated ${csvFiles.length} CSV file(s):</h3>`;
-
-      html += `<div style="margin-bottom: 20px;">`;
-      html += `<button onclick="downloadAllCsvFiles()" style="padding: 10px 20px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Download All CSV Files</button>`;
-      html += `</div>\n\n`;
-
-      for (const csvFile of csvFiles) {
-        try {
-          const csvUrl = new URL(`/api/outputs/${csvFile}`, baseUrl).toString();
-          const response = await fetch(csvUrl);
-
-          if (response.ok) {
-            const csvContent = await response.text();
-            html += `<div style="margin-bottom: 30px; border: 1px solid #ddd; padding: 15px; border-radius: 4px;">`;
-            html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">`;
-            html += `<h4 style="margin: 0; color: #0066cc;">${csvFile}</h4>`;
-            html += `<button onclick="downloadCsvFile('${csvFile}', '${csvUrl}')" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">Download</button>`;
-            html += `</div>`;
-            html += `<pre style="overflow-x: auto; background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 400px;">${csvContent}</pre>`;
-            html += `</div>`;
-          } else {
-            html += `<div style="margin-bottom: 20px;">`;
-            html += `<h4 style="color: #b00020;">${csvFile}</h4>`;
-            html += `<p>Could not fetch file (${response.status})</p>`;
-            html += `</div>`;
-          }
-        } catch (error) {
-          html += `<div style="margin-bottom: 20px;">`;
-          html += `<h4 style="color: #b00020;">${csvFile}</h4>`;
-          html += `<p>Error: ${error.message}</p>`;
-          html += `</div>`;
-        }
-      }
-
-      html += '</div>';
-      document.getElementById('result').innerHTML = html;
-      document.getElementById('status').textContent = `Success - ${csvFiles.length} CSV file(s) displayed`;
-    } catch (error) {
-      document.getElementById('result').textContent = `Error displaying CSV files: ${error.message}`;
-      document.getElementById('status').textContent = "Error";
-    }
-  }
-
-  function downloadCsvFile(filename, url) {
-    const downloadUrl = url.includes('?') ? `${url}&download=true` : `${url}?download=true`;
-
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-
-  async function downloadAllCsvFiles() {
-    const buttons = document.getElementById('result').querySelectorAll('button[onclick^="downloadCsvFile"]');
-
-    if (buttons.length === 0) {
-      alert('No CSV files to download');
-      return;
-    }
-
-    buttons.forEach((button, index) => {
-      setTimeout(() => {
-        const onclickAttr = button.getAttribute('onclick');
-        const match = onclickAttr.match(/downloadCsvFile\('([^']+)',\s*'([^']+)'\)/);
-        if (match) {
-          const filename = match[1];
-          const url = match[2];
-          downloadCsvFile(filename, url);
-        }
-      }, index * 200);
-    });
-  }
-
   window.loadScenariosFromDB = loadScenariosFromDB;
   window.saveScenarioToDB = saveScenarioToDB;
   window.generateScenarioName = generateScenarioName;
-  window.updateScenarioBadge = updateScenarioBadge;
   window.addScenarioToSession = addScenarioToSession;
   window.hasRequiredFields = hasRequiredFields;
   window.getInvalidFields = getInvalidFields;
@@ -799,9 +707,6 @@
   window.loadForgeFile = loadForgeFile;
   window.loadCsvFile = loadCsvFile;
   window.loadForgeJson = loadForgeJson;
-  window.displayCsvFiles = displayCsvFiles;
-  window.downloadCsvFile = downloadCsvFile;
-  window.downloadAllCsvFiles = downloadAllCsvFiles;
   window.deleteScenarioFromDB = deleteScenarioFromDB;
   window.patchScenarioApi = patchScenarioApi;
 })();

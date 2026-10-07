@@ -208,7 +208,6 @@
               C.activeScenarioName = name;
               updateScenarioBreadcrumb();
               renderScenarioList();
-              updateScenarioBadge();
               await saveScenarioToDB(s);
             }
           } else {
