@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { getStripConfig, readFigureValue, type StripFigure } from '@/data/strip-config';
 import { useNavigation } from '@/hooks/use-navigation';
-import { formatCurrency, formatNumber, formatSignedCurrencyValue } from '@/lib/format';
+import { formatCurrency, formatNumber, formatSignedCurrencyValue, formatSignedNumberValue } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 export interface ContributionStripProps {
@@ -11,17 +11,33 @@ export interface ContributionStripProps {
   onNavigateResults: (subItemId: string) => void;
 }
 
-function formatFigure(value: number | null, format: StripFigure['format']): string {
+const GRID_COLS: Record<number, string> = {
+  2: 'grid-cols-2',
+  3: 'grid-cols-3',
+  4: 'grid-cols-4',
+  5: 'grid-cols-5',
+};
+
+function figureUnit(figure: StripFigure): string {
+  return 'unit' in figure && figure.unit ? ` ${figure.unit}` : '';
+}
+
+function figureDecimals(figure: StripFigure): number {
+  return 'decimals' in figure && figure.decimals != null ? figure.decimals : 0;
+}
+
+function formatFigure(value: number | null, figure: StripFigure): string {
   if (value === null) return '—';
-  switch (format) {
+  const unit = figureUnit(figure);
+  switch (figure.format) {
     case 'currency':
-      return formatCurrency(value, 0);
+      return formatCurrency(value, 0) + unit;
     case 'ratio':
-      return formatNumber(value, 3);
+      return formatNumber(value, 3) + unit;
     case 'percent':
-      return formatNumber(value * 100, 1) + '%';
+      return formatNumber(value * 100, 1) + '%' + unit;
     case 'number':
-      return formatNumber(value, 0);
+      return formatNumber(value, figureDecimals(figure)) + unit;
   }
 }
 
@@ -31,19 +47,21 @@ function figureColor(figure: StripFigure, value: number | null): string {
   return value >= 1 ? 'text-green-600' : 'text-red-600';
 }
 
-function DeltaChip({ current, saved, format }: {
+function DeltaChip({ current, saved, figure }: {
   current: number | null;
   saved: number | null;
-  format: StripFigure['format'];
+  figure: StripFigure;
 }): ReactElement | null {
   if (current === null || saved === null) return null;
   const delta = current - saved;
   if (Math.abs(delta) < 0.005) return null;
 
-  const isRatio = format === 'ratio';
+  const isRatio = figure.format === 'ratio';
   const label = isRatio
     ? (delta > 0 ? '+' : '') + formatNumber(delta, 3)
-    : formatSignedCurrencyValue(delta, 0);
+    : figure.format === 'number'
+      ? formatSignedNumberValue(delta, figureDecimals(figure)) + figureUnit(figure)
+      : formatSignedCurrencyValue(delta, 0);
   const color = isRatio
     ? (delta > 0 ? 'text-green-600' : 'text-red-600')
     : (delta > 0 ? 'text-red-600' : 'text-green-600'); // higher cost = bad
@@ -64,6 +82,8 @@ export function ContributionStrip({
   if (!subItemId) return null;
   const config = getStripConfig(subItemId);
   if (!config) return null;
+
+  const colsClass = GRID_COLS[config.figures.length] ?? 'grid-cols-3';
 
   if (!results) {
     return (
@@ -89,7 +109,7 @@ export function ContributionStrip({
           <ArrowRight className="size-3" />
         </button>
       </div>
-      <div className="grid grid-cols-3 divide-x divide-slate-100">
+      <div className={cn('grid divide-x divide-slate-100', colsClass)}>
         {config.figures.map((figure) => {
           const value = readFigureValue(figure, results);
           return (
@@ -98,12 +118,12 @@ export function ContributionStrip({
                 {figure.label}
               </p>
               <p className={cn('mt-0.5 text-lg font-bold tabular-nums', figureColor(figure, value))}>
-                {formatFigure(value, figure.format)}
+                {formatFigure(value, figure)}
               </p>
               <DeltaChip
                 current={value}
                 saved={savedResults ? readFigureValue(figure, savedResults) : null}
-                format={figure.format}
+                figure={figure}
               />
             </div>
           );

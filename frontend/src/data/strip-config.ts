@@ -9,6 +9,7 @@ interface PathFigure {
   format: 'currency' | 'number' | 'percent' | 'ratio';
   colorByThreshold?: boolean;
   decimals?: number;
+  unit?: string;
 }
 
 interface TaxonomyFigure {
@@ -197,6 +198,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         source: 'path',
         path: 'derived_parameters.average_terrain_multiplier',
         format: 'number',
+        decimals: 2,
       },
       {
         label: 'Weighted Miles',
