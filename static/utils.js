@@ -52,27 +52,6 @@ function milesToAcres(miles, rowWidthFeet) {
   return (miles * 5280 * rowWidthFeet) / 43560;
 }
 
-function computeTerrainAcres(terrainMilesMap, rowWidthFeet) {
-  const acres = {};
-  for (const [terrain, miles] of Object.entries(terrainMilesMap)) {
-    if (miles > 0) acres[terrain] = milesToAcres(miles, rowWidthFeet);
-  }
-  return acres;
-}
-
-function computeEffectiveAcres(terrainAcres, upliftFactor) {
-  const eff = {};
-  for (const [terrain, acres] of Object.entries(terrainAcres)) {
-    eff[terrain] = acres * upliftFactor;
-  }
-  return eff;
-}
-
-function computeTotalEffectiveAcres(terrainAcres, upliftFactor) {
-  const total = Object.values(terrainAcres).reduce((s, a) => s + a, 0);
-  return total * upliftFactor;
-}
-
 let _modalCallback = null;
 function showModal(title, message, onConfirm, confirmLabel, confirmClass) {
   const overlay = document.getElementById('modal-overlay');
@@ -115,10 +94,6 @@ function setValueAtPath(obj, path, value) {
     current = current[parts[i]];
   }
   current[parts[parts.length - 1]] = value;
-}
-
-function btnLabel(btn) {
-  return btn.childNodes[0]?.textContent?.trim() || btn.textContent.trim();
 }
 
 function formatTimestamp(dateStr) {
@@ -312,16 +287,6 @@ function makeMethodologyIcon(tabKey) {
   return icon;
 }
 
-function formatDollar(n) {
-  if (n == null || isNaN(n)) return '—';
-  const abs = Math.abs(n);
-  const sign = n < 0 ? '−' : '';
-  if (abs >= 1e9) return sign + '$' + (abs / 1e9).toFixed(2) + 'B';
-  if (abs >= 1e6) return sign + '$' + (abs / 1e6).toFixed(2) + 'M';
-  if (abs >= 1e3) return sign + '$' + (abs / 1e3).toFixed(1) + 'K';
-  return sign + '$' + abs.toFixed(0);
-}
-
 function deriveDefaultApiBase(currentUrl, defaultPort) {
   try {
     const url = new URL(currentUrl);
@@ -338,24 +303,6 @@ function deriveDefaultApiBase(currentUrl, defaultPort) {
     return url.origin;
   } catch (error) {
     return `http://127.0.0.1:${defaultPort}`;
-  }
-}
-
-function parseValues(raw) {
-  return raw
-    .split(",")
-    .map((value) => value.trim())
-    .filter((value) => value.length)
-    .map((value) => Number(value))
-    .filter((value) => !Number.isNaN(value));
-}
-
-async function readFileAsJson(file) {
-  const text = await file.text();
-  try {
-    return JSON.parse(text);
-  } catch (error) {
-    throw new Error("The selected file is not valid JSON.");
   }
 }
 
@@ -421,11 +368,6 @@ function humanizeLabel(key) {
     .replace(/Nox\b/g, 'NOx')
     .replace(/Eal\b/g, 'EAL')
     .replace(/Eac\b/g, 'EAC');
-}
-
-// --- Structured output helpers ---
-function safeGet(obj, path, defaultVal = 0) {
-  return path.split('.').reduce((o, k) => (o && o[k] !== undefined ? o[k] : defaultVal), obj);
 }
 
 const TAB_TOOLTIP_CONTENT = {
@@ -543,26 +485,6 @@ function calculateTerrainMilesTotal() {
   return total;
 }
 
-// Helper: hide the first section-header-row after a tab-section-header if its text matches any in the list
-function hideFirstDuplicateSubheader(tabHeader, matchTexts) {
-  let sibling = tabHeader.nextElementSibling;
-  while (sibling && !sibling.classList.contains('tab-section-header')) {
-    if (sibling.classList.contains('section-header-row')) {
-      const innerHeader = sibling.querySelector('.section-header, .subsection-header');
-      if (innerHeader) {
-        const innerText = innerHeader.textContent.trim().toLowerCase();
-        if (matchTexts.some(t => innerText === t)) {
-          sibling.style.display = 'none';
-          break;
-        }
-      }
-    }
-    sibling = sibling.nextElementSibling;
-  }
-}
-
-
-
   // Public API
   window.debounce = debounce;
   window.showToast = showToast;
@@ -571,7 +493,6 @@ function hideFirstDuplicateSubheader(tabHeader, matchTexts) {
   window.hideModal = hideModal;
   window.getValueAtPath = getValueAtPath;
   window.setValueAtPath = setValueAtPath;
-  window.btnLabel = btnLabel;
   window.formatTimestamp = formatTimestamp;
   window.flattenObject = flattenObject;
   window.csvEscape = csvEscape;
@@ -581,21 +502,13 @@ function hideFirstDuplicateSubheader(tabHeader, matchTexts) {
   window.showMethodologyTooltip = showMethodologyTooltip;
   window.makeMethodologyIcon = makeMethodologyIcon;
   window.makeHelpIcon = makeHelpIcon;
-  window.formatDollar = formatDollar;
   window.deriveDefaultApiBase = deriveDefaultApiBase;
-  window.parseValues = parseValues;
-  window.readFileAsJson = readFileAsJson;
   window.formatNumber = formatNumber;
   window.formatCurrency = formatCurrency;
   window.formatSignedCurrencyValue = formatSignedCurrencyValue;
   window.formatSignedNumberValue = formatSignedNumberValue;
   window.humanizeLabel = humanizeLabel;
-  window.safeGet = safeGet;
   window.showMultiplierConfirmDialog = showMultiplierConfirmDialog;
   window.calculateTerrainMilesTotal = calculateTerrainMilesTotal;
-  window.hideFirstDuplicateSubheader = hideFirstDuplicateSubheader;
   window.milesToAcres = milesToAcres;
-  window.computeTerrainAcres = computeTerrainAcres;
-  window.computeEffectiveAcres = computeEffectiveAcres;
-  window.computeTotalEffectiveAcres = computeTotalEffectiveAcres;
 })();

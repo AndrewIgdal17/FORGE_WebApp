@@ -13,7 +13,6 @@ async function removeScenarioFromSession(id) {
   if (C.comparisonBaselineId === id) C.comparisonBaselineId = null;
   renderScenarioList();
   renderCompareSelector();
-  updateScenarioBadge();
 }
 
 function renameScenario(id, newName) {
@@ -50,14 +49,6 @@ async function duplicateScenario(sourceScenario) {
   } else {
     renderScenarioList();
     renderCompareSelector();
-  }
-}
-
-function loadScenarioIntoUI(scenario) {
-  if (window.location.pathname === '/app/workspace' && typeof setActiveScenario === 'function') {
-    setActiveScenario(scenario);
-  } else {
-    window.location.href = '/app/workspace?scenario=' + scenario.id;
   }
 }
 
@@ -518,7 +509,6 @@ window.renderCompareSelector = renderCompareSelector;
 window.removeScenarioFromSession = removeScenarioFromSession;
 window.renameScenario = renameScenario;
 window.duplicateScenario = duplicateScenario;
-window.loadScenarioIntoUI = loadScenarioIntoUI;
 window.getScenarioParams = getScenarioParams;
 window.showSaveDialog = showSaveDialog;
 window.hideSaveDialog = hideSaveDialog;

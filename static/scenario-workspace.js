@@ -15,14 +15,7 @@ function setActiveScenario(scenario) {
   C.activeScenarioName = scenario.customName;
   if (typeof updateScenarioNameDisplay === 'function') updateScenarioNameDisplay(scenario.customName);
   updateScenarioBreadcrumb();
-  if (scenario.ref_snapshot_id && window._snapshotCache[scenario.ref_snapshot_id]) {
-    const snap = window._snapshotCache[scenario.ref_snapshot_id];
-    if (typeof setSnapshotOriginalData === 'function') {
-      setSnapshotOriginalData(snap);
-    }
-    const full = assembleFullInputs(snap, scenario.overrides, scenario.inputs || {});
-    renderJsonInputs(full);
-  } else if (scenario.inputs && Object.keys(scenario.inputs).length > 0) {
+  if (scenario.inputs && Object.keys(scenario.inputs).length > 0) {
     renderJsonInputs(scenario.inputs);
   }
   if (scenario.results) {
@@ -86,23 +79,7 @@ function updateBreadcrumb() {
 
 function updateScenarioBreadcrumb() { updateBreadcrumb(); }
 
-
-async function createNewScenario(name) {
-  const trimmed = name.trim();
-  if (!trimmed) return;
-  const scenario = await addScenarioToSession(null, null,
-    { timestamp: new Date().toISOString(), source: 'new' },
-    trimmed
-  );
-  setActiveScenario(scenario);
-  if (typeof switchSidebarView === 'function') switchSidebarView('inputs');
-  if (typeof navigateToSubItem === 'function') {
-    navigateToSubItem('project-identity', 'technology');
-  }
-}
-
 window.setActiveScenario = setActiveScenario;
-window.createNewScenario = createNewScenario;
 window.updateBreadcrumb = updateBreadcrumb;
 window.updateScenarioBreadcrumb = updateScenarioBreadcrumb;
 

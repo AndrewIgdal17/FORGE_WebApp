@@ -39,14 +39,6 @@ function showAssistantBubble(content) {
   _bubbleEl.style.display = '';
 }
 
-function showAssistantMessage(text) {
-  if (!_bubbleEl) return;
-  _bubbleEl.innerHTML =
-    '<div class="assistant-bubble-content">' + text + '</div>' +
-    '<button type="button" class="assistant-bubble-close" onclick="hideAssistant()">&times;</button>';
-  _bubbleEl.style.display = '';
-}
-
 function hideAssistant() {
   if (_bubbleEl) _bubbleEl.style.display = 'none';
 }
@@ -87,7 +79,6 @@ function getContextualTip() {
     return 'The Inputs sidebar contains ~340 fields across 10 sections. Most have researched defaults \u2014 you only need to set project-specific values.';
   }
   if (tab === 'results') return 'Results update live as you change inputs. The <strong>Summary</strong> shows headline BCR and cost/benefit totals.';
-  if (tab === 'scenarios') return 'Manage your scenarios here. Use <strong>Compare</strong> for side-by-side metrics. <strong>Duplicate</strong> a scenario to create a variant.';
   return 'Welcome to the FORGE. Click <strong>+ New Scenario</strong> to get started.';
 }
 
@@ -125,7 +116,6 @@ function showWelcomeBubble() {
 
 window.initAssistant = initAssistant;
 window.showWelcomeBubble = showWelcomeBubble;
-window.showAssistantMessage = showAssistantMessage;
 window.showAssistantBubble = showAssistantBubble;
 window.hideAssistant = hideAssistant;
 window.startQuickTour = startQuickTour;
