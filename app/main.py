@@ -55,13 +55,6 @@ def _calc_semaphore() -> asyncio.Semaphore:
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-STATIC_DIR = BASE_DIR / "static"
-LANDING_FILE = STATIC_DIR / "landing.html"
-SIGNUP_FILE = STATIC_DIR / "signup.html"
-LOGIN_FILE = STATIC_DIR / "login.html"
-HOME_FILE = STATIC_DIR / "home.html"
-WORKSPACE_FILE = STATIC_DIR / "workspace.html"
-SCENARIOS_FILE = STATIC_DIR / "scenarios-manager.html"
 
 # React frontend (all page routes: /, /signup, /login, /app, /app/workspace, /app/scenarios-manager)
 REACT_DIST = BASE_DIR / "frontend" / "dist"
@@ -262,7 +255,6 @@ app.add_middleware(BodySizeLimitMiddleware)
 # allow_headers=["Authorization","Content-Type"].
 
 app.include_router(scenarios_module.router)
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # React built assets (JS/CSS bundles from Vite)
 if REACT_DIST.exists() and (REACT_DIST / "assets").exists():
@@ -290,55 +282,47 @@ async def client_config() -> Response:
     return Response(content=body, media_type="application/javascript")
 
 
-# --- Page-serving routes (Phase 1: replaced by React static hosting) --------
-# These routes serve static HTML files and will be removed when the React
-# frontend is deployed. The React app will be served as static files.
+def _serve_react() -> FileResponse:
+    """Serve the React SPA shell. Client routes are handled in the browser."""
+    if not REACT_INDEX.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="frontend not built")
+    return FileResponse(REACT_INDEX)
+
+
 @app.get("/", response_class=FileResponse)
 async def serve_landing() -> FileResponse:
-    """Serve the landing page (React if built, vanilla fallback)."""
-    if REACT_INDEX.exists():
-        return FileResponse(REACT_INDEX)
-    return FileResponse(LANDING_FILE)
+    """Serve the landing page."""
+    return _serve_react()
 
 
 @app.get("/signup", response_class=FileResponse)
 async def serve_signup() -> FileResponse:
-    """Serve the signup page (React if built, vanilla fallback)."""
-    if REACT_INDEX.exists():
-        return FileResponse(REACT_INDEX)
-    return FileResponse(SIGNUP_FILE)
+    """Serve the signup page."""
+    return _serve_react()
 
 
 @app.get("/login", response_class=FileResponse)
 async def serve_login() -> FileResponse:
-    """Serve the login page (React if built, vanilla fallback)."""
-    if REACT_INDEX.exists():
-        return FileResponse(REACT_INDEX)
-    return FileResponse(LOGIN_FILE)
+    """Serve the login page."""
+    return _serve_react()
 
 
 @app.get("/app", response_class=FileResponse)
 async def serve_home() -> FileResponse:
-    """Serve the FORGE home page (React if built, vanilla fallback)."""
-    if REACT_INDEX.exists():
-        return FileResponse(REACT_INDEX)
-    return FileResponse(HOME_FILE)
+    """Serve the FORGE home page."""
+    return _serve_react()
 
 
 @app.get("/app/workspace", response_class=FileResponse)
 async def serve_workspace() -> FileResponse:
-    """Serve the FORGE workspace (React if built, vanilla fallback)."""
-    if REACT_INDEX.exists():
-        return FileResponse(REACT_INDEX)
-    return FileResponse(WORKSPACE_FILE)
+    """Serve the FORGE workspace."""
+    return _serve_react()
 
 
 @app.get("/app/scenarios-manager", response_class=FileResponse)
 async def serve_scenarios_manager() -> FileResponse:
-    """Serve the scenario manager (React if built, vanilla fallback)."""
-    if REACT_INDEX.exists():
-        return FileResponse(REACT_INDEX)
-    return FileResponse(SCENARIOS_FILE)
+    """Serve the scenario manager."""
+    return _serve_react()
 
 
 @app.get("/api/health", response_class=JSONResponse)

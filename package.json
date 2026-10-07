@@ -4,7 +4,7 @@
   "description": "Lint config for FORGE's static/ browser code — flags innerHTML/outerHTML sinks via eslint-plugin-no-unsanitized.",
   "scripts": {
     "lint": "eslint static/",
-    "test": "node --test tests/browser/*.mjs"
+    "test": "node --experimental-strip-types --test tests/browser/*.mjs"
   },
   "devDependencies": {
     "eslint": "^10.12.0",
