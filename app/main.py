@@ -252,6 +252,10 @@ app.add_middleware(CacheBustMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
 
 # No CORS middleware: the browser and the API are served from the same origin.
+# Phase 1 note: if the React frontend is served from a different origin,
+# add CORSMiddleware with allow_origins=[<react_app_url>],
+# allow_methods=["GET","POST","PATCH","DELETE"],
+# allow_headers=["Authorization","Content-Type"].
 
 app.include_router(scenarios_module.router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -266,6 +270,8 @@ async def _scenario_auth_error_handler(_request: Request, exc: scenarios_module.
     )
 
 
+# Phase 1: replaced by VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+# environment variables at React build time.
 @app.get("/client-config.js")
 async def client_config() -> Response:
     """Serve the browser's Supabase URL and publishable key from server env."""
@@ -276,6 +282,9 @@ async def client_config() -> Response:
     return Response(content=body, media_type="application/javascript")
 
 
+# --- Page-serving routes (Phase 1: replaced by React static hosting) --------
+# These routes serve static HTML files and will be removed when the React
+# frontend is deployed. The React app will be served as static files.
 @app.get("/", response_class=FileResponse)
 async def serve_landing() -> FileResponse:
     """Serve the landing page."""
