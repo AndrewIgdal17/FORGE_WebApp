@@ -2,9 +2,14 @@ import type { ReactElement } from 'react';
 import { SIDEBAR_SECTIONS } from '@/data/sidebar-sections';
 import { useNavigation } from '@/hooks/use-navigation';
 import { SidebarSection } from '@/components/sidebar/sidebar-section';
+import type { SubItemValidation } from '@/components/sidebar/sidebar-item';
 import { ViewToggle } from '@/components/sidebar/view-toggle';
 
-export function Sidebar(): ReactElement {
+interface SidebarProps {
+  validation?: Record<string, SubItemValidation>;
+}
+
+export function Sidebar({ validation }: SidebarProps): ReactElement {
   const { view, subItemId, selectSubItem } = useNavigation();
 
   return (
@@ -29,6 +34,7 @@ export function Sidebar(): ReactElement {
               onSelectSubItem={(id) => selectSubItem(section.id, id)}
               showCount={view === 'inputs'}
               isResultsView={view === 'results'}
+              validation={view === 'inputs' ? validation : undefined}
             />
           ))
         )}

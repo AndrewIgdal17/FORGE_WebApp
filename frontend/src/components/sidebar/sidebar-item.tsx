@@ -1,6 +1,11 @@
 import type { ReactElement } from 'react';
 import { cn } from '@/lib/utils';
 
+export interface SubItemValidation {
+  invalidCount?: number;
+  hasMismatch?: boolean;
+}
+
 interface SidebarItemProps {
   subItem: { id: string; label: string };
   isActive: boolean;

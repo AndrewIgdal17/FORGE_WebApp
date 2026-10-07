@@ -8,6 +8,7 @@ import SignupPage from '@/pages/signup';
 import LoginPage from '@/pages/login';
 import HomePage from '@/pages/home';
 import ScenariosManagerPage from '@/pages/scenarios-manager';
+import WorkspacePage from '@/pages/workspace';
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/app" element={<HomePage />} />
               <Route path="/app/scenarios-manager" element={<ScenariosManagerPage />} />
+              <Route path="/app/workspace" element={<WorkspacePage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </BrowserRouter>

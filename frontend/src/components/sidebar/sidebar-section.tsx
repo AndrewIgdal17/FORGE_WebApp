@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import { cn } from '@/lib/utils';
 import { SidebarItem } from '@/components/sidebar/sidebar-item';
+import type { SubItemValidation } from '@/components/sidebar/sidebar-item';
 
 interface SidebarSectionProps {
   section: { id: string; label: string; color: string; subItems: { id: string; label: string }[] };
@@ -10,6 +11,7 @@ interface SidebarSectionProps {
   showCount?: boolean;
   fieldCount?: number | null;
   isResultsView?: boolean;
+  validation?: Record<string, SubItemValidation>;
 }
 
 export function SidebarSection({
@@ -19,6 +21,7 @@ export function SidebarSection({
   showCount = false,
   fieldCount = null,
   isResultsView = false,
+  validation,
 }: SidebarSectionProps): ReactElement {
   const containsActive = section.subItems.some((item) => item.id === activeSubItemId);
   const [open, setOpen] = useState(containsActive);
@@ -77,6 +80,8 @@ export function SidebarSection({
               subItem={subItem}
               isActive={subItem.id === activeSubItemId}
               onClick={() => onSelectSubItem(subItem.id)}
+              invalidCount={validation?.[subItem.id]?.invalidCount}
+              hasMismatch={validation?.[subItem.id]?.hasMismatch}
             />
           ))}
         </div>
