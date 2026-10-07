@@ -92,7 +92,7 @@ const RESULTS_EXPORT_FIELDS: Array<{ key: string; path: string }> = [
   { key: 'project_lifetime_years', path: 'technical_parameters.project_lifetime_years' },
   { key: 'delay_years', path: 'technical_parameters.delay_years' },
   { key: 'build_cost_pv', path: 'costs.build.total_pv' },
-  { key: 'row_capital_pv', path: 'costs.row.row_capital_pv' },
+  { key: 'acquisition_pv', path: 'costs.row.acquisition_pv' },
   { key: 'row_rent_pv', path: 'costs.row.row_rent_pv' },
   { key: 'env_mitigation_pv', path: 'costs.environmental.total_pv' },
   { key: 'total_capital_pv', path: 'summary.total_capital_pv' },

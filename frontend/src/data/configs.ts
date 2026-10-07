@@ -160,9 +160,9 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         zeroIfMissing: true,
       },
       {
-        key: 'row_capital_pv',
-        label: 'ROW Capital Cost',
-        path: 'costs.row.row_capital_pv',
+        key: 'acquisition_pv',
+        label: 'Acquisition Cost',
+        path: 'costs.row.acquisition_pv',
         format: 'currency',
       },
       {

@@ -122,8 +122,8 @@ export function deriveTaxonomyResults(
       taxonomy_id: 'row_acquisition',
       value_pv: proportional(
         orZero(row.acquisition_nominal),
-        orZero(row.row_capital_nominal),
-        orZero(row.row_capital_pv),
+        orZero(row.acquisition_nominal_total),
+        orZero(row.acquisition_pv),
       ),
       value_nominal: orZero(row.acquisition_nominal),
       detail: [],
@@ -132,8 +132,8 @@ export function deriveTaxonomyResults(
       taxonomy_id: 'row_holding',
       value_pv: proportional(
         orZero(row.holding_nominal),
-        orZero(row.row_capital_nominal),
-        orZero(row.row_capital_pv),
+        orZero(row.acquisition_nominal_total),
+        orZero(row.acquisition_pv),
       ),
       value_nominal: orZero(row.holding_nominal),
       detail: [],

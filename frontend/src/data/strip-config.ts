@@ -74,7 +74,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   'rights-of-way': {
     title: 'Rights of Way contributes to capital',
     figures: [
-      { label: 'ROW Capital PV', path: 'bcr.row_cost_pv', format: 'currency' },
+      { label: 'Acquisition PV', path: 'bcr.acquisition_pv', format: 'currency' },
       { label: 'ROW Rent PV', path: 'bcr.row_rent_pv', format: 'currency' },
       { label: 'Total Capital PV', path: 'summary.total_capital_pv', format: 'currency' },
     ],
