@@ -1,12 +1,7 @@
-import { useState } from 'react';
 import type { ReactElement } from 'react';
-import { Lock, LockOpen } from 'lucide-react';
 import { CurrencyField } from '@/components/form/currency-field';
 import { NumberField } from '@/components/form/number-field';
 import { PercentageField } from '@/components/form/percentage-field';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { useFormStore } from '@/stores/form-store';
 
 const EMISSIONS = '16_emissions_reductions.emissions_reductions';
 const GROWTH_PATH = `${EMISSIONS}.societal_costs_per_kg.co2_cost_annual_growth`;
@@ -47,15 +42,7 @@ const EXTERNALITIES = [
 
 const cellFieldClass = 'px-2 py-1.5 [&_label]:sr-only';
 
-function formatGrowth(value: unknown): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '';
-  return `${(value * 100).toLocaleString('en-US', { maximumFractionDigits: 4 })}%`;
-}
-
 export function EmissionsSection(): ReactElement {
-  const [growthLocked, setGrowthLocked] = useState(true);
-  const growth = useFormStore((state) => state.getFieldValue(GROWTH_PATH));
-
   return (
     <section id="energy-emissions-emissions" className="grid max-w-4xl gap-6">
       <div>
@@ -126,34 +113,11 @@ export function EmissionsSection(): ReactElement {
         </table>
       </div>
       <div className="grid max-w-xl gap-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-slate-600">
-            CO₂ cost annual growth is locked at the default real escalation rate.
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setGrowthLocked((current) => !current)}
-          >
-            {growthLocked ? <Lock /> : <LockOpen />}
-            {growthLocked ? 'Locked — click to override' : 'Unlocked — editing'}
-          </Button>
-        </div>
-        {growthLocked ? (
-          <Input
-            aria-label="CO2 cost annual growth"
-            value={formatGrowth(growth)}
-            disabled
-            readOnly
-          />
-        ) : (
-          <PercentageField
-            path={GROWTH_PATH}
-            label="CO₂ cost annual growth (%)"
-            helpText="Real annual escalation of the CO₂ societal cost."
-          />
-        )}
+        <PercentageField
+          path={GROWTH_PATH}
+          label="CO₂ cost annual growth (%)"
+          helpText="Real annual escalation of the CO₂ societal cost."
+        />
       </div>
     </section>
   );

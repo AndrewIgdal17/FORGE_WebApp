@@ -1,12 +1,7 @@
-import { useState } from 'react';
 import type { ReactElement } from 'react';
-import { Lock, LockOpen } from 'lucide-react';
 import { CurrencyField } from '@/components/form/currency-field';
 import { NumberField } from '@/components/form/number-field';
 import { PercentageField } from '@/components/form/percentage-field';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { useFormStore } from '@/stores/form-store';
 
 const WILDFIRE = '06_wildfire_costs.wildfire';
 
@@ -16,14 +11,7 @@ const CONSTRUCTION_TYPES = [
   { key: 'subsea', label: 'Subsea' },
 ] as const;
 
-function formatMultiplier(value: unknown): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '';
-  return value.toLocaleString('en-US', { maximumFractionDigits: 10 });
-}
-
 export function WildfireRisk(): ReactElement {
-  const [locked, setLocked] = useState(true);
-
   return (
     <section id="wildfire-risk" className="grid max-w-xl gap-4">
       <div>
@@ -49,57 +37,17 @@ export function WildfireRisk(): ReactElement {
         min={0}
         step={0.001}
       />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-900">Construction type multipliers</h3>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setLocked((current) => !current)}
-        >
-          {locked ? <Lock /> : <LockOpen />}
-          {locked ? 'Locked — click to override' : 'Unlocked — editing'}
-        </Button>
-      </div>
+      <h3 className="text-sm font-semibold text-slate-900">Construction type multipliers</h3>
       {CONSTRUCTION_TYPES.map((construction) => (
-        <MultiplierRow
+        <NumberField
           key={construction.key}
-          label={construction.label}
           path={`${WILDFIRE}.ignition_rate_multiplier.${construction.key}`}
-          locked={locked}
+          label={`${construction.label} ignition multiplier`}
+          helpText={`Multiplier on the base ignition rate for ${construction.label.toLowerCase()} construction.`}
+          min={0}
+          step={0.01}
         />
       ))}
     </section>
-  );
-}
-
-function MultiplierRow({
-  label,
-  path,
-  locked,
-}: {
-  label: string;
-  path: string;
-  locked: boolean;
-}): ReactElement {
-  const value = useFormStore((state) => state.getFieldValue(path));
-  if (locked) {
-    return (
-      <Input
-        aria-label={`${label} ignition multiplier`}
-        value={formatMultiplier(value)}
-        disabled
-        readOnly
-      />
-    );
-  }
-  return (
-    <NumberField
-      path={path}
-      label={`${label} ignition multiplier`}
-      helpText={`Multiplier on the base ignition rate for ${label.toLowerCase()} construction.`}
-      min={0}
-      step={0.01}
-    />
   );
 }

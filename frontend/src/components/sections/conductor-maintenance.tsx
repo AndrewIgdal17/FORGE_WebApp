@@ -1,9 +1,5 @@
-import { useState } from 'react';
 import type { ReactElement } from 'react';
-import { Lock, LockOpen } from 'lucide-react';
 import { CurrencyField } from '@/components/form/currency-field';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { buildCategoryKey, getConductorOm } from '@/lib/lookups';
 import type { ProjectFields } from '@/lib/lookups';
 import { useFormStore } from '@/stores/form-store';
@@ -31,13 +27,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return null;
 }
 
-function formatMoney(value: unknown): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '';
-  return `$${value.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
-}
-
 export function ConductorMaintenance(): ReactElement {
-  const [locked, setLocked] = useState(true);
   const lookups = useFormStore((state) => state.lookups);
   const constructionType = useFormStore((state) =>
     state.getFieldValue(`${PROJECT}.construction_type`),
@@ -65,7 +55,6 @@ export function ConductorMaintenance(): ReactElement {
   const path = categoryKey
     ? `13_category_om_conductors.project_categories_om_conductors.${categoryKey}.variable_cost_per_mile_year`
     : '';
-  const stored = useFormStore((state) => (path ? state.getFieldValue(path) : undefined));
 
   if (!entry || !path) {
     return (
@@ -75,41 +64,19 @@ export function ConductorMaintenance(): ReactElement {
     );
   }
 
-  const shown = stored === undefined || stored === null ? entry.variable_cost_per_mile_year : stored;
-
   return (
     <section id="conductor-maintenance" className="grid max-w-3xl gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900">Conductor maintenance</h2>
-          <p className="text-sm text-slate-600">
-            Annual conductor O&amp;M for <span className="font-medium text-slate-900">{categoryKey}</span>.
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setLocked((current) => !current)}
-        >
-          {locked ? <Lock /> : <LockOpen />}
-          {locked ? 'Locked — click to override' : 'Unlocked — editing'}
-        </Button>
+      <div>
+        <h2 className="text-base font-semibold text-slate-900">Conductor maintenance</h2>
+        <p className="text-sm text-slate-600">
+          Annual conductor O&amp;M for <span className="font-medium text-slate-900">{categoryKey}</span>.
+        </p>
       </div>
-      {locked ? (
-        <Input
-          aria-label="Conductor O&M per mile per year"
-          value={formatMoney(shown)}
-          disabled
-          readOnly
-        />
-      ) : (
-        <CurrencyField
-          path={path}
-          label="Variable cost per mile per year"
-          helpText="Annual conductor maintenance cost per mile. Unlock to override the lookup default."
-        />
-      )}
+      <CurrencyField
+        path={path}
+        label="Variable cost per mile per year"
+        helpText="Annual conductor maintenance cost per mile."
+      />
     </section>
   );
 }

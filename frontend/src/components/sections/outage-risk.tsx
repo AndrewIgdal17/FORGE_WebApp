@@ -1,11 +1,8 @@
-import { useState } from 'react';
 import type { ReactElement } from 'react';
-import { Lock, LockOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CurrencyField } from '@/components/form/currency-field';
 import { NumberField } from '@/components/form/number-field';
 import { PercentageField } from '@/components/form/percentage-field';
-import { Input } from '@/components/ui/input';
 import { useFormStore } from '@/stores/form-store';
 
 const OUTAGE = '07_outage_costs.outage';
@@ -18,13 +15,7 @@ const DURATION_TYPES = [
   { key: 'subsea', label: 'Subsea' },
 ] as const;
 
-function formatMultiplier(value: unknown): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '';
-  return value.toLocaleString('en-US', { maximumFractionDigits: 10 });
-}
-
 export function OutageRisk(): ReactElement {
-  const [locked, setLocked] = useState(true);
   const acDc = useFormStore((state) => state.getFieldValue(AC_DC_PATH));
   const capacity = useFormStore((state) => state.getFieldValue(CAPACITY_PATH));
   const setFieldValue = useFormStore((state) => state.setFieldValue);
@@ -92,24 +83,14 @@ export function OutageRisk(): ReactElement {
         min={0}
         step={1}
       />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-900">Duration multipliers</h3>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setLocked((current) => !current)}
-        >
-          {locked ? <Lock /> : <LockOpen />}
-          {locked ? 'Locked — click to override' : 'Unlocked — editing'}
-        </Button>
-      </div>
+      <h3 className="text-sm font-semibold text-slate-900">Duration multipliers</h3>
       {DURATION_TYPES.map((construction) => (
-        <DurationRow
+        <NumberField
           key={construction.key}
-          label={construction.label}
           path={`${OUTAGE}.outage_duration_multiplier.${construction.key}`}
-          locked={locked}
+          label={`${construction.label} duration multiplier`}
+          helpText={`Multiplier on base outage duration for ${construction.label.toLowerCase()} construction.`}
+          min={0}
         />
       ))}
       <h3 className="text-sm font-semibold text-slate-900">Outage frequency</h3>
@@ -142,35 +123,5 @@ export function OutageRisk(): ReactElement {
         step={0.0001}
       />
     </section>
-  );
-}
-
-function DurationRow({
-  label,
-  path,
-  locked,
-}: {
-  label: string;
-  path: string;
-  locked: boolean;
-}): ReactElement {
-  const value = useFormStore((state) => state.getFieldValue(path));
-  if (locked) {
-    return (
-      <Input
-        aria-label={`${label} duration multiplier`}
-        value={formatMultiplier(value)}
-        disabled
-        readOnly
-      />
-    );
-  }
-  return (
-    <NumberField
-      path={path}
-      label={`${label} duration multiplier`}
-      helpText={`Multiplier on base outage duration for ${label.toLowerCase()} construction.`}
-      min={0}
-    />
   );
 }
