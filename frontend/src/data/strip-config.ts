@@ -1,23 +1,89 @@
 // repos/FORGE_WebApp/frontend/src/data/strip-config.ts
 
-export interface StripFigure {
-  /** Human label shown above the value */
+import { getValueAtPath } from '@/lib/path';
+
+interface PathFigure {
   label: string;
-  /** Dot-path into the results object (e.g. 'costs.build.total_pv') */
+  source: 'path';
   path: string;
-  /** How to format: 'currency' for dollars, 'number' for raw, 'percent' for %, 'ratio' for BCR */
   format: 'currency' | 'number' | 'percent' | 'ratio';
-  /** Optional: for ratio format, color-code green >= 1, red < 1 */
   colorByThreshold?: boolean;
+  decimals?: number;
 }
+
+interface TaxonomyFigure {
+  label: string;
+  source: 'taxonomy';
+  taxonomyId: string;
+  field: 'value_pv' | 'value_nominal' | 'value_annual';
+  format: 'currency' | 'number';
+}
+
+interface ComputedFigure {
+  label: string;
+  source: 'computed';
+  paths: string[];
+  operation: 'multiply' | 'sum' | 'subtract';
+  format: 'currency' | 'number';
+  unit?: string;
+}
+
+export type StripFigure = PathFigure | TaxonomyFigure | ComputedFigure;
 
 export interface StripConfig {
   /** Strip title: e.g. "Rights of Way contributes to capital" */
   title: string;
-  /** The 3 figures to display */
-  figures: [StripFigure, StripFigure, StripFigure];
+  /** Figures for this sub-item (2–5) */
+  figures: StripFigure[];
   /** Which results sidebar sub-item ID to link to */
   resultsView: string;
+}
+
+export function readFinite(
+  results: Record<string, unknown> | null,
+  path: string,
+): number | null {
+  if (!results) return null;
+  const value = getValueAtPath(results, path);
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+export function readFigureValue(
+  figure: StripFigure,
+  results: Record<string, unknown>,
+): number | null {
+  switch (figure.source) {
+    case 'path':
+      return readFinite(results, figure.path);
+    case 'taxonomy': {
+      const items = results.taxonomy_results;
+      if (!Array.isArray(items)) return null;
+      const match = items.find(
+        (item: unknown) =>
+          item &&
+          typeof item === 'object' &&
+          (item as Record<string, unknown>).taxonomy_id === figure.taxonomyId,
+      );
+      if (!match || typeof match !== 'object') return null;
+      const value = (match as Record<string, unknown>)[figure.field];
+      return typeof value === 'number' && Number.isFinite(value) ? value : null;
+    }
+    case 'computed': {
+      const values = figure.paths.map((p) => readFinite(results, p));
+      if (values.some((v) => v === null)) return null;
+      const nums = values as number[];
+      switch (figure.operation) {
+        case 'multiply':
+          return nums.reduce((a, b) => a * b, 1);
+        case 'sum':
+          return nums.reduce((a, b) => a + b, 0);
+        case 'subtract':
+          return nums.length >= 2
+            ? nums[0] - nums.slice(1).reduce((a, b) => a + b, 0)
+            : null;
+      }
+    }
+  }
 }
 
 export const STRIP_CONFIG: Record<string, StripConfig> = {
@@ -25,18 +91,56 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   technology: {
     title: 'Technology affects build cost and delivered energy',
     figures: [
-      { label: 'Build Cost PV', path: 'bcr.build_cost_pv', format: 'currency' },
-      { label: 'Delivered Energy PV', path: 'bcr.delivered_benefit_pv', format: 'currency' },
-      { label: 'Societal BCR', path: 'bcr.bcr_societal', format: 'ratio', colorByThreshold: true },
+      { label: 'Build Cost PV', source: 'path', path: 'bcr.build_cost_pv', format: 'currency' },
+      {
+        label: 'Conductor Cost PV',
+        source: 'taxonomy',
+        taxonomyId: 'build_conductor',
+        field: 'value_pv',
+        format: 'currency',
+      },
+      {
+        label: 'Structure Cost PV',
+        source: 'taxonomy',
+        taxonomyId: 'build_structure',
+        field: 'value_pv',
+        format: 'currency',
+      },
+      {
+        label: 'Converter Cost PV',
+        source: 'taxonomy',
+        taxonomyId: 'build_converter',
+        field: 'value_pv',
+        format: 'currency',
+      },
+      {
+        label: 'Effective Capacity',
+        source: 'computed',
+        paths: ['technical_parameters.capacity_mw', 'technical_parameters.line_utilization'],
+        operation: 'multiply',
+        format: 'number',
+        unit: 'MW',
+      },
     ],
     resultsView: 'r-capital',
   },
   timeline: {
     title: 'Timeline affects delay cost and AFUDC',
     figures: [
-      { label: 'Total Delay PV', path: 'summary.total_delay_pv', format: 'currency' },
-      { label: 'Capital PV (after AFUDC)', path: 'summary.total_capital_pv', format: 'currency' },
-      { label: 'Societal BCR', path: 'bcr.bcr_societal', format: 'ratio', colorByThreshold: true },
+      { label: 'Base Delay PV', source: 'path', path: 'bcr.delay_cost_pv', format: 'currency' },
+      {
+        label: 'Congestion Delay PV',
+        source: 'path',
+        path: 'bcr.congestion_delay_cost_pv',
+        format: 'currency',
+      },
+      {
+        label: 'Displacement Delay Emissions PV',
+        source: 'path',
+        path: 'bcr.emissions_displacement_delay_pv',
+        format: 'currency',
+      },
+      { label: 'Total Delay PV', source: 'path', path: 'summary.total_delay_pv', format: 'currency' },
     ],
     resultsView: 'r-operational',
   },
@@ -45,18 +149,40 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   'conductor-details': {
     title: 'Conductors affect line losses',
     figures: [
-      { label: 'Line-Loss Energy PV', path: 'bcr.energy_losses_pv', format: 'currency' },
-      { label: 'Line-Loss Emissions PV', path: 'bcr.emissions_comp_cost_pv', format: 'currency' },
-      { label: 'Conductor Loss PV', path: 'bcr.conductor_loss_pv', format: 'currency' },
+      {
+        label: 'Conductor Build Cost PV',
+        source: 'taxonomy',
+        taxonomyId: 'build_conductor',
+        field: 'value_pv',
+        format: 'currency',
+      },
+      { label: 'Conductor Loss PV', source: 'path', path: 'bcr.conductor_loss_pv', format: 'currency' },
+      {
+        label: 'Conductor Losses (MWh/yr)',
+        source: 'path',
+        path: 'costs.line_loss.line_loss_mwh_yr',
+        format: 'number',
+      },
     ],
     resultsView: 'r-emissions-costs',
   },
   'converter-details': {
     title: 'Converters contribute to capital',
     figures: [
-      { label: 'Build Cost PV', path: 'bcr.build_cost_pv', format: 'currency' },
-      { label: 'Converter Loss PV', path: 'bcr.converter_loss_pv', format: 'currency' },
-      { label: 'Total Capital PV', path: 'summary.total_capital_pv', format: 'currency' },
+      {
+        label: 'Converter Build Cost PV',
+        source: 'taxonomy',
+        taxonomyId: 'build_converter',
+        field: 'value_pv',
+        format: 'currency',
+      },
+      { label: 'Converter Loss PV', source: 'path', path: 'bcr.converter_loss_pv', format: 'currency' },
+      {
+        label: 'Converter Losses (MWh/yr)',
+        source: 'path',
+        path: 'costs.line_loss.converter_loss_mwh_yr',
+        format: 'number',
+      },
     ],
     resultsView: 'r-capital',
   },
@@ -65,18 +191,28 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   'terrain-mix': {
     title: 'Terrain affects mitigation and build costs',
     figures: [
-      { label: 'Env. Mitigation PV', path: 'bcr.env_mitigation_pv', format: 'currency' },
-      { label: 'Build Cost PV', path: 'bcr.build_cost_pv', format: 'currency' },
-      { label: 'Total Capital PV', path: 'summary.total_capital_pv', format: 'currency' },
+      { label: 'Total Miles', source: 'path', path: 'derived_parameters.total_miles', format: 'number' },
+      {
+        label: 'Average Multiplier',
+        source: 'path',
+        path: 'derived_parameters.average_terrain_multiplier',
+        format: 'number',
+      },
+      {
+        label: 'Weighted Miles',
+        source: 'path',
+        path: 'derived_parameters.weighted_miles',
+        format: 'number',
+      },
     ],
     resultsView: 'r-capital',
   },
   'rights-of-way': {
     title: 'Rights of Way contributes to capital',
     figures: [
-      { label: 'Acquisition PV', path: 'bcr.acquisition_pv', format: 'currency' },
-      { label: 'ROW Rent PV', path: 'bcr.row_rent_pv', format: 'currency' },
-      { label: 'Total Capital PV', path: 'summary.total_capital_pv', format: 'currency' },
+      { label: 'Holding PV', source: 'path', path: 'costs.row.row_holding_pv', format: 'currency' },
+      { label: 'Acquisition PV', source: 'path', path: 'costs.row.acquisition_pv', format: 'currency' },
+      { label: 'Rent PV', source: 'path', path: 'costs.row.row_rent_pv', format: 'currency' },
     ],
     resultsView: 'r-capital',
   },
@@ -85,18 +221,38 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   'economic-details': {
     title: 'Economic details drive loss-compensation benefits',
     figures: [
-      { label: 'Delivered Energy PV', path: 'bcr.delivered_benefit_pv', format: 'currency' },
-      { label: 'Capacity Value PV', path: 'bcr.capacity_value_benefit_pv', format: 'currency' },
-      { label: 'Total Benefits PV', path: 'summary.total_benefits_pv', format: 'currency' },
+      {
+        label: 'Delivered Energy PV',
+        source: 'path',
+        path: 'bcr.delivered_benefit_pv',
+        format: 'currency',
+      },
+      {
+        label: 'Capacity Value PV',
+        source: 'path',
+        path: 'bcr.capacity_value_benefit_pv',
+        format: 'currency',
+      },
+      { label: 'Outage PV', source: 'path', path: 'bcr.outage_pv', format: 'currency' },
     ],
     resultsView: 'r-loss-comp',
   },
   'system-constraints': {
     title: 'System constraints drive congestion benefits',
     figures: [
-      { label: 'Congestion Benefit PV', path: 'bcr.congestion_benefit_pv', format: 'currency' },
-      { label: 'Congestion Delay PV', path: 'bcr.congestion_delay_cost_pv', format: 'currency' },
-      { label: 'Societal BCR', path: 'bcr.bcr_societal', format: 'ratio', colorByThreshold: true },
+      { label: 'Relief MW', source: 'path', path: 'benefits.congestion.relief_mw', format: 'number' },
+      {
+        label: 'Congestion Benefit PV',
+        source: 'path',
+        path: 'bcr.congestion_benefit_pv',
+        format: 'currency',
+      },
+      {
+        label: 'Congestion Delay Cost PV',
+        source: 'path',
+        path: 'bcr.congestion_delay_cost_pv',
+        format: 'currency',
+      },
     ],
     resultsView: 'r-congestion',
   },
@@ -105,18 +261,41 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   rates: {
     title: 'Discount rates affect every present value',
     figures: [
-      { label: 'Societal BCR', path: 'bcr.bcr_societal', format: 'ratio', colorByThreshold: true },
-      { label: 'Ratepayer BCR', path: 'bcr.bcr_ratepayer', format: 'ratio', colorByThreshold: true },
-      { label: 'Utility BCR', path: 'bcr.bcr_utility', format: 'ratio', colorByThreshold: true },
+      {
+        label: 'Societal BCR',
+        source: 'path',
+        path: 'bcr.bcr_societal',
+        format: 'ratio',
+        colorByThreshold: true,
+      },
+      {
+        label: 'Ratepayer BCR',
+        source: 'path',
+        path: 'bcr.bcr_ratepayer',
+        format: 'ratio',
+        colorByThreshold: true,
+      },
+      {
+        label: 'Utility BCR',
+        source: 'path',
+        path: 'bcr.bcr_utility',
+        format: 'ratio',
+        colorByThreshold: true,
+      },
     ],
     resultsView: 'r-bcr',
   },
   afudc: {
     title: 'AFUDC adds to capital cost',
     figures: [
-      { label: 'Build Cost PV', path: 'bcr.build_cost_pv', format: 'currency' },
-      { label: 'Capital PV (after AFUDC)', path: 'summary.total_capital_pv', format: 'currency' },
-      { label: 'Total Costs PV', path: 'summary.total_costs_pv', format: 'currency' },
+      { label: 'AFUDC Rate', source: 'path', path: 'derived_parameters.afudc_rate', format: 'percent' },
+      { label: 'Build Cost Capitalized', source: 'path', path: 'costs.build.total_afudc', format: 'currency' },
+      {
+        label: 'Capital Costs Nominal',
+        source: 'path',
+        path: 'bcr.capital_costs_nominal',
+        format: 'currency',
+      },
     ],
     resultsView: 'r-capital',
   },
@@ -125,27 +304,57 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   conductor: {
     title: 'Contingencies add to capital',
     figures: [
-      { label: 'Build Cost PV', path: 'bcr.build_cost_pv', format: 'currency' },
-      { label: 'Capital PV', path: 'summary.total_capital_pv', format: 'currency' },
-      { label: 'Total Costs PV', path: 'summary.total_costs_pv', format: 'currency' },
+      {
+        label: 'Conductor Contingency %',
+        source: 'path',
+        path: 'derived_parameters.contingencies.conductor_contingency',
+        format: 'percent',
+      },
+      {
+        label: 'Structure Contingency %',
+        source: 'path',
+        path: 'derived_parameters.contingencies.structure_contingency',
+        format: 'percent',
+      },
+      { label: 'Build Cost PV', source: 'path', path: 'bcr.build_cost_pv', format: 'currency' },
     ],
     resultsView: 'r-capital',
   },
   'base-mitigation': {
     title: 'Mitigation contributes to capital',
     figures: [
-      { label: 'Env. Mitigation PV', path: 'bcr.env_mitigation_pv', format: 'currency' },
-      { label: 'Capital PV', path: 'summary.total_capital_pv', format: 'currency' },
-      { label: 'Total Costs PV', path: 'summary.total_costs_pv', format: 'currency' },
+      {
+        label: 'Base Restoration PV',
+        source: 'path',
+        path: 'costs.environmental.base_cost_pv',
+        format: 'currency',
+      },
+      { label: 'Credits PV', source: 'path', path: 'costs.environmental.credits_pv', format: 'currency' },
+      {
+        label: 'Total Env. Mitigation PV',
+        source: 'path',
+        path: 'bcr.env_mitigation_pv',
+        format: 'currency',
+      },
     ],
     resultsView: 'r-capital',
   },
   credits: {
     title: 'Credits reduce capital cost',
     figures: [
-      { label: 'Credits PV', path: 'costs.environmental.credits_pv', format: 'currency' },
-      { label: 'Env. Mitigation PV', path: 'bcr.env_mitigation_pv', format: 'currency' },
-      { label: 'Capital PV', path: 'summary.total_capital_pv', format: 'currency' },
+      { label: 'Credits PV', source: 'path', path: 'costs.environmental.credits_pv', format: 'currency' },
+      {
+        label: 'Base Restoration PV',
+        source: 'path',
+        path: 'costs.environmental.base_cost_pv',
+        format: 'currency',
+      },
+      {
+        label: 'Total Env. Mitigation PV',
+        source: 'path',
+        path: 'bcr.env_mitigation_pv',
+        format: 'currency',
+      },
     ],
     resultsView: 'r-capital',
   },
@@ -154,27 +363,31 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   'operational-insurance': {
     title: 'Insurance contributes to operational costs',
     figures: [
-      { label: 'Insurance PV', path: 'bcr.insurance_pv', format: 'currency' },
-      { label: 'Total Operational PV', path: 'summary.total_operational_pv', format: 'currency' },
-      { label: 'Total Costs PV', path: 'summary.total_costs_pv', format: 'currency' },
+      { label: 'Annual Premium', source: 'path', path: 'costs.insurance.annual_premium', format: 'currency' },
+      {
+        label: 'Insurable Value',
+        source: 'path',
+        path: 'costs.insurance.insurable_value',
+        format: 'currency',
+      },
+      { label: 'Insurance PV', source: 'path', path: 'bcr.insurance_pv', format: 'currency' },
     ],
     resultsView: 'r-operational',
   },
   'vegetation-management': {
     title: 'Vegetation management contributes to O&M',
     figures: [
-      { label: 'O&M PV', path: 'bcr.oandm_pv', format: 'currency' },
-      { label: 'Total Operational PV', path: 'summary.total_operational_pv', format: 'currency' },
-      { label: 'Total Costs PV', path: 'summary.total_costs_pv', format: 'currency' },
+      { label: 'Vegetation Annual', source: 'path', path: 'costs.oandm.vegetation_annual', format: 'currency' },
+      { label: 'Vegetation PV', source: 'path', path: 'costs.oandm.vegetation_pv', format: 'currency' },
+      { label: 'Total O&M PV', source: 'path', path: 'bcr.oandm_pv', format: 'currency' },
     ],
     resultsView: 'r-operational',
   },
   'delay-costs': {
     title: 'Delay costs include base and constraint delays',
     figures: [
-      { label: 'Delay Cost PV', path: 'bcr.delay_cost_pv', format: 'currency' },
-      { label: 'Congestion Delay PV', path: 'bcr.congestion_delay_cost_pv', format: 'currency' },
-      { label: 'Total Delay PV', path: 'summary.total_delay_pv', format: 'currency' },
+      { label: 'Base Delay PV', source: 'path', path: 'bcr.delay_cost_pv', format: 'currency' },
+      { label: 'Total Delay PV', source: 'path', path: 'summary.total_delay_pv', format: 'currency' },
     ],
     resultsView: 'r-operational',
   },
@@ -183,18 +396,23 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   'wildfire-risk': {
     title: 'Wildfire contributes to risk costs',
     figures: [
-      { label: 'Wildfire PV', path: 'bcr.wildfire_pv', format: 'currency' },
-      { label: 'BCR excl. Wildfire', path: 'bcr.bcr_excluding_wildfire_risk', format: 'ratio', colorByThreshold: true },
-      { label: 'Total Risk PV', path: 'summary.total_risk_pv', format: 'currency' },
+      { label: 'Expected Annual Loss', source: 'path', path: 'costs.wildfire.EAL', format: 'currency' },
+      { label: 'Wildfire PV', source: 'path', path: 'bcr.wildfire_pv', format: 'currency' },
+      { label: 'Total Risk PV', source: 'path', path: 'summary.total_risk_pv', format: 'currency' },
     ],
     resultsView: 'r-risk-costs',
   },
   'outage-risk': {
     title: 'Outage contributes to risk costs',
     figures: [
-      { label: 'Outage PV', path: 'bcr.outage_pv', format: 'currency' },
-      { label: 'BCR excl. Wildfire+Outage', path: 'bcr.bcr_excluding_wildfire_risk_and_outage_risk', format: 'ratio', colorByThreshold: true },
-      { label: 'Total Risk PV', path: 'summary.total_risk_pv', format: 'currency' },
+      {
+        label: 'Expected Annual Loss',
+        source: 'path',
+        path: 'costs.outage.expected_annual_loss',
+        format: 'currency',
+      },
+      { label: 'Outage PV', source: 'path', path: 'bcr.outage_pv', format: 'currency' },
+      { label: 'Total Risk PV', source: 'path', path: 'summary.total_risk_pv', format: 'currency' },
     ],
     resultsView: 'r-risk-costs',
   },
@@ -203,9 +421,18 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   'energy-emissions-emissions': {
     title: 'Emissions intensities affect costs and avoided emissions',
     figures: [
-      { label: 'Emissions Cost PV', path: 'bcr.emissions_comp_cost_pv', format: 'currency' },
-      { label: 'Avoided Emissions PV', path: 'bcr.displacement_avoided_benefit_pv', format: 'currency' },
-      { label: 'Societal BCR', path: 'bcr.bcr_societal', format: 'ratio', colorByThreshold: true },
+      {
+        label: 'Emissions Cost PV',
+        source: 'path',
+        path: 'bcr.emissions_comp_cost_pv',
+        format: 'currency',
+      },
+      {
+        label: 'Avoided Emissions PV',
+        source: 'path',
+        path: 'bcr.displacement_avoided_benefit_pv',
+        format: 'currency',
+      },
     ],
     resultsView: 'r-emissions-costs',
   },
@@ -214,9 +441,18 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   'energy-emissions-energy': {
     title: 'Energy mix drives avoided emissions benefit',
     figures: [
-      { label: 'Avoided Emissions PV', path: 'bcr.displacement_avoided_benefit_pv', format: 'currency' },
-      { label: 'Facilitated Emissions PV', path: 'summary.fac_emissions_project_pv', format: 'currency' },
-      { label: 'Total Benefits PV', path: 'summary.total_benefits_pv', format: 'currency' },
+      {
+        label: 'Avoided Emissions PV',
+        source: 'path',
+        path: 'bcr.displacement_avoided_benefit_pv',
+        format: 'currency',
+      },
+      {
+        label: 'Facilitated Emissions PV',
+        source: 'path',
+        path: 'summary.fac_emissions_project_pv',
+        format: 'currency',
+      },
     ],
     resultsView: 'r-benefits-overview',
   },

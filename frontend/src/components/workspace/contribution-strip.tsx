@@ -1,21 +1,14 @@
 import type { ReactElement } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { getStripConfig, type StripFigure } from '@/data/strip-config';
+import { getStripConfig, readFigureValue, type StripFigure } from '@/data/strip-config';
 import { useNavigation } from '@/hooks/use-navigation';
 import { formatCurrency, formatNumber, formatSignedCurrencyValue } from '@/lib/format';
-import { getValueAtPath } from '@/lib/path';
 import { cn } from '@/lib/utils';
 
 export interface ContributionStripProps {
   results: Record<string, unknown> | null;
   savedResults: Record<string, unknown> | null;
   onNavigateResults: (subItemId: string) => void;
-}
-
-function readFinite(results: Record<string, unknown> | null, path: string): number | null {
-  if (!results) return null;
-  const value = getValueAtPath(results, path);
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function formatFigure(value: number | null, format: StripFigure['format']): string {
@@ -33,7 +26,8 @@ function formatFigure(value: number | null, format: StripFigure['format']): stri
 }
 
 function figureColor(figure: StripFigure, value: number | null): string {
-  if (!figure.colorByThreshold || value === null) return 'text-slate-900';
+  const colorByThreshold = figure.source === 'path' && figure.colorByThreshold === true;
+  if (!colorByThreshold || value === null) return 'text-slate-900';
   return value >= 1 ? 'text-green-600' : 'text-red-600';
 }
 
@@ -97,9 +91,9 @@ export function ContributionStrip({
       </div>
       <div className="grid grid-cols-3 divide-x divide-slate-100">
         {config.figures.map((figure) => {
-          const value = readFinite(results, figure.path);
+          const value = readFigureValue(figure, results);
           return (
-            <div key={figure.path} className="px-4 py-3">
+            <div key={figure.label} className="px-4 py-3">
               <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-400">
                 {figure.label}
               </p>
@@ -108,7 +102,7 @@ export function ContributionStrip({
               </p>
               <DeltaChip
                 current={value}
-                saved={readFinite(savedResults, figure.path)}
+                saved={savedResults ? readFigureValue(figure, savedResults) : null}
                 format={figure.format}
               />
             </div>
