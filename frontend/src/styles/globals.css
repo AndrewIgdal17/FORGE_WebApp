@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --color-forge-primary: #0066cc;
+  --color-forge-primary-hover: #0052a3;
+  --color-forge-primary-light: rgba(0, 100, 200, 0.1);
+  --color-forge-success: #059669;
+  --color-forge-warning: #f59e0b;
+  --color-forge-danger: #dc2626;
+  --color-section-project: #3b82f6;
+  --color-section-equipment: #6366f1;
+  --color-section-routing: #0891b2;
+  --color-section-benefits: #10b981;
+  --color-section-financial: #f59e0b;
+  --color-section-capital: #ef4444;
+  --color-section-operating: #f97316;
+  --color-section-risk: #a855f7;
+  --color-section-emissions: #14b8a6;
+  --color-section-energy: #06b6d4;
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
