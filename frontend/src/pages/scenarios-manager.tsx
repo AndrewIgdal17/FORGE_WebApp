@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, ReactElement } from 'react';
 import { useSearchParams } from 'react-router';
 import { AuthGuard } from '@/components/auth-guard';
+import { ComparisonTable } from '@/components/comparison/comparison-table';
 import { AppNav } from '@/components/layout/app-nav';
 import { CompareSelector } from '@/components/scenarios/compare-selector';
 import { ScenarioList } from '@/components/scenarios/scenario-list';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/hooks/use-toast';
 import { getDefaults } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -36,6 +38,7 @@ export default function ScenariosManagerPage(): ReactElement {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const promptedUpload = useRef(false);
 
+  const scenarios = useScenarioStore((state) => state.scenarios);
   const loadScenarios = useScenarioStore((state) => state.loadScenarios);
   const createScenario = useScenarioStore((state) => state.createScenario);
   const setActiveScenario = useScenarioStore((state) => state.setActiveScenario);
@@ -43,6 +46,8 @@ export default function ScenariosManagerPage(): ReactElement {
   const [tab, setTab] = useState<ManagerTab>('manage');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [baselineId, setBaselineId] = useState<string | null>(null);
+  const [showDelta, setShowDelta] = useState(false);
+  const [showPercentDelta, setShowPercentDelta] = useState(false);
   const [defaults, setDefaults] = useState<Record<string, unknown> | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -120,6 +125,8 @@ export default function ScenariosManagerPage(): ReactElement {
     }
   }
 
+  const selectedScenarios = scenarios.filter((scenario) => selectedIds.has(scenario.id));
+
   return (
     <AuthGuard>
       <div className="flex min-h-screen flex-col bg-slate-50">
@@ -193,9 +200,30 @@ export default function ScenariosManagerPage(): ReactElement {
                 baselineId={baselineId}
                 onBaselineChange={setBaselineId}
               />
-              <div className="rounded-lg border border-dashed border-slate-300 bg-white px-6 py-10 text-center text-sm text-slate-500">
-                Comparison table coming in Phase 2c
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <Checkbox
+                    checked={showDelta}
+                    onCheckedChange={(checked) => setShowDelta(checked === true)}
+                    aria-label="Show Δ"
+                  />
+                  Show Δ
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <Checkbox
+                    checked={showPercentDelta}
+                    onCheckedChange={(checked) => setShowPercentDelta(checked === true)}
+                    aria-label="Show %Δ"
+                  />
+                  Show %Δ
+                </label>
               </div>
+              <ComparisonTable
+                scenarios={selectedScenarios}
+                baselineId={baselineId ?? ''}
+                showDelta={showDelta}
+                showPercentDelta={showPercentDelta}
+              />
             </div>
           )}
         </main>
