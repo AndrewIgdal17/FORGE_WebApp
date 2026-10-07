@@ -1,0 +1,245 @@
+import { supabase } from '@/lib/supabase';
+
+export interface CalculatorInfo {
+  package: string;
+  version: string;
+  commit: string | null;
+  defaults_id: string;
+}
+
+export interface HealthResponse {
+  status: string;
+  app_commit: string | null;
+  calculator: CalculatorInfo;
+}
+
+export interface DefaultsResponse {
+  calculator: CalculatorInfo;
+  defaults: Record<string, unknown>;
+}
+
+export interface GridMixShares {
+  coal: number;
+  oil: number;
+  natural_gas: number;
+  solar: number;
+  wind: number;
+  hydro: number;
+  nuclear: number;
+  other: number;
+}
+
+export interface GridMixPreset {
+  id: string;
+  label: string;
+  description: string;
+  grid_mix: {
+    initial: GridMixShares;
+    rate_pre_cod: GridMixShares;
+    rate_post_cod: GridMixShares;
+  };
+}
+
+export type GridMixPresetsResponse = GridMixPreset[];
+
+export interface TaxonomyItem {
+  id: string;
+  side: string;
+  category: string;
+  subgroup: string;
+  label: string;
+  discount_rate: string | null;
+  condition: string | null;
+  display_order: number;
+  description: string;
+}
+
+export interface TaxonomyResponse {
+  items: TaxonomyItem[];
+  dimensions: Record<string, string[]>;
+  excludable_groups: Record<
+    string,
+    { id: string; label: string; taxonomy_ids: string[] }
+  >;
+  bcr_families: Record<string, { id: string; label: string; order: number }>;
+  bcr_definitions: Record<string, Record<string, unknown>>;
+}
+
+export interface InputFieldMetadata {
+  id: string;
+  taxonomy_id: string;
+  input_tab: string;
+  yaml_section: string;
+  field_path: string;
+  label: string;
+  help_text: string | null;
+  unit: string | null;
+  input_type: string;
+  condition: string | null;
+  validation: Record<string, unknown>;
+  display_order: number;
+  section_label: string | null;
+  tier: string;
+  sub_tab: string | null;
+}
+
+export type InputMetadataResponse = InputFieldMetadata[];
+
+export interface CalculateRequest {
+  defaults_id: string;
+  changes: Record<string, unknown>;
+  scenario_id?: string;
+}
+
+export interface CalculateResponse {
+  success: boolean;
+  scenario_id: string;
+  timestamp: string;
+  results: Record<string, unknown>;
+  error: null;
+}
+
+export interface ScenarioCreate {
+  name: string;
+  source: string;
+  defaults_id: string;
+  changes: Record<string, unknown>;
+}
+
+export interface ScenarioUpdate {
+  revision: number;
+  name?: string;
+  defaults_id?: string;
+  changes?: Record<string, unknown>;
+}
+
+export interface ScenarioResponse {
+  id: string;
+  user_id: string;
+  name: string;
+  source: string;
+  defaults_id: string;
+  changes: Record<string, unknown>;
+  results: Record<string, unknown> | null;
+  calculator: CalculatorInfo | null;
+  inputs_id: string | null;
+  computed_at: string | null;
+  calc_error: string | null;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: unknown;
+
+  constructor(status: number, body: unknown) {
+    super(formatErrorBody(body));
+    this.name = 'ApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
+function formatErrorBody(body: unknown): string {
+  if (typeof body === 'string' && body.length > 0) {
+    return body;
+  }
+  if (body === undefined || body === null || body === '') {
+    return 'Request failed';
+  }
+  return JSON.stringify(body);
+}
+
+async function readBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
+
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  const headers = new Headers(options?.headers);
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  if (options?.body != null && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  const response = await fetch(path, { ...options, headers });
+  if (!response.ok) {
+    throw new ApiError(response.status, await readBody(response));
+  }
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  return (await readBody(response)) as T;
+}
+
+export async function getHealth(): Promise<HealthResponse> {
+  return apiFetch<HealthResponse>('/api/health');
+}
+
+export async function getCalculatorInfo(): Promise<CalculatorInfo> {
+  return apiFetch<CalculatorInfo>('/api/calculator');
+}
+
+export async function getDefaults(): Promise<DefaultsResponse> {
+  return apiFetch<DefaultsResponse>('/api/defaults');
+}
+
+export async function getGridMixPresets(): Promise<GridMixPresetsResponse> {
+  return apiFetch<GridMixPresetsResponse>('/api/presets/grid_mix');
+}
+
+export async function getTaxonomy(): Promise<TaxonomyResponse> {
+  return apiFetch<TaxonomyResponse>('/api/taxonomy');
+}
+
+export async function getInputMetadata(): Promise<InputMetadataResponse> {
+  return apiFetch<InputMetadataResponse>('/api/input_metadata');
+}
+
+export async function calculate(
+  payload: CalculateRequest,
+): Promise<CalculateResponse> {
+  return apiFetch<CalculateResponse>('/api/forge/calculate', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createScenario(
+  payload: ScenarioCreate,
+): Promise<ScenarioResponse> {
+  return apiFetch<ScenarioResponse>('/api/scenarios', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateScenario(
+  id: string,
+  payload: ScenarioUpdate,
+): Promise<ScenarioResponse> {
+  return apiFetch<ScenarioResponse>(`/api/scenarios/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteScenario(id: string): Promise<void> {
+  await apiFetch<void>(`/api/scenarios/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
