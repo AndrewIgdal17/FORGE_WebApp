@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactElement } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { BcrScoreboard } from '@/components/workspace/bcr-scoreboard';
 import { cn } from '@/lib/utils';
 
 export interface WorkspaceHeaderProps {
   scenarioName: string;
   unsavedChanges: boolean;
   calculationStatus: string;
+  results: Record<string, unknown> | null;
   onSave: () => void;
   onRename: (name: string) => void;
   onExportForge: () => void;
@@ -18,6 +20,7 @@ export function WorkspaceHeader({
   scenarioName,
   unsavedChanges,
   calculationStatus,
+  results,
   onSave,
   onRename,
   onExportForge,
@@ -127,6 +130,8 @@ export function WorkspaceHeader({
       <p className="text-xs text-slate-500" data-calc-status>
         {calculationStatus}
       </p>
+
+      <BcrScoreboard results={results} />
 
       <div className="relative flex" ref={menuRoot}>
         <Button

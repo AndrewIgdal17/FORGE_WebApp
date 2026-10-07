@@ -439,6 +439,7 @@ function WorkspaceBody(): ReactElement {
             scenarioName={activeScenario?.name ?? ''}
             unsavedChanges={unsavedChanges}
             calculationStatus={calculationStatus}
+            results={activeScenario?.results ?? null}
             onSave={() => { void handleSave(); }}
             onRename={(name) => { void handleRename(name); }}
             onExportForge={handleExportForge}
