@@ -144,24 +144,28 @@ export function ConverterDetails(): ReactElement {
 
   return (
     <section id="converter-details" className="grid max-w-3xl gap-3">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <SelectField
-          path={CONVERTER_TYPE_PATH}
-          label="Converter type"
-          helpText="LCC or VSC converter station type."
-          options={CONVERTER_OPTIONS}
-        />
-        <NumberField
-          path={CONVERTER_COUNT_PATH}
-          label="Number of converters"
-          helpText="Number of converter stations."
-          min={0}
-          step={1}
-        />
-      </div>
       {!isDc ? (
         <p className="text-sm text-slate-600">{AC_MESSAGE}</p>
-      ) : !omRate ? (
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SelectField
+              path={CONVERTER_TYPE_PATH}
+              label="Converter type"
+              helpText="LCC or VSC converter station type."
+              options={CONVERTER_OPTIONS}
+            />
+            <NumberField
+              path={CONVERTER_COUNT_PATH}
+              label="Number of converters"
+              helpText="Number of converter stations."
+              min={0}
+              step={1}
+            />
+          </div>
+        </>
+      )}
+      {isDc && !omRate ? (
         <p className="text-sm text-slate-600">{EMPTY_MESSAGE}</p>
       ) : (
         <>
