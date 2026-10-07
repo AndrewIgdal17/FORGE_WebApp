@@ -6,6 +6,7 @@ import { NavigationProvider } from '@/hooks/use-navigation';
 import LandingPage from '@/pages/landing';
 import SignupPage from '@/pages/signup';
 import LoginPage from '@/pages/login';
+import HomePage from '@/pages/home';
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
               <Route path="/" element={<LandingPage />} />
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/app" element={<HomePage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </BrowserRouter>
