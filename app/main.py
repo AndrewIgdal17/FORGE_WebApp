@@ -63,6 +63,10 @@ HOME_FILE = STATIC_DIR / "home.html"
 WORKSPACE_FILE = STATIC_DIR / "workspace.html"
 SCENARIOS_FILE = STATIC_DIR / "scenarios-manager.html"
 
+# React frontend (Phase 1: serves /, /signup, /login)
+REACT_DIST = BASE_DIR / "frontend" / "dist"
+REACT_INDEX = REACT_DIST / "index.html"
+
 # Fail closed: refuse to start without SUPABASE_URL + FORGE_DATABASE_URL,
 # unless FORGE_AUTH_DISABLED=true is set explicitly for local dev.
 auth_module.assert_startup_credentials()
@@ -260,6 +264,10 @@ app.add_middleware(BodySizeLimitMiddleware)
 app.include_router(scenarios_module.router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+# React built assets (JS/CSS bundles from Vite)
+if REACT_DIST.exists() and (REACT_DIST / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=str(REACT_DIST / "assets")), name="react-assets")
+
 
 @app.exception_handler(scenarios_module.ScenarioAuthError)
 async def _scenario_auth_error_handler(_request: Request, exc: scenarios_module.ScenarioAuthError) -> JSONResponse:
@@ -287,19 +295,25 @@ async def client_config() -> Response:
 # frontend is deployed. The React app will be served as static files.
 @app.get("/", response_class=FileResponse)
 async def serve_landing() -> FileResponse:
-    """Serve the landing page."""
+    """Serve the landing page (React if built, vanilla fallback)."""
+    if REACT_INDEX.exists():
+        return FileResponse(REACT_INDEX)
     return FileResponse(LANDING_FILE)
 
 
 @app.get("/signup", response_class=FileResponse)
 async def serve_signup() -> FileResponse:
-    """Serve the standalone signup page."""
+    """Serve the signup page (React if built, vanilla fallback)."""
+    if REACT_INDEX.exists():
+        return FileResponse(REACT_INDEX)
     return FileResponse(SIGNUP_FILE)
 
 
 @app.get("/login", response_class=FileResponse)
 async def serve_login() -> FileResponse:
-    """Serve the login page."""
+    """Serve the login page (React if built, vanilla fallback)."""
+    if REACT_INDEX.exists():
+        return FileResponse(REACT_INDEX)
     return FileResponse(LOGIN_FILE)
 
 
