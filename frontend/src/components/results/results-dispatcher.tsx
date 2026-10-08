@@ -1,4 +1,6 @@
 import type { ReactElement } from 'react';
+import { BenefitsView } from '@/components/results/benefits-view';
+import { CostsView } from '@/components/results/costs-view';
 import type { PerspectiveKey } from '@/components/results/perspective-toggle';
 import { ResultsOverview } from '@/components/results/results-overview';
 
@@ -25,7 +27,7 @@ export function NoResultsPlaceholder(): ReactElement {
 
 /**
  * Maps a results sidebar sub-item to its view.
- * Overview is live. Costs, benefits, timeline, and sensitivity arrive in later tasks.
+ * Overview, costs, and benefits are live. Timeline and sensitivity arrive in later tasks.
  */
 export function ResultsDispatcher({
   subItemId,
@@ -39,10 +41,12 @@ export function ResultsDispatcher({
     case 'r-overview':
       return <ResultsOverview results={results} taxonomy={taxonomy} perspective={perspective} />;
     case 'r-costs':
+      return <CostsView results={results} taxonomy={taxonomy} perspective={perspective} />;
     case 'r-benefits':
+      return <BenefitsView results={results} taxonomy={taxonomy} perspective={perspective} />;
     case 'r-timeline':
     case 'r-sensitivity':
-      return <div className="p-6 text-sm text-slate-500">Coming in Tasks 4–6.</div>;
+      return <div className="p-6 text-sm text-slate-500">Coming in Tasks 5–6.</div>;
     default:
       return null;
   }
