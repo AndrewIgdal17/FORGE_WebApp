@@ -50,6 +50,17 @@ export function VegetationMgmt(): ReactElement {
   const entry =
     lookups && lookupKey ? asRecord(getVegetationManagement(lookups, lookupKey)) : null;
 
+  if (typeof constructionType === 'string' && constructionType !== 'Overhead') {
+    return (
+      <section id="vegetation-management">
+        <p className="text-sm text-slate-600">
+          Vegetation management costs apply to overhead lines only. Underground and
+          subsea lines have no vegetation clearing.
+        </p>
+      </section>
+    );
+  }
+
   if (!entry || !lookupKey) {
     return (
       <section id="vegetation-management">

@@ -101,11 +101,8 @@ export function loadLookups(defaults: Record<string, unknown>): LookupTables {
       '21_project_category_circuit_and_resistance_detail',
       'project_categories_circuit_and_resistance_details',
     ),
-    conductorOmLookup: sectionTable(
-      defaults,
-      '13_category_om_conductors',
-      'project_categories_om_conductors',
-    ),
+    // YAML 13 (conductor O&M catalog) was deleted; conductor O&M is in structure rates.
+    conductorOmLookup: {},
   };
 }
 
