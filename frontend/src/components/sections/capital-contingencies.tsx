@@ -1,9 +1,14 @@
 import type { ReactElement } from 'react';
+import { CurrencyField } from '@/components/form/currency-field';
 import { PercentageField } from '@/components/form/percentage-field';
 import { useFormStore } from '@/stores/form-store';
 
 const CONTINGENCIES = '03_financing.financial.contingencies';
+const BUILD_COSTS = '10_project_category_build_costs';
+const OVERRIDES = `${BUILD_COSTS}.overrides`;
 const AC_DC_PATH = '01_project_technical_details.project.ac_dc';
+const OVERRIDE_HELP =
+  'Blank uses the equipment catalog. A number replaces the catalog value.';
 
 export function CapitalContingencies(): ReactElement {
   const acDc = useFormStore((state) => state.getFieldValue(AC_DC_PATH));
@@ -36,6 +41,40 @@ export function CapitalContingencies(): ReactElement {
       ) : (
         <p className="text-sm text-slate-600">Converter contingency applies to DC projects.</p>
       )}
+      <PercentageField
+        path={`${BUILD_COSTS}.soft_cost_multiplier`}
+        label="Soft cost adder (%)"
+        helpText="Project management, engineering, and administrative costs, applied after contingency. Default 10%."
+      />
+      <div className="grid gap-4 border-t border-slate-200 pt-4">
+        <h3 className="text-sm font-semibold text-slate-900">Build cost overrides</h3>
+        <CurrencyField
+          path={`${OVERRIDES}.variable_conductor_cost_per_mile`}
+          label="Conductor cost ($/mile)"
+          helpText={OVERRIDE_HELP}
+          nullable
+        />
+        <CurrencyField
+          path={`${OVERRIDES}.fixed_conductor_cost`}
+          label="Conductor fixed cost ($)"
+          helpText={OVERRIDE_HELP}
+          nullable
+        />
+        <CurrencyField
+          path={`${OVERRIDES}.variable_structure_cost_per_mile`}
+          label="Structure cost ($/mile)"
+          helpText={OVERRIDE_HELP}
+          nullable
+        />
+        {isDc ? (
+          <CurrencyField
+            path={`${OVERRIDES}.fixed_converter_cost`}
+            label="Converter cost, one end ($)"
+            helpText={OVERRIDE_HELP}
+            nullable
+          />
+        ) : null}
+      </div>
     </section>
   );
 }

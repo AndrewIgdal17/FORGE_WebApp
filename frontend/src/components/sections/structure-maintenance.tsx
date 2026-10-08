@@ -6,6 +6,7 @@ import { useFormStore } from '@/stores/form-store';
 
 const CONSTRUCTION_TYPE_PATH = '01_project_technical_details.project.construction_type';
 const STRUCTURE_ROOT = '14_category_om_structures.project_categories_om_structures';
+const OM_ESCALATION_PATH = '14_category_om_structures.om_real_escalation_rate';
 const CONFIGURE = 'Configure project first';
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -27,14 +28,7 @@ export function StructureMaintenance(): ReactElement {
   const fieldKey = isOverhead ? 'base_om_per_mile_year' : 'om_pct_of_line_capex';
   const path = ct ? `${STRUCTURE_ROOT}.${ct}.${fieldKey}` : '';
 
-  if (!entry || !path) {
-    return (
-      <section id="structure-maintenance">
-        <p className="text-sm text-slate-600">{CONFIGURE}</p>
-      </section>
-    );
-  }
-
+  const configured = Boolean(entry && path);
   const label = isOverhead ? 'Base O&M ($/mile/year)' : 'O&M (% of line CAPEX/year)';
 
   return (
@@ -42,22 +36,30 @@ export function StructureMaintenance(): ReactElement {
       <div>
         <h2 className="text-base font-semibold text-slate-900">Structure maintenance</h2>
         <p className="text-sm text-slate-600">
-          Structure O&amp;M for {ct}. Overhead is a per-mile rate. Other construction types are a percent of line capital cost.
+          {configured
+            ? `Structure O&M for ${ct}. Overhead is a per-mile rate. Other construction types are a percent of line capital cost.`
+            : CONFIGURE}
         </p>
       </div>
-      {isOverhead ? (
+      {configured && isOverhead ? (
         <CurrencyField
           path={path}
           label={label}
           helpText="Annual structure maintenance per mile, excluding vegetation management."
         />
-      ) : (
+      ) : null}
+      {configured && !isOverhead ? (
         <PercentageField
           path={path}
           label={label}
           helpText="Annual line O&M as a percent of line capital cost."
         />
-      )}
+      ) : null}
+      <PercentageField
+        path={OM_ESCALATION_PATH}
+        label="O&M escalation (%/yr, real)"
+        helpText="Real growth of line, vegetation, and converter O&M. Default 2.0%/yr."
+      />
     </section>
   );
 }

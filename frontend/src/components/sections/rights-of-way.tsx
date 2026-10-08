@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { CurrencyField } from '@/components/form/currency-field';
 import { NumberField } from '@/components/form/number-field';
+import { PercentageField } from '@/components/form/percentage-field';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { terrainMilesPath, terrainsForConstruction } from '@/components/sections/terrain-mix';
@@ -16,6 +17,7 @@ const PROJECT = '01_project_technical_details.project';
 const CONSTRUCTION_TYPE_PATH = `${PROJECT}.construction_type`;
 const USES_EXISTING_ROW_PATH = `${PROJECT}.uses_existing_row`;
 const ROW_ROOT = '11_project_row_details.right_of_way';
+const ROW_RENT_ESCALATION_PATH = '11_project_row_details.row_rent_escalation_real';
 const MAX_ZONES = 15;
 const MIN_VISIBLE_ZONES = 3;
 const MILES_TOLERANCE = 0.01;
@@ -225,6 +227,13 @@ export function RightsOfWay(): ReactElement {
         <p className="text-sm text-slate-600">
           Per-zone land costs. Zone miles should sum to terrain miles.
         </p>
+      </div>
+      <div className="max-w-xl">
+        <PercentageField
+          path={ROW_RENT_ESCALATION_PATH}
+          label="ROW rent escalation (%/yr, real)"
+          helpText="Real growth of ROW rent. Holding stays flat. Default 0%/yr."
+        />
       </div>
       {mismatch ? (
         <Alert className="border-amber-300 bg-amber-50 text-amber-950">

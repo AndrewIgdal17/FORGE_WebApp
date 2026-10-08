@@ -8,6 +8,8 @@ export interface CurrencyFieldProps {
   path: string;
   label: string;
   helpText?: string;
+  /** Empty input stores null. A number replaces the previous value. */
+  nullable?: boolean;
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -38,6 +40,7 @@ export function CurrencyField({
   path,
   label,
   helpText,
+  nullable = false,
 }: CurrencyFieldProps): ReactElement {
   const value = useFormStore((state) => state.getFieldValue(path));
   const setFieldValue = useFormStore((state) => state.setFieldValue);
@@ -54,7 +57,13 @@ export function CurrencyField({
     const next = event.target.value;
     setDraft(next);
     const parsed = parseCurrencyInput(next);
-    if (parsed !== null) setFieldValue(path, parsed);
+    if (parsed !== null) {
+      setFieldValue(path, parsed);
+      return;
+    }
+    if (nullable && next.replace(/[$,]/g, '').trim() === '') {
+      setFieldValue(path, null);
+    }
   }
 
   return (
