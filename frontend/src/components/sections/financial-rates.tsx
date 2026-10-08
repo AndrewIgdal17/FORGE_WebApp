@@ -12,6 +12,7 @@ const BASE_YEAR_PATH = `${FINANCIAL}.base_year`;
 const INFLATION_PATH = `${FINANCIAL}.inflation_rate`;
 const WACC_PATH = `${FINANCIAL}.wacc_nominal`;
 const SOCIAL_PATH = `${FINANCIAL}.social_discount_rate`;
+const ESCALATION_PATH = `${FINANCIAL}.construction_cost_escalation_rate`;
 const REVENUE_PATH = `${FINANCIAL}.revenue.rate_based.enabled`;
 
 const BASE_YEAR_OPTIONS: SelectOption[] = Array.from({ length: 31 }, (_, index) => {
@@ -90,6 +91,11 @@ export function FinancialRates(): ReactElement {
         path={SOCIAL_PATH}
         label="Social discount rate (%)"
         helpText="Discount rate for social externalities such as risk and emissions."
+      />
+      <PercentageField
+        path={ESCALATION_PATH}
+        label="Construction cost escalation (%/yr)"
+        helpText="Nominal annual escalation of capital cost during delay. Default 4%/yr. Source: MISO MTEP25 planning methodology (MISO2025CostGuide)."
       />
       <CheckboxField
         path={REVENUE_PATH}
