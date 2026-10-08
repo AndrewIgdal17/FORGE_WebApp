@@ -13,6 +13,7 @@ const INFLATION_PATH = `${FINANCIAL}.inflation_rate`;
 const WACC_PATH = `${FINANCIAL}.wacc_nominal`;
 const SOCIAL_PATH = `${FINANCIAL}.social_discount_rate`;
 const ESCALATION_PATH = `${FINANCIAL}.construction_cost_escalation_rate`;
+const BENEFIT_ESCALATION_PATH = '17_congestion_reductions.benefit_price_escalation_real';
 const REVENUE_PATH = `${FINANCIAL}.revenue.rate_based.enabled`;
 
 const BASE_YEAR_OPTIONS: SelectOption[] = Array.from({ length: 31 }, (_, index) => {
@@ -96,6 +97,11 @@ export function FinancialRates(): ReactElement {
         path={ESCALATION_PATH}
         label="Construction cost escalation (%/yr)"
         helpText="Nominal annual escalation of capital cost during delay. Default 4%/yr. Source: MISO MTEP25 planning methodology (MISO2025CostGuide)."
+      />
+      <PercentageField
+        path={BENEFIT_ESCALATION_PATH}
+        label="Benefit price escalation (%/yr, real)"
+        helpText="Real annual growth of congestion prices, capacity prices, and the value of delivered energy and losses. Default 0%/yr."
       />
       <CheckboxField
         path={REVENUE_PATH}
