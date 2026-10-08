@@ -114,8 +114,6 @@ function detailRows(row: Record<string, unknown> | null): TaxonomyDetailRow[] {
     const nominal = finiteNumber(record.value_nominal);
     let pv = finiteNumber(record.value_pv);
     if (pv == null) pv = finiteNumber(record.value);
-    const annual = finiteNumber(record.value_annual);
-    if ((pv == null || pv === 0) && annual) pv = annual;
     rows.push({
       label: detailLabel(record),
       nominal,

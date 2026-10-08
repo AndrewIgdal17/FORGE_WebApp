@@ -3,7 +3,6 @@ import { BenefitDrillIn } from '@/components/results/benefit-drill-in';
 import { CostDrillIn } from '@/components/results/cost-drill-in';
 import { ResultsBCRPanel } from '@/components/results/results-bcr-panel';
 import { ResultsOverview } from '@/components/results/results-overview';
-import { SectionOverview } from '@/components/results/section-overview';
 
 export interface ResultsDispatcherProps {
   subItemId: string;
@@ -35,7 +34,6 @@ export function ResultsDispatcher({
   subItemId,
   results,
   taxonomy,
-  onNavigate,
 }: ResultsDispatcherProps): ReactElement | null {
   if (!results) return <NoResultsPlaceholder />;
 
@@ -44,15 +42,6 @@ export function ResultsDispatcher({
       return <ResultsOverview results={results} taxonomy={taxonomy} />;
     case 'r-bcr':
       return <ResultsBCRPanel results={results} taxonomy={taxonomy} />;
-    case 'r-costs-overview':
-      return (
-        <SectionOverview
-          results={results}
-          sectionType="costs"
-          taxonomy={taxonomy}
-          onNavigate={onNavigate}
-        />
-      );
     case 'r-capital':
       return <CostDrillIn results={results} categories={['hard']} taxonomy={taxonomy} />;
     case 'r-operational':
@@ -61,15 +50,6 @@ export function ResultsDispatcher({
       return <CostDrillIn results={results} categories={['risk']} taxonomy={taxonomy} />;
     case 'r-emissions-costs':
       return <CostDrillIn results={results} categories={['emissions']} taxonomy={taxonomy} />;
-    case 'r-benefits-overview':
-      return (
-        <SectionOverview
-          results={results}
-          sectionType="benefits"
-          taxonomy={taxonomy}
-          onNavigate={onNavigate}
-        />
-      );
     case 'r-congestion':
       return (
         <BenefitDrillIn
