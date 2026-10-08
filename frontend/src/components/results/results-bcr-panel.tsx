@@ -1,15 +1,18 @@
 import type { ReactElement } from 'react';
 import { CustomBCRPanel } from '@/components/results/custom-bcr-panel';
+import type { PerspectiveKey } from '@/components/results/perspective-toggle';
 import { PerspectivesTable } from '@/components/results/perspectives-table';
 import { SensitivityTable } from '@/components/results/sensitivity-table';
 
 export interface ResultsBCRPanelProps {
   results: Record<string, unknown>;
+  perspective: PerspectiveKey;
   taxonomy?: Record<string, unknown>;
 }
 
 export function ResultsBCRPanel({
   results,
+  perspective: _perspective,
   taxonomy,
 }: ResultsBCRPanelProps): ReactElement {
   return (

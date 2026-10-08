@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import type { PerspectiveKey } from '@/components/results/perspective-toggle';
 import {
   Card,
   CardDescription,
@@ -16,6 +17,7 @@ import { cn } from '@/lib/utils';
 
 export interface ResultsOverviewProps {
   results: Record<string, unknown>;
+  perspective: PerspectiveKey;
   taxonomy?: Record<string, unknown>;
 }
 
@@ -124,6 +126,7 @@ function MoneyCard({ label, value }: { label: string; value: number }): ReactEle
 
 export function ResultsOverview({
   results,
+  perspective: _perspective,
   taxonomy,
 }: ResultsOverviewProps): ReactElement {
   const summary = asRecord(results.summary);

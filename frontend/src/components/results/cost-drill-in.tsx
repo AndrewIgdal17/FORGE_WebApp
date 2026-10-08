@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { CompositionBar } from '@/components/results/composition-bar';
+import type { PerspectiveKey } from '@/components/results/perspective-toggle';
 import { TaxonomyCard } from '@/components/results/taxonomy-card';
 import {
   cardValues,
@@ -18,6 +19,7 @@ import { cn } from '@/lib/utils';
 export interface CostDrillInProps {
   results: Record<string, unknown>;
   categories: string[];
+  perspective: PerspectiveKey;
   taxonomy?: Record<string, unknown>;
 }
 
@@ -34,6 +36,7 @@ function moneyTone(value: number): string | undefined {
 export function CostDrillIn({
   results,
   categories,
+  perspective: _perspective,
   taxonomy,
 }: CostDrillInProps): ReactElement {
   if (!taxonomy) return <div />;

@@ -3,6 +3,8 @@ import type { ReactElement } from 'react';
 import { toast } from 'sonner';
 import { AuthGuard } from '@/components/auth-guard';
 import { AppNav } from '@/components/layout/app-nav';
+import type { PerspectiveKey } from '@/components/results/perspective-toggle';
+import { PerspectiveToggle } from '@/components/results/perspective-toggle';
 import { ResultsDispatcher } from '@/components/results/results-dispatcher';
 import { ScenarioWizard } from '@/components/scenarios/scenario-wizard';
 import { SectionDispatcher } from '@/components/sections/section-dispatcher';
@@ -184,6 +186,7 @@ function WorkspaceBody(): ReactElement {
   const [ready, setReady] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [calculationStatus, setCalculationStatus] = useState('Not calculated');
+  const [perspective, setPerspective] = useState<PerspectiveKey>('societal');
 
   const baselineRef = useRef<string | null>(null);
   const lastStatusRef = useRef('Not calculated');
@@ -470,16 +473,25 @@ function WorkspaceBody(): ReactElement {
                   {subItemId ? <SectionDispatcher subItemId={subItemId} /> : null}
                 </>
               ) : null}
-              {view === 'results' && subItemId ? (
-                <ResultsDispatcher
-                  subItemId={subItemId}
-                  results={activeScenario?.results ?? null}
-                  taxonomy={taxonomy}
-                  isReconductoring={reconductoring}
-                  acDc={projectFields.acDc}
-                  constructionType={projectFields.constructionType}
-                  onNavigate={handleResultsNavigate}
-                />
+              {view === 'results' ? (
+                <>
+                  <PerspectiveToggle
+                    perspective={perspective}
+                    onPerspectiveChange={setPerspective}
+                  />
+                  {subItemId ? (
+                    <ResultsDispatcher
+                      subItemId={subItemId}
+                      results={activeScenario?.results ?? null}
+                      perspective={perspective}
+                      taxonomy={taxonomy}
+                      isReconductoring={reconductoring}
+                      acDc={projectFields.acDc}
+                      constructionType={projectFields.constructionType}
+                      onNavigate={handleResultsNavigate}
+                    />
+                  ) : null}
+                </>
               ) : null}
               {view === 'sensitivity' ? (
                 <p className="text-sm text-slate-500">Sensitivity analysis is not available yet.</p>

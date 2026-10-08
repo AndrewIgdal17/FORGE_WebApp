@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { CompositionBar } from '@/components/results/composition-bar';
+import type { PerspectiveKey } from '@/components/results/perspective-toggle';
 import { TaxonomyCard } from '@/components/results/taxonomy-card';
 import {
   cardValues,
@@ -18,6 +19,7 @@ export interface BenefitDrillInProps {
   results: Record<string, unknown>;
   category: string;
   subgroup?: string;
+  perspective: PerspectiveKey;
   taxonomy?: Record<string, unknown>;
 }
 
@@ -36,6 +38,7 @@ export function BenefitDrillIn({
   results,
   category,
   subgroup,
+  perspective: _perspective,
   taxonomy,
 }: BenefitDrillInProps): ReactElement {
   if (!taxonomy) return <div />;
