@@ -123,7 +123,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         unit: 'MW',
       },
     ],
-    resultsView: 'r-capital',
+    resultsView: 'r-costs',
   },
   timeline: {
     title: 'Timeline affects delay cost and AFUDC',
@@ -143,7 +143,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
       },
       { label: 'Total Delay PV', source: 'path', path: 'summary.total_delay_pv', format: 'currency' },
     ],
-    resultsView: 'r-operational',
+    resultsView: 'r-costs',
   },
 
   // --- Equipment ---
@@ -165,7 +165,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         format: 'number',
       },
     ],
-    resultsView: 'r-emissions-costs',
+    resultsView: 'r-costs',
   },
   'converter-details': {
     title: 'Converters contribute to capital',
@@ -185,7 +185,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         format: 'number',
       },
     ],
-    resultsView: 'r-capital',
+    resultsView: 'r-costs',
   },
 
   // --- Routing & Terrain ---
@@ -207,7 +207,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         format: 'number',
       },
     ],
-    resultsView: 'r-capital',
+    resultsView: 'r-costs',
   },
   'rights-of-way': {
     title: 'Rights of Way contributes to capital',
@@ -216,7 +216,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
       { label: 'Acquisition PV', source: 'path', path: 'costs.row.acquisition_pv', format: 'currency' },
       { label: 'Rent PV', source: 'path', path: 'costs.row.row_rent_pv', format: 'currency' },
     ],
-    resultsView: 'r-capital',
+    resultsView: 'r-costs',
   },
 
   // --- Benefits ---
@@ -237,7 +237,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
       },
       { label: 'Outage PV', source: 'path', path: 'bcr.outage_pv', format: 'currency' },
     ],
-    resultsView: 'r-loss-comp',
+    resultsView: 'r-benefits',
   },
   'system-constraints': {
     title: 'System constraints drive congestion benefits',
@@ -256,7 +256,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         format: 'currency',
       },
     ],
-    resultsView: 'r-congestion',
+    resultsView: 'r-benefits',
   },
 
   // --- Financial ---
@@ -285,7 +285,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         colorByThreshold: true,
       },
     ],
-    resultsView: 'r-bcr',
+    resultsView: 'r-overview',
   },
   afudc: {
     title: 'AFUDC adds to capital cost',
@@ -299,7 +299,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         format: 'currency',
       },
     ],
-    resultsView: 'r-capital',
+    resultsView: 'r-costs',
   },
 
   // --- Capital Costs ---
@@ -320,7 +320,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
       },
       { label: 'Build Cost PV', source: 'path', path: 'bcr.build_cost_pv', format: 'currency' },
     ],
-    resultsView: 'r-capital',
+    resultsView: 'r-costs',
   },
   'base-mitigation': {
     title: 'Mitigation contributes to capital',
@@ -339,7 +339,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         format: 'currency',
       },
     ],
-    resultsView: 'r-capital',
+    resultsView: 'r-costs',
   },
   credits: {
     title: 'Credits reduce capital cost',
@@ -358,7 +358,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         format: 'currency',
       },
     ],
-    resultsView: 'r-capital',
+    resultsView: 'r-costs',
   },
 
   // --- Operating Costs ---
@@ -374,7 +374,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
       },
       { label: 'Insurance PV', source: 'path', path: 'bcr.insurance_pv', format: 'currency' },
     ],
-    resultsView: 'r-operational',
+    resultsView: 'r-costs',
   },
   'vegetation-management': {
     title: 'Vegetation management contributes to O&M',
@@ -383,7 +383,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
       { label: 'Vegetation PV', source: 'path', path: 'costs.oandm.vegetation_pv', format: 'currency' },
       { label: 'Total O&M PV', source: 'path', path: 'bcr.oandm_pv', format: 'currency' },
     ],
-    resultsView: 'r-operational',
+    resultsView: 'r-costs',
   },
   'delay-costs': {
     title: 'Delay costs include base and constraint delays',
@@ -391,7 +391,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
       { label: 'Base Delay PV', source: 'path', path: 'bcr.delay_cost_pv', format: 'currency' },
       { label: 'Total Delay PV', source: 'path', path: 'summary.total_delay_pv', format: 'currency' },
     ],
-    resultsView: 'r-operational',
+    resultsView: 'r-costs',
   },
 
   // --- Risk ---
@@ -402,7 +402,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
       { label: 'Wildfire PV', source: 'path', path: 'bcr.wildfire_pv', format: 'currency' },
       { label: 'Total Risk PV', source: 'path', path: 'summary.total_risk_pv', format: 'currency' },
     ],
-    resultsView: 'r-risk-costs',
+    resultsView: 'r-costs',
   },
   'outage-risk': {
     title: 'Outage contributes to risk costs',
@@ -416,7 +416,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
       { label: 'Outage PV', source: 'path', path: 'bcr.outage_pv', format: 'currency' },
       { label: 'Total Risk PV', source: 'path', path: 'summary.total_risk_pv', format: 'currency' },
     ],
-    resultsView: 'r-risk-costs',
+    resultsView: 'r-costs',
   },
 
   // --- Emissions ---
@@ -436,7 +436,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         format: 'currency',
       },
     ],
-    resultsView: 'r-emissions-costs',
+    resultsView: 'r-costs',
   },
 
   // --- Energy Mix ---
@@ -456,7 +456,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         format: 'currency',
       },
     ],
-    resultsView: 'r-benefits-overview',
+    resultsView: 'r-benefits',
   },
 };
 
