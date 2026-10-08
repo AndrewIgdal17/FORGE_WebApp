@@ -51,9 +51,12 @@ export const PERSPECTIVE_CATEGORIES: Record<
   },
   ratepayer: {
     costs: [
-      { key: 'soft', label: 'Soft Costs', path: 'summary.reporting_category_soft_pv' },
-      { key: 'hard', label: 'Hard Costs', path: 'summary.reporting_category_hard_pv' },
-      { key: 'emissions', label: 'Loss Compensation', path: 'summary.reporting_category_emissions_pv' },
+      { key: 'capital_recovery', label: 'Capital Recovery', path: 'bcr.capital_recovery_pv' },
+      { key: 'oandm', label: 'O&M', path: 'bcr.oandm_pv' },
+      { key: 'insurance', label: 'Insurance', path: 'bcr.insurance_pv' },
+      { key: 'row_rent', label: 'ROW Rent', path: 'bcr.row_rent_pv' },
+      { key: 'conductor_loss', label: 'Conductor Losses', path: 'bcr.conductor_loss_pv' },
+      { key: 'converter_loss', label: 'Converter Losses', path: 'bcr.converter_loss_pv' },
     ],
     benefits: [
       { key: 'enabling', label: 'Enabling', path: 'bcr.benefits_enabling_pv' },
@@ -105,12 +108,7 @@ function readNumber(results: Record<string, unknown>, path: string): number | nu
   return null;
 }
 
-function readText(results: Record<string, unknown>, path: string): string | null {
-  const value = getValueAtPath(results, path);
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
+
 
 function formatCompactCurrency(value: number): string {
   const sign = value < 0 ? '-' : '';
@@ -245,21 +243,6 @@ function generateNarrative(
   return `This project costs ${formatCompactCurrency(totalCosts)} and delivers ${formatCompactCurrency(totalBenefits)} in ${label} benefits, for a BCR of ${bcrText}.${driver}${pencil}`;
 }
 
-function formatProjectContext(results: Record<string, unknown>): string {
-  const miles = readNumber(results, 'technical_parameters.line_length_miles');
-  const capacity = readNumber(results, 'technical_parameters.capacity_mw');
-  const acDc = readText(results, 'technical_parameters.ac_dc');
-  const delay = readNumber(results, 'technical_parameters.delay_years');
-  const lifetime = readNumber(results, 'technical_parameters.project_lifetime_years');
-  const milesText = miles == null ? '— mi' : `${formatNumber(miles, 0)} mi`;
-  const capacityText =
-    capacity == null
-      ? `— MW${acDc ? ` ${acDc}` : ''}`
-      : `${formatNumber(capacity, 0)} MW${acDc ? ` ${acDc}` : ''}`;
-  const delayText = delay == null ? '— yr delay' : `${formatNumber(delay, 0)} yr delay`;
-  const lifeText = lifetime == null ? '— yr life' : `${formatNumber(lifetime, 0)} yr life`;
-  return `${milesText} · ${capacityText} · ${delayText} · ${lifeText}`;
-}
 
 function CategoryWaterfall({
   title,
@@ -357,10 +340,6 @@ export function ResultsOverview({
         <CategoryWaterfall title="Costs" data={costs} fill={COST_BAR} />
         <CategoryWaterfall title="Benefits" data={benefits} fill={BENEFIT_BAR} />
       </div>
-
-      <p className="border-t border-slate-200 pt-4 text-sm text-slate-500">
-        {formatProjectContext(results)}
-      </p>
     </div>
   );
 }
