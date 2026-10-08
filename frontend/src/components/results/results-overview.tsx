@@ -74,20 +74,6 @@ export const PERSPECTIVE_CATEGORIES: Record<
   },
 };
 
-const SPECIFIC_TOTAL_PATHS: Record<
-  Exclude<PerspectiveKey, 'societal'>,
-  { costs: string; benefits: string }
-> = {
-  ratepayer: {
-    costs: 'bcr.ratepayer_costs_pv',
-    benefits: 'bcr.ratepayer_benefits_pv',
-  },
-  utility: {
-    costs: 'bcr.utility_costs_pv',
-    benefits: 'bcr.utility_benefits_pv',
-  },
-};
-
 const COST_BAR = '#dc2626';
 const BENEFIT_BAR = '#059669';
 
@@ -97,25 +83,10 @@ interface CategoryAmount {
   value: number;
 }
 
-interface MoneyTotals {
-  costs: number;
-  benefits: number;
-}
-
 function readNumber(results: Record<string, unknown>, path: string): number | null {
   const value = getValueAtPath(results, path);
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   return null;
-}
-
-
-
-function formatCompactCurrency(value: number): string {
-  const sign = value < 0 ? '-' : '';
-  const abs = Math.abs(value);
-  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(1)}B`;
-  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(0)}M`;
-  return `${sign}${formatCurrency(abs, 0)}`;
 }
 
 function formatNetBenefit(value: number | null): string {
@@ -162,87 +133,6 @@ function loadCategories(
     }))
     .sort((left, right) => Math.abs(right.value) - Math.abs(left.value));
 }
-
-function sumValues(items: CategoryAmount[]): number {
-  return items.reduce((total, item) => total + item.value, 0);
-}
-
-/** Recover cost and benefit totals from BCR = B/C and net = B−C when the payload has no split. */
-function impliedTotals(bcr: number, netBenefit: number): MoneyTotals | null {
-  if (Math.abs(bcr - 1) < 1e-6) return null;
-  const costs = netBenefit / (bcr - 1);
-  const benefits = costs * bcr;
-  if (!Number.isFinite(costs) || !Number.isFinite(benefits) || costs < 0 || benefits < 0) {
-    return null;
-  }
-  return { costs, benefits };
-}
-
-function resolveTotals(
-  perspective: PerspectiveKey,
-  results: Record<string, unknown>,
-  costs: CategoryAmount[],
-  benefits: CategoryAmount[],
-  bcr: number | null,
-  netBenefit: number | null,
-): MoneyTotals {
-  const summed: MoneyTotals = {
-    costs: sumValues(costs),
-    benefits: sumValues(benefits),
-  };
-
-  if (perspective === 'societal') {
-    const totalCosts = readNumber(results, 'summary.total_costs_pv');
-    const totalBenefits = readNumber(results, 'summary.total_benefits_pv');
-    if (totalCosts != null && totalBenefits != null) {
-      return { costs: totalCosts, benefits: totalBenefits };
-    }
-    return summed;
-  }
-
-  const paths = SPECIFIC_TOTAL_PATHS[perspective];
-  const specificCosts = readNumber(results, paths.costs);
-  const specificBenefits = readNumber(results, paths.benefits);
-  if (specificCosts != null && specificBenefits != null) {
-    return { costs: specificCosts, benefits: specificBenefits };
-  }
-
-  if (bcr != null && netBenefit != null) {
-    const implied = impliedTotals(bcr, netBenefit);
-    if (implied) return implied;
-  }
-  return summed;
-}
-
-function generateNarrative(
-  perspective: PerspectiveKey,
-  totalCosts: number,
-  totalBenefits: number,
-  bcr: number | null,
-  costCategories: CategoryAmount[],
-): string {
-  const label = PERSPECTIVE_DEFINITIONS[perspective].label.toLowerCase();
-  const bcrText = bcr == null ? 'n/a' : bcr.toFixed(2);
-  const largest = costCategories[0];
-  const displayedCosts = sumValues(costCategories);
-  const driver =
-    largest && displayedCosts !== 0
-      ? ` The primary cost driver is ${largest.label} (${formatCompactCurrency(largest.value)}, ${Math.round((Math.abs(largest.value) / Math.abs(displayedCosts)) * 100)}%).`
-      : '';
-  const pencil =
-    bcr == null
-      ? ''
-      : ` The project ${bcr >= 1 ? 'pencils' : 'does not pencil'} under the ${label} perspective.`;
-
-  if (perspective === 'ratepayer') {
-    return `Ratepayers see ${formatCompactCurrency(totalBenefits)} in benefits against ${formatCompactCurrency(totalCosts)} in costs, for a BCR of ${bcrText}.${driver} Avoided emissions do not flow through rates.${pencil}`;
-  }
-  if (perspective === 'utility') {
-    return `The utility earns ${formatCompactCurrency(totalBenefits)} in allowed revenue against ${formatCompactCurrency(totalCosts)} in costs, for a BCR of ${bcrText}.${driver}${pencil}`;
-  }
-  return `This project costs ${formatCompactCurrency(totalCosts)} and delivers ${formatCompactCurrency(totalBenefits)} in ${label} benefits, for a BCR of ${bcrText}.${driver}${pencil}`;
-}
-
 
 function CategoryWaterfall({
   title,
@@ -297,14 +187,6 @@ export function ResultsOverview({
   const categories = PERSPECTIVE_CATEGORIES[perspective];
   const costs = loadCategories(results, categories.costs);
   const benefits = loadCategories(results, categories.benefits);
-  const totals = resolveTotals(perspective, results, costs, benefits, bcr, netBenefit);
-  const narrative = generateNarrative(
-    perspective,
-    totals.costs,
-    totals.benefits,
-    bcr,
-    costs,
-  );
 
   return (
     <div className="space-y-6">
@@ -333,8 +215,6 @@ export function ResultsOverview({
           </div>
         </CardContent>
       </Card>
-
-      <p className="text-sm leading-relaxed text-slate-600">{narrative}</p>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <CategoryWaterfall title="Costs" data={costs} fill={COST_BAR} />
