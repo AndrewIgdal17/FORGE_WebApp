@@ -4,7 +4,9 @@ import { NumberField } from '@/components/form/number-field';
 import { PercentageField } from '@/components/form/percentage-field';
 
 const EMISSIONS = '16_emissions_reductions.emissions_reductions';
+const COMPENSATION_PATH = `${EMISSIONS}.compensation_percent`;
 const GROWTH_PATH = `${EMISSIONS}.societal_costs_per_kg.co2_cost_annual_growth`;
+const CO2_COST_PATH = `${EMISSIONS}.societal_costs_per_kg.co2_cost_per_kg`;
 
 const FUELS = [
   'coal',
@@ -35,7 +37,6 @@ const POLLUTANTS = [
 ] as const;
 
 const EXTERNALITIES = [
-  { key: 'co2_cost_per_kg', label: 'CO₂' },
   { key: 'sox_cost_per_kg', label: 'SOx' },
   { key: 'nox_cost_per_kg', label: 'NOx' },
 ] as const;
@@ -50,6 +51,13 @@ export function EmissionsSection(): ReactElement {
         <p className="text-sm text-slate-600">
           Emission intensity by fuel, and the social cost used to value avoided pollution.
         </p>
+      </div>
+      <div className="grid max-w-xl gap-2">
+        <PercentageField
+          path={COMPENSATION_PATH}
+          label="Loss compensation (%)"
+          helpText="Share of line losses replaced by additional generation. Default 100%."
+        />
       </div>
       <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
         <table className="w-full min-w-[36rem] border-collapse">
@@ -95,6 +103,20 @@ export function EmissionsSection(): ReactElement {
             </tr>
           </thead>
           <tbody>
+            <tr className="border-b">
+              <th scope="row" className="px-3 py-2 text-left text-sm font-medium text-slate-800">
+                CO₂
+              </th>
+              <td className={cellFieldClass}>
+                <NumberField
+                  path={CO2_COST_PATH}
+                  label="CO₂ cost per kg ($)"
+                  helpText="0.236 $/kg equals 236 $/t. Default from EPA SC-GHG 2023."
+                  min={0}
+                  step={0.001}
+                />
+              </td>
+            </tr>
             {EXTERNALITIES.map((row) => (
               <tr key={row.key} className="border-b last:border-b-0">
                 <th scope="row" className="px-3 py-2 text-left text-sm font-medium text-slate-800">

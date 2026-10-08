@@ -12,13 +12,8 @@ const TIMING = '19_cost_timing_patterns.cost_timing_patterns';
 const TIMING_CATEGORIES: Array<{ key: string; label: string }> = [
   { key: 'build_costs', label: 'Build costs' },
   { key: 'row_acquisition', label: 'ROW acquisition' },
-  { key: 'row_holding', label: 'ROW holding' },
-  { key: 'row_rent', label: 'ROW rent' },
   { key: 'environmental_mitigation_base', label: 'Env. mitigation (base)' },
   { key: 'environmental_mitigation_credits', label: 'Env. mitigation (credits)' },
-  { key: 'delay_costs', label: 'Delay costs' },
-  { key: 'operations_and_maintenance', label: 'O&M' },
-  { key: 'construction_insurance', label: 'Construction insurance' },
 ];
 
 const cellFieldClass = 'px-2 py-1.5 [&_label]:sr-only';
@@ -74,7 +69,7 @@ export function AfudcPanel(): ReactElement {
       <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
         <table className="w-full min-w-[40rem] border-collapse">
           <caption className="sr-only">
-            Cost timing patterns: fraction incurred during delay and construction, and AFUDC eligibility
+            Cost timing patterns: percent incurred during delay and construction, and AFUDC eligibility
           </caption>
           <thead>
             <tr className="border-b-2 border-slate-200 bg-slate-50 text-left text-xs font-semibold text-slate-500">
@@ -94,14 +89,14 @@ export function AfudcPanel(): ReactElement {
                   <PercentageField
                     path={timingPath(category.key, 'during_delay')}
                     label={`${category.label} during delay`}
-                    helpText="Fraction of this cost incurred during the delay period."
+                    helpText="Percent of this cost incurred during delay."
                   />
                 </td>
                 <td className={cellFieldClass}>
                   <PercentageField
                     path={timingPath(category.key, 'during_construction')}
                     label={`${category.label} during construction`}
-                    helpText="Fraction of this cost incurred during construction."
+                    helpText="Percent of this cost incurred during construction."
                   />
                 </td>
                 <td className={cellFieldClass}>

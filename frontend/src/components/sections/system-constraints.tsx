@@ -9,8 +9,9 @@ const SECTION = '17_congestion_reductions';
 
 export function SystemConstraints(): ReactElement {
   const projectType = useFormStore((state) => state.getFieldValue(PROJECT_TYPE_PATH));
-  const reconductoring = projectType === 'reconductoring';
-  const root = reconductoring
+  const incremental =
+    projectType === 'reconductoring' || projectType === 'rebuild';
+  const root = incremental
     ? 'incremental_congestion_reductions'
     : 'greenfield_congestion_reductions';
   const base = `${SECTION}.${root}`;
@@ -20,12 +21,12 @@ export function SystemConstraints(): ReactElement {
       <div>
         <h2 className="text-base font-semibold text-slate-900">System constraints</h2>
         <p className="text-sm text-slate-600">
-          {reconductoring
+          {incremental
             ? 'Incremental congestion relief on the existing corridor.'
             : 'Greenfield congestion relief for a new line.'}
         </p>
       </div>
-      {reconductoring ? null : (
+      {incremental ? null : (
         <PercentageField
           path={`${base}.constraints.flow_factor`}
           label="Flow factor (%)"
@@ -34,7 +35,7 @@ export function SystemConstraints(): ReactElement {
       )}
       <NumberField
         path={`${base}.constraints.constrained_hours`}
-        label="Constrained hours"
+        label="Constrained hours (hours/year)"
         helpText="Hours per year the targeted constraint binds."
         min={0}
       />
