@@ -3,6 +3,7 @@ import { BenefitsView } from '@/components/results/benefits-view';
 import { CostsView } from '@/components/results/costs-view';
 import type { PerspectiveKey } from '@/components/results/perspective-toggle';
 import { ResultsOverview } from '@/components/results/results-overview';
+import { SensitivityView } from '@/components/results/sensitivity-view';
 import { TimelineChart } from '@/components/results/timeline-chart';
 
 export interface ResultsDispatcherProps {
@@ -28,7 +29,7 @@ export function NoResultsPlaceholder(): ReactElement {
 
 /**
  * Maps a results sidebar sub-item to its view.
- * Overview, costs, benefits, and timeline are live. Sensitivity arrives in a later task.
+ * Overview, costs, benefits, timeline, and sensitivity are live.
  */
 export function ResultsDispatcher({
   subItemId,
@@ -48,7 +49,9 @@ export function ResultsDispatcher({
     case 'r-timeline':
       return <TimelineChart results={results} perspective={perspective} />;
     case 'r-sensitivity':
-      return <div className="p-6 text-sm text-slate-500">Coming in Task 6.</div>;
+      return (
+        <SensitivityView results={results} taxonomy={taxonomy} perspective={perspective} />
+      );
     default:
       return null;
   }
