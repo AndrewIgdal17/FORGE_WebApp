@@ -3,6 +3,8 @@ import type { ReactElement } from 'react';
 import { CurrencyField } from '@/components/form/currency-field';
 import { NumberField } from '@/components/form/number-field';
 import { PercentageField } from '@/components/form/percentage-field';
+import { SelectField } from '@/components/form/select-field';
+import type { SelectOption } from '@/components/form/select-field';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { terrainMilesPath, terrainsForConstruction } from '@/components/sections/terrain-mix';
@@ -16,6 +18,15 @@ import { useFormStore } from '@/stores/form-store';
 const PROJECT = '01_project_technical_details.project';
 const CONSTRUCTION_TYPE_PATH = `${PROJECT}.construction_type`;
 const USES_EXISTING_ROW_PATH = `${PROJECT}.uses_existing_row`;
+const ROW_AGREEMENT_PATH = `${PROJECT}.row_agreement_type`;
+const ROW_AGREEMENT_OPTIONS: SelectOption[] = [
+  { value: 'permanent_easement_new', label: 'Permanent easement' },
+  { value: 'fee_simple', label: 'Fee simple' },
+  { value: 'federal_hybrid', label: 'Federal hybrid' },
+  { value: 'lease_license_existing', label: 'Lease or license (existing)' },
+];
+const ROW_AGREEMENT_HELP =
+  'Lease drops acquisition and holding, keeps rent from year 1. Permanent easement and fee simple keep acquisition and holding, drop rent. Federal hybrid keeps all three. If unset, reconductoring/rebuild/existing-ROW infers lease; otherwise permanent easement.';
 const ROW_ROOT = '11_project_row_details.right_of_way';
 const ROW_RENT_ESCALATION_PATH = '11_project_row_details.row_rent_escalation_real';
 const MAX_ZONES = 15;
@@ -222,6 +233,14 @@ export function RightsOfWay(): ReactElement {
 
   return (
     <section id="rights-of-way" className="grid max-w-5xl gap-3">
+      <div className="max-w-xl">
+        <SelectField
+          path={ROW_AGREEMENT_PATH}
+          label="ROW agreement"
+          helpText={ROW_AGREEMENT_HELP}
+          options={ROW_AGREEMENT_OPTIONS}
+        />
+      </div>
       <div>
         <h2 className="text-base font-semibold text-slate-900">Right-of-way zones</h2>
         <p className="text-sm text-slate-600">
