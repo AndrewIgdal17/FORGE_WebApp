@@ -1,8 +1,5 @@
 import type { ReactElement } from 'react';
-import { BenefitDrillIn } from '@/components/results/benefit-drill-in';
-import { CostDrillIn } from '@/components/results/cost-drill-in';
 import type { PerspectiveKey } from '@/components/results/perspective-toggle';
-import { ResultsBCRPanel } from '@/components/results/results-bcr-panel';
 import { ResultsOverview } from '@/components/results/results-overview';
 
 export interface ResultsDispatcherProps {
@@ -28,9 +25,7 @@ export function NoResultsPlaceholder(): ReactElement {
 
 /**
  * Maps a results sidebar sub-item to its view.
- * Category keys match `CostDrillIn` / `BenefitDrillIn` and `renderResultsSubItem`:
- * capital → hard, operational → soft, risk → risk, emissions → emissions,
- * congestion → remedial/congestion, loss compensation → enabling, remedial → remedial.
+ * Overview is live. Costs, benefits, timeline, and sensitivity arrive in later tasks.
  */
 export function ResultsDispatcher({
   subItemId,
@@ -43,72 +38,11 @@ export function ResultsDispatcher({
   switch (subItemId) {
     case 'r-overview':
       return <ResultsOverview results={results} taxonomy={taxonomy} perspective={perspective} />;
-    case 'r-bcr':
-      return <ResultsBCRPanel results={results} taxonomy={taxonomy} perspective={perspective} />;
-    case 'r-capital':
-      return (
-        <CostDrillIn
-          results={results}
-          categories={['hard']}
-          taxonomy={taxonomy}
-          perspective={perspective}
-        />
-      );
-    case 'r-operational':
-      return (
-        <CostDrillIn
-          results={results}
-          categories={['soft']}
-          taxonomy={taxonomy}
-          perspective={perspective}
-        />
-      );
-    case 'r-risk-costs':
-      return (
-        <CostDrillIn
-          results={results}
-          categories={['risk']}
-          taxonomy={taxonomy}
-          perspective={perspective}
-        />
-      );
-    case 'r-emissions-costs':
-      return (
-        <CostDrillIn
-          results={results}
-          categories={['emissions']}
-          taxonomy={taxonomy}
-          perspective={perspective}
-        />
-      );
-    case 'r-congestion':
-      return (
-        <BenefitDrillIn
-          results={results}
-          category="remedial"
-          subgroup="congestion"
-          taxonomy={taxonomy}
-          perspective={perspective}
-        />
-      );
-    case 'r-loss-comp':
-      return (
-        <BenefitDrillIn
-          results={results}
-          category="enabling"
-          taxonomy={taxonomy}
-          perspective={perspective}
-        />
-      );
-    case 'r-remedial':
-      return (
-        <BenefitDrillIn
-          results={results}
-          category="remedial"
-          taxonomy={taxonomy}
-          perspective={perspective}
-        />
-      );
+    case 'r-costs':
+    case 'r-benefits':
+    case 'r-timeline':
+    case 'r-sensitivity':
+      return <div className="p-6 text-sm text-slate-500">Coming in Tasks 4–6.</div>;
     default:
       return null;
   }
