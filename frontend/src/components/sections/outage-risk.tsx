@@ -39,7 +39,7 @@ export function OutageRisk(): ReactElement {
           <div className="min-w-0 flex-1">
             <NumberField
               path={CAPACITY_PATH}
-              label="Capacity at risk factor"
+              label="Capacity at risk (fraction of nameplate)"
               helpText="Fraction of capacity lost per outage. 1 is a radial line."
               min={0}
               max={1}
@@ -54,7 +54,7 @@ export function OutageRisk(): ReactElement {
       {automatic ? (
         <NumberField
           path={CAPACITY_PATH}
-          label="Capacity at risk factor"
+          label="Capacity at risk (fraction of nameplate)"
           helpText="Leave this blank to keep the automatic value, or enter a fraction from 0 to 1."
           min={0}
           max={1}

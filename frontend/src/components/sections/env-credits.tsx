@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { CurrencyField } from '@/components/form/currency-field';
+import { PercentageField } from '@/components/form/percentage-field';
 import { terrainMilesPath } from '@/components/sections/terrain-mix';
 import type { TerrainId } from '@/components/sections/terrain-mix';
 import { milesToAcres } from '@/lib/geometry';
@@ -76,6 +77,9 @@ export function EnvCredits(): ReactElement {
   const constructionType = useFormStore((state) =>
     state.getFieldValue(`${PROJECT}.construction_type`),
   );
+  const projectType = useFormStore((state) =>
+    state.getFieldValue(`${PROJECT}.project_type`),
+  );
   const acDc = useFormStore((state) => state.getFieldValue(`${PROJECT}.ac_dc`));
   const capacityMw = useFormStore((state) => state.getFieldValue(`${PROJECT}.capacity_mw`));
   const conductorType = useFormStore((state) =>
@@ -129,6 +133,15 @@ export function EnvCredits(): ReactElement {
           {rowWidth === null ? CONFIGURE : formatAcres(totalAcres)}
         </span>
       </p>
+      {projectType === 'rebuild' ? (
+        <div className="max-w-xl">
+          <PercentageField
+            path={`${ENV}.rebuild_env_mitigation_fraction`}
+            label="Rebuild credit share (%)"
+            helpText="Share of wetland and habitat credits kept on a rebuild. Default 50%. Reconductoring keeps none."
+          />
+        </div>
+      ) : null}
       <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
         <table className="w-full min-w-[36rem] border-collapse">
           <caption className="sr-only">Habitat and wetland credit cost per acre</caption>
