@@ -30,8 +30,6 @@ const VALUE_OF_LOAD_PATH = `${PROJECT}.value_of_load_per_mwh`;
 const CONVERTER_COUNT_PATH = `${PROJECT}.number_of_converters`;
 const CONVERTER_TYPE_PATH = `${PROJECT}.converter_type`;
 const PROJECT_TYPE_PATH = `${PROJECT}.project_type`;
-const COMPARISON_CAPACITY_PATH = `${PROJECT}.greenfield_comparison_capacity_mw`;
-const COMPARISON_CONDUCTOR_PATH = `${PROJECT}.greenfield_comparison_conductor_type`;
 const USES_EXISTING_ROW_PATH = `${PROJECT}.uses_existing_row`;
 const OLD_AC_DC_PATH = `${PROJECT}.old_ac_dc`;
 const OLD_CAPACITY_PATH = `${PROJECT}.old_capacity_mw`;
@@ -112,12 +110,6 @@ export function TechnologySection(): ReactElement {
   const capacity = useFormStore((state) => state.getFieldValue(CAPACITY_PATH));
   const conductor = useFormStore((state) => state.getFieldValue(CONDUCTOR_PATH));
   const projectType = useFormStore((state) => state.getFieldValue(PROJECT_TYPE_PATH));
-  const comparisonCapacity = useFormStore((state) =>
-    state.getFieldValue(COMPARISON_CAPACITY_PATH),
-  );
-  const comparisonConductor = useFormStore((state) =>
-    state.getFieldValue(COMPARISON_CONDUCTOR_PATH),
-  );
   const oldAcDc = useFormStore((state) => state.getFieldValue(OLD_AC_DC_PATH));
   const oldCapacity = useFormStore((state) => state.getFieldValue(OLD_CAPACITY_PATH));
   const oldConductor = useFormStore((state) =>
@@ -127,7 +119,6 @@ export function TechnologySection(): ReactElement {
 
   const isDc = acDc === 'DC';
   const showCorona = constructionType === 'Overhead' && acDc === 'AC';
-  const isGreenfield = projectType === 'greenfield';
   const isReconductoring = projectType === 'reconductoring';
   const showExistingRow =
     projectType === 'reconductoring' || projectType === 'rebuild';
@@ -139,21 +130,6 @@ export function TechnologySection(): ReactElement {
   useEffect(() => {
     syncConductor(constructionType, conductor, CONDUCTOR_PATH, setFieldValue);
   }, [constructionType, conductor, setFieldValue]);
-
-  useEffect(() => {
-    if (!isGreenfield) return;
-    syncCapacity(acDc, comparisonCapacity, COMPARISON_CAPACITY_PATH, setFieldValue);
-  }, [isGreenfield, acDc, comparisonCapacity, setFieldValue]);
-
-  useEffect(() => {
-    if (!isGreenfield) return;
-    syncConductor(
-      constructionType,
-      comparisonConductor,
-      COMPARISON_CONDUCTOR_PATH,
-      setFieldValue,
-    );
-  }, [isGreenfield, constructionType, comparisonConductor, setFieldValue]);
 
   useEffect(() => {
     if (!isReconductoring) return;
@@ -224,22 +200,6 @@ export function TechnologySection(): ReactElement {
         helpText="Greenfield is a new line. Reconductoring replaces the conductor. Rebuild replaces the structures."
         options={PROJECT_TYPE_OPTIONS}
       />
-      {isGreenfield ? (
-        <>
-          <SelectField
-            path={COMPARISON_CAPACITY_PATH}
-            label="Comparison capacity (MW)"
-            helpText="Optional greenfield capacity for the line-loss comparison case. Blank skips the comparison."
-            options={capacityOptions(acDc)}
-          />
-          <SelectField
-            path={COMPARISON_CONDUCTOR_PATH}
-            label="Comparison conductor type"
-            helpText="Conductor on the optional greenfield comparison case. Blank skips the comparison."
-            options={conductorOptions(constructionType)}
-          />
-        </>
-      ) : null}
       {showExistingRow ? (
         <CheckboxField
           path={USES_EXISTING_ROW_PATH}
