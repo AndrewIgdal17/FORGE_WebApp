@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { CurrencyField } from '@/components/form/currency-field';
 import { NumberField } from '@/components/form/number-field';
+import { PercentageField } from '@/components/form/percentage-field';
 import { TERRAIN_IDS, terrainMilesPath } from '@/components/sections/terrain-mix';
 import type { TerrainId } from '@/components/sections/terrain-mix';
 import { milesToAcres } from '@/lib/geometry';
@@ -150,6 +151,13 @@ export function BaseMitigation(): ReactElement {
         min={0}
         step={0.05}
       />
+      {ctLabel === 'Subsea' ? (
+        <PercentageField
+          path={`${ENV}.marine_env_mitigation_pct_capex`}
+          label="Marine mitigation (% of subsea CAPEX)"
+          helpText="Added on subsea projects. Default 3% of subsea construction cost."
+        />
+      ) : null}
       <p className="text-sm text-slate-600">
         Total effective acres{' '}
         <span className="font-medium text-slate-900">

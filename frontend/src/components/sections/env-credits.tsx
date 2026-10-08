@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { CurrencyField } from '@/components/form/currency-field';
+import { NumberField } from '@/components/form/number-field';
 import { PercentageField } from '@/components/form/percentage-field';
 import { terrainMilesPath } from '@/components/sections/terrain-mix';
 import type { TerrainId } from '@/components/sections/terrain-mix';
@@ -133,6 +134,15 @@ export function EnvCredits(): ReactElement {
           {rowWidth === null ? CONFIGURE : formatAcres(totalAcres)}
         </span>
       </p>
+      <div className="max-w-xl">
+        <NumberField
+          path={`${ENV}.mitigation_ratio`}
+          label="Compensatory mitigation ratio"
+          helpText="Credits required equal impacted acres times this ratio. Default 2.0."
+          min={0}
+          step={0.1}
+        />
+      </div>
       {projectType === 'rebuild' ? (
         <div className="max-w-xl">
           <PercentageField
