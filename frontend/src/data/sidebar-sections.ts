@@ -112,25 +112,10 @@ export const SIDEBAR_SECTIONS: SidebarSections = {
       subItems: [{ id: 'r-overview', label: 'Overview' }],
     },
     {
-      id: 'r-costs-benefits',
-      label: 'Breakdown',
-      color: '#ef4444',
-      subItems: [
-        { id: 'r-costs', label: 'Costs' },
-        { id: 'r-benefits', label: 'Benefits' },
-      ],
-    },
-    {
       id: 'r-time',
       label: 'Timeline',
       color: '#3b82f6',
       subItems: [{ id: 'r-timeline', label: 'Over Time' }],
-    },
-    {
-      id: 'r-analysis',
-      label: 'Analysis',
-      color: '#a855f7',
-      subItems: [{ id: 'r-sensitivity', label: 'Sensitivity' }],
     },
   ],
 };
