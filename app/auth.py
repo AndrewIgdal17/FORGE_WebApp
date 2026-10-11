@@ -76,13 +76,14 @@ _jwks_client_url: str | None = None
 
 def _get_jwks_client(supabase_url: str) -> PyJWKClient:
     global _jwks_client, _jwks_client_url
-    if _jwks_client is None or _jwks_client_url != supabase_url:
+    jwks_base = os.environ.get("FORGE_JWKS_URL") or f"{supabase_url}/auth/v1/.well-known/jwks.json"
+    if _jwks_client is None or _jwks_client_url != jwks_base:
         _jwks_client = PyJWKClient(
-            f"{supabase_url}/auth/v1/.well-known/jwks.json",
+            jwks_base,
             cache_keys=True,
             lifespan=3600,
         )
-        _jwks_client_url = supabase_url
+        _jwks_client_url = jwks_base
     return _jwks_client
 
 

@@ -46,10 +46,10 @@ export function ScenarioList({
   const [renameValue, setRenameValue] = useState('');
   const [pendingDelete, setPendingDelete] = useState<Scenario | null>(null);
 
-  const examples = scenarios.filter((scenario) => scenario.source === 'system');
+  const examples = scenarios.filter((scenario) => scenario.source === 'paper');
   const yours = scenarios.filter(
     (scenario) =>
-      scenario.source !== 'system' &&
+      scenario.source !== 'paper' &&
       currentUserId !== null &&
       scenario.user_id === currentUserId,
   );
@@ -77,7 +77,7 @@ export function ScenarioList({
   async function handleDuplicate(scenario: Scenario): Promise<void> {
     try {
       const copy = await duplicateScenario(scenario.id);
-      if (scenario.source === 'system') onOpen(copy);
+      if (scenario.source === 'paper') onOpen(copy);
     } catch (error) {
       toast.error(errorMessage(error, 'Could not duplicate scenario'));
     }

@@ -118,7 +118,7 @@ export default function HomePage(): ReactElement {
     }
   }
 
-  const examples = scenarios.filter((s) => s.source === 'system');
+  const examples = scenarios.filter((s) => s.source === 'paper');
   const hasScenarios = scenarios.length > 0;
 
   return (
