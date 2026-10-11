@@ -1,12 +1,5 @@
-# Checks on every push and pull request, then migrations.
-# migrate-staging runs only on a push to main.
-# migrate-production runs only on a push to release, in the production
-# environment (required reviewer is configured on that environment, not here).
-#
-# Secrets:
-#   SUPABASE_ACCESS_TOKEN          repository secret (migration jobs)
-#   SUPABASE_PROJECT_REF           environment secret (staging, production)
-#   SUPABASE_DB_PASSWORD           environment secret (staging, production)
+# Checks on every push and pull request.
+# FORGE is self-hosted on turgon; Render and hosted Supabase are retired.
 name: CI
 
 on:
@@ -185,88 +178,6 @@ jobs:
         if: always()
         run: docker rm -f forge-ci || true
 
-  blueprint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version-file: .python-version
-      - name: Validate render.yaml against Render's schema
-        run: |
-          set -euo pipefail
-          python -m pip install --disable-pip-version-check pyyaml jsonschema
-          python << 'PY'
-          import json
-          import urllib.request
-
-          import yaml
-          from jsonschema import Draft202012Validator
-
-          with urllib.request.urlopen("https://render.com/schema/render.yaml.json", timeout=60) as response:
-              schema = json.load(response)
-          with open("render.yaml", encoding="utf-8") as handle:
-              document = yaml.safe_load(handle)
-
-          Draft202012Validator(schema).validate(document)
-
-          services = document["services"]
-          names = [service["name"] for service in services]
-          if names != ["forge-staging", "forge-production"]:
-              raise SystemExit(f"unexpected services: {names}")
-          for service in services:
-              if service["runtime"] != "docker":
-                  raise SystemExit(f"{service['name']}: runtime must be docker")
-              if service["healthCheckPath"] != "/api/health":
-                  raise SystemExit(f"{service['name']}: healthCheckPath must be /api/health")
-              if service["autoDeploy"] not in (True, "yes", False, "no"):
-                  raise SystemExit(f"{service['name']}: autoDeploy must be true, yes, false, or no")
-              database = next(item for item in service["envVars"] if item["key"] == "FORGE_DATABASE_URL")
-              if database.get("sync") is not False:
-                  raise SystemExit(f"{service['name']}: FORGE_DATABASE_URL must use sync: false")
-          print("render.yaml matches Render's schema")
-          PY
-
-  migrate-staging:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [lint, unit, database, container, blueprint]
-    runs-on: ubuntu-latest
-    environment: staging
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1
-        with:
-          version: "2.90.0"
-      - name: Push migrations to staging
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-        run: |
-          set -euo pipefail
-          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" --yes
-          supabase db push --yes
-
-  migrate-production:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/release'
-    needs: [lint, unit, database, container, blueprint]
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1
-        with:
-          version: "2.90.0"
-      - name: Push migrations to production
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-        run: |
-          set -euo pipefail
-          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" --yes
-          supabase db push --yes
-
   react-typecheck:
     runs-on: ubuntu-latest
     steps:
@@ -287,5 +198,5 @@ jobs:
       - run: cd frontend && npm ci
       - run: cd frontend && npm run build
     env:
-      VITE_SUPABASE_URL: https://fsjppprwigmuypyzpbir.supabase.co
+      VITE_SUPABASE_URL: https://api.forge-calc.com
       VITE_SUPABASE_ANON_KEY: placeholder-for-ci-build-check
