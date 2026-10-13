@@ -1,3 +1,5 @@
+import type { MultiLineString } from 'geojson';
+
 import { supabase } from '@/lib/supabase';
 
 export interface CalculatorInfo {
@@ -97,6 +99,12 @@ export interface CalculateResponse {
   timestamp: string;
   results: Record<string, unknown>;
   error: null;
+}
+
+export interface AnalyzeResponse {
+  total_miles: number;
+  intersections: Record<string, Record<string, unknown>>;
+  changes: Record<string, unknown>;
 }
 
 export interface ScenarioCreate {
@@ -216,6 +224,21 @@ export async function calculate(
   return apiFetch<CalculateResponse>('/api/forge/calculate', {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+const ANALYZE_TIMEOUT_MS = 30_000;
+
+export async function analyzeRoute(
+  route: MultiLineString,
+  signal?: AbortSignal,
+): Promise<AnalyzeResponse> {
+  const timeout = AbortSignal.timeout(ANALYZE_TIMEOUT_MS);
+  const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  return apiFetch<AnalyzeResponse>('/api/route/analyze', {
+    method: 'POST',
+    body: JSON.stringify({ route }),
+    signal: combined,
   });
 }
 

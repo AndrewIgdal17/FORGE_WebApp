@@ -26,6 +26,7 @@ export interface FormActions {
   resetFieldToDefault: (path: string) => void;
   resetSectionToDefaults: (sectionPath: string) => void;
   loadScenarioChanges: (changes: Record<string, unknown>) => void;
+  applyChanges: (changes: Record<string, unknown>) => void;
   getChanges: () => Record<string, unknown>;
   getProjectFields: () => ProjectFields;
   isReconductoring: () => boolean;
@@ -215,6 +216,18 @@ export const useFormStore = create<FormState & FormActions>((set, get) => ({
       setValueAtPath(data, path, cloneValue(value));
     }
     set({ data });
+  },
+
+  applyChanges: (changes) => {
+    const { data } = get();
+    if (!data) return;
+    const entries = Object.entries(changes);
+    if (entries.length === 0) return;
+    const next = structuredClone(data);
+    for (const [path, value] of entries) {
+      setValueAtPath(next, path, cloneValue(value));
+    }
+    set({ data: next });
   },
 
   getChanges: () => {
