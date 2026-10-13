@@ -38,9 +38,12 @@ router = APIRouter()
 _CALCULATOR_INFO = forge.calculator_info()
 _DEFAULTS_ID = forge.get_defaults_id()
 
+# `route` is a PostGIS geometry. Read it back as GeoJSON, never hex EWKB.
+# Used in SELECT and RETURNING only — never as an INSERT column list.
 _SCENARIO_COLUMNS = (
     "id, user_id, name, source, defaults_id, changes, results, calculator, "
-    "inputs_id, computed_at, calc_error, revision, created_at, updated_at"
+    "inputs_id, computed_at, calc_error, revision, created_at, updated_at, "
+    "ST_AsGeoJSON(route)::jsonb AS route, segments"
 )
 
 _security = HTTPBearer(auto_error=False)
@@ -117,7 +120,8 @@ def _decode_jsonb(value: Any) -> Any:
 
 def _row_to_dict(record) -> dict:
     row = dict(record)
-    for key in ("changes", "results", "calculator"):
+    # asyncpg has no jsonb codec, so route and segments may arrive as text.
+    for key in ("changes", "results", "calculator", "route", "segments"):
         row[key] = _decode_jsonb(row.get(key))
     for key in ("id", "user_id"):
         if isinstance(row.get(key), UUID):
@@ -202,6 +206,16 @@ def _jsonb_param(value: Any) -> str | None:
     return json.dumps(value) if value is not None else None
 
 
+def _geojson_param(value: dict | None) -> str | None:
+    """GeoJSON text for ``ST_GeomFromGeoJSON``. SQL NULL when the route is absent.
+
+    ``json.dumps(None)`` is the string ``"null"``, which PostGIS rejects.
+    A Python ``None`` parameter is SQL NULL, and ``ST_GeomFromGeoJSON(NULL)``
+    stores a null geometry.
+    """
+    return json.dumps(value) if value is not None else None
+
+
 # --- Business logic ------------------------------------------------------------
 
 
@@ -230,10 +244,12 @@ async def create_scenario(user_id: str, payload: ScenarioCreate) -> JSONResponse
             f"""
             insert into public.scenario
                 (user_id, name, source, defaults_id, changes,
-                 results, calculator, inputs_id, computed_at, calc_error)
+                 results, calculator, inputs_id, computed_at, calc_error,
+                 route, segments)
             values
                 ($1, $2, $3, $4, $5::jsonb,
-                 $6::jsonb, $7::jsonb, $8, $9, $10)
+                 $6::jsonb, $7::jsonb, $8, $9, $10,
+                 ST_SetSRID(ST_GeomFromGeoJSON($11::text), 4326), $12::jsonb)
             returning {_SCENARIO_COLUMNS}
             """,
             UUID(user_id),
@@ -246,6 +262,8 @@ async def create_scenario(user_id: str, payload: ScenarioCreate) -> JSONResponse
             calc_fields["inputs_id"],
             calc_fields["computed_at"],
             calc_fields["calc_error"],
+            _geojson_param(payload.route),
+            _jsonb_param(payload.segments),
         )
 
     return JSONResponse(status_code=status.HTTP_201_CREATED, content=_row_to_dict(record))
@@ -310,21 +328,17 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
                 "calc_error": existing["calc_error"],
             }
 
-        record = await conn.fetchrow(
-            f"""
-            update public.scenario
-            set name = $1,
-                defaults_id = $2,
-                changes = $3::jsonb,
-                results = $4::jsonb,
-                calculator = $5::jsonb,
-                inputs_id = $6,
-                computed_at = $7,
-                calc_error = $8,
-                revision = revision + 1
-            where id = $9 and revision = $10
-            returning {_SCENARIO_COLUMNS}
-            """,
+        assignments = [
+            "name = $1",
+            "defaults_id = $2",
+            "changes = $3::jsonb",
+            "results = $4::jsonb",
+            "calculator = $5::jsonb",
+            "inputs_id = $6",
+            "computed_at = $7",
+            "calc_error = $8",
+        ]
+        params: list[Any] = [
             new_name,
             new_defaults_id,
             json.dumps(new_changes),
@@ -333,8 +347,30 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
             calc_fields["inputs_id"],
             calc_fields["computed_at"],
             calc_fields["calc_error"],
-            existing["id"],
-            payload.revision,
+        ]
+        # Only fields the caller sent. A name-only PATCH must not null the route.
+        if "route" in payload.model_fields_set:
+            params.append(_geojson_param(payload.route))
+            assignments.append(
+                f"route = ST_SetSRID(ST_GeomFromGeoJSON(${len(params)}::text), 4326)"
+            )
+        if "segments" in payload.model_fields_set:
+            params.append(_jsonb_param(payload.segments))
+            assignments.append(f"segments = ${len(params)}::jsonb")
+        assignments.append("revision = revision + 1")
+        params.append(existing["id"])
+        id_param = len(params)
+        params.append(payload.revision)
+        revision_param = len(params)
+
+        record = await conn.fetchrow(
+            f"""
+            update public.scenario
+            set {", ".join(assignments)}
+            where id = ${id_param} and revision = ${revision_param}
+            returning {_SCENARIO_COLUMNS}
+            """,
+            *params,
         )
         if record is None:
             return _error(
