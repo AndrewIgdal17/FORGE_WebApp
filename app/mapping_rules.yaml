@@ -1,0 +1,127 @@
+# Mapping rules: GIS intersection results → FORGE calculator input paths.
+# Each rule takes a value from the intersection bag and writes it to a
+# calculator input path. All MVP rules use the "direct" transform (value
+# passes through unchanged as miles).
+
+rules:
+  # Terrain miles (9 categories, from NLCD + 3DEP slope crosswalk)
+  - layer: "terrain/nlcd"
+    key: "forested"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.forested"
+    transform: "direct"
+
+  - layer: "terrain/nlcd"
+    key: "wetland"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.wetland"
+    transform: "direct"
+
+  - layer: "terrain/nlcd"
+    key: "scrubbed_flat"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.scrubbed_flat"
+    transform: "direct"
+
+  - layer: "terrain/nlcd"
+    key: "urban"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.urban"
+    transform: "direct"
+
+  - layer: "terrain/nlcd"
+    key: "farmland"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.farmland"
+    transform: "direct"
+
+  - layer: "terrain/nlcd"
+    key: "desert_barren"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.desert_barren"
+    transform: "direct"
+
+  - layer: "terrain/nlcd"
+    key: "mountain"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.mountain"
+    transform: "direct"
+
+  - layer: "terrain/nlcd"
+    key: "rolling_hills"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.rolling_hills"
+    transform: "direct"
+
+  - layer: "terrain/nlcd"
+    key: "subsea"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.subsea"
+    transform: "direct"
+
+  # ROW zone miles (15 zones, from county → BLM zone crosswalk)
+  - layer: "row/blm"
+    key: "zone_1"
+    forge_path: "11_project_row_details.right_of_way.zone_1.miles"
+    transform: "direct"
+
+  - layer: "row/blm"
+    key: "zone_2"
+    forge_path: "11_project_row_details.right_of_way.zone_2.miles"
+    transform: "direct"
+
+  - layer: "row/blm"
+    key: "zone_3"
+    forge_path: "11_project_row_details.right_of_way.zone_3.miles"
+    transform: "direct"
+
+  - layer: "row/blm"
+    key: "zone_4"
+    forge_path: "11_project_row_details.right_of_way.zone_4.miles"
+    transform: "direct"
+
+  - layer: "row/blm"
+    key: "zone_5"
+    forge_path: "11_project_row_details.right_of_way.zone_5.miles"
+    transform: "direct"
+
+  - layer: "row/blm"
+    key: "zone_6"
+    forge_path: "11_project_row_details.right_of_way.zone_6.miles"
+    transform: "direct"
+
+  - layer: "row/blm"
+    key: "zone_7"
+    forge_path: "11_project_row_details.right_of_way.zone_7.miles"
+    transform: "direct"
+
+  - layer: "row/blm"
+    key: "zone_8"
+    forge_path: "11_project_row_details.right_of_way.zone_8.miles"
+    transform: "direct"
+
+  - layer: "row/blm"
+    key: "zone_9"
+    forge_path: "11_project_row_details.right_of_way.zone_9.miles"
+    transform: "direct"
+
+  - layer: "row/blm"
+    key: "zone_10"
+    forge_path: "11_project_row_details.right_of_way.zone_10.miles"
+    transform: "direct"
+
+  - layer: "row/blm"
+    key: "zone_11"
+    forge_path: "11_project_row_details.right_of_way.zone_11.miles"
+    transform: "direct"
+
+  - layer: "row/blm"
+    key: "zone_12"
+    forge_path: "11_project_row_details.right_of_way.zone_12.miles"
+    transform: "direct"
+
+  - layer: "row/blm"
+    key: "zone_13"
+    forge_path: "11_project_row_details.right_of_way.zone_13.miles"
+    transform: "direct"
+
+  - layer: "row/blm"
+    key: "zone_14"
+    forge_path: "11_project_row_details.right_of_way.zone_14.miles"
+    transform: "direct"
+
+  - layer: "row/blm"
+    key: "zone_15"
+    forge_path: "11_project_row_details.right_of_way.zone_15.miles"
+    transform: "direct"

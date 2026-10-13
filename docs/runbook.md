@@ -64,6 +64,7 @@ Secrets live on turgon only — never in the vault or git.
 | `FORGE_DATABASE_URL` | `/srv/forge/.env` → container env | `postgresql://forge_api:<password>@supabase-db:5432/postgres` — direct Postgres via Docker network (not through pooler). |
 | `PORT` | `forge-app` container env | `8000` (container-internal; host maps 3000→8000). |
 | `FORGE_CALC_WORKERS` | `forge-app` container env | `4` — calculator thread pool size. |
+| `FORGE_NLCD_PATH` | `forge-app` container env | NLCD land-cover COG. Default `/gis-data/nlcd/nlcd_2021_land_cover_cog.tif`. `deploy.sh` bind-mounts host `/srv/forge/gis-data` at `/gis-data` read-only. |
 | `VITE_SUPABASE_URL` | Build arg (baked into React) | `https://api.forge-calc.com` — browser-side Supabase client URL. |
 | `VITE_SUPABASE_ANON_KEY` | Build arg (baked into React) | Publishable anon key from `/opt/supabase/docker/.env`. |
 | Supabase stack secrets | `/opt/supabase/docker/.env` | `POSTGRES_PASSWORD`, `JWT_SECRET`, `JWT_KEYS`, `ANON_KEY`, `SERVICE_ROLE_KEY`, `DASHBOARD_PASSWORD`. |
