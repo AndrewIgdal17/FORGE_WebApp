@@ -38,6 +38,8 @@ class ScenarioCreate(BaseModel):
     source: str
     defaults_id: str
     changes: dict[str, Any]
+    route: dict[str, Any] | None = None  # GeoJSON MultiLineString
+    segments: list[dict[str, Any]] | None = None
 
 
 class ScenarioUpdate(BaseModel):
@@ -45,3 +47,5 @@ class ScenarioUpdate(BaseModel):
     name: str | None = None
     defaults_id: str | None = None
     changes: dict[str, Any] | None = None
+    route: dict[str, Any] | None = None
+    segments: list[dict[str, Any]] | None = None
