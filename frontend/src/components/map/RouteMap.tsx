@@ -25,7 +25,7 @@ export interface MapOverlay {
     | 'ref.corridors_hifld'
     | 'ref.subregions_egrid'
     | 'ref.highways_nhs'
-    | 'ref.rail_tiger';
+    | 'ref.rail_narn';
   label: string;
   swatchClass: string;
   kind: 'fill' | 'line';
@@ -73,8 +73,8 @@ export const PREVIEW_OVERLAYS: readonly MapOverlay[] = [
     color: '#3b82f6',
   },
   {
-    id: 'ref.rail_tiger',
-    label: 'Rail Network',
+    id: 'ref.rail_narn',
+    label: 'Rail Network (FRA)',
     swatchClass: 'bg-amber-700',
     kind: 'line',
     color: '#b45309',

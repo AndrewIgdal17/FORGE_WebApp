@@ -6,13 +6,26 @@ import type {
   MapLayerMouseEvent,
   MapMouseEvent,
 } from 'maplibre-gl';
-import { MAP_OVERLAYS } from '@/components/map/RouteMap';
+import { MAP_OVERLAYS, PREVIEW_OVERLAYS } from '@/components/map/RouteMap';
 import { VOLTAGE_STYLES } from '@/data/color-maps';
 
-/** Analysis layers only. Preview overlays stay out of hover and click. */
-const INTERACTIVE_LAYER_IDS: readonly string[] = MAP_OVERLAYS
-  .filter((overlay) => overlay.id !== 'ref.counties_tiger')
-  .map((overlay) => overlay.id);
+/** Layers with hover tooltip + click inspect. Counties excluded (reference only). */
+const TOOLTIP_LAYER_IDS: readonly string[] = [
+  ...MAP_OVERLAYS.filter((o) => o.id !== 'ref.counties_tiger').map((o) => o.id),
+  ...PREVIEW_OVERLAYS.map((o) => o.id),
+];
+
+/** Layers with click-to-inspect popups. Grid regions + corridors. */
+const CLICK_INSPECT_LAYER_IDS = new Set<string>([
+  'ref.corridors_hifld',
+  'ref.subregions_egrid',
+]);
+
+/** Layers with hover highlight (feature-state). Fill layers only. */
+const HOVER_HIGHLIGHT_LAYER_IDS = new Set<string>([
+  'ref.counties_tiger',
+  'ref.subregions_egrid',
+]);
 const POPUP_FONT = 'system-ui, sans-serif';
 
 interface HoverTarget {
@@ -64,13 +77,33 @@ function corridorTooltip(properties: FeatureProps): string {
   return parts.join(' · ');
 }
 
+function highwayTooltip(properties: FeatureProps): string {
+  const sign = prop(properties, 'sign1') || prop(properties, 'signt1');
+  const name = prop(properties, 'lname');
+  const fclass = prop(properties, 'fclass');
+  const label = sign || name || 'Highway';
+  const classLabel = fclass === '1' ? 'Interstate' : fclass === '2' ? 'Freeway' : '';
+  return classLabel ? `${label} · ${classLabel}` : label;
+}
+
+function railTooltip(properties: FeatureProps): string {
+  const owner = prop(properties, 'rrowner1') || prop(properties, 'RROWNER1');
+  const tracks = prop(properties, 'tracks') || prop(properties, 'TRACKS');
+  const parts: string[] = [];
+  if (owner) parts.push(owner);
+  if (tracks && tracks !== '0') parts.push(`${tracks} track${tracks === '1' ? '' : 's'}`);
+  return parts.length > 0 ? parts.join(' · ') : 'Rail';
+}
+
 function tooltipText(feature: MapGeoJSONFeature): string {
   switch (feature.layer.id) {
     case 'ref.corridors_hifld':
       return corridorTooltip(feature.properties);
+    case 'ref.highways_nhs':
+      return highwayTooltip(feature.properties);
+    case 'ref.rail_narn':
+      return railTooltip(feature.properties);
     default:
-      // Grid regions: no hover tooltip (click-to-inspect only).
-      // The hover highlight still shows via setHoverState.
       return '';
   }
 }
@@ -133,12 +166,12 @@ function styleReady(map: MapLibreMap): boolean {
 
 function topFeature(map: MapLibreMap, point: MapMouseEvent['point']): MapGeoJSONFeature | null {
   if (!overlaysReady(map)) return null;
-  const hits = map.queryRenderedFeatures(point, { layers: [...INTERACTIVE_LAYER_IDS] });
+  const hits = map.queryRenderedFeatures(point, { layers: [...TOOLTIP_LAYER_IDS] });
   return hits[0] ?? null;
 }
 
 function overlaysReady(map: MapLibreMap): boolean {
-  return styleReady(map) && INTERACTIVE_LAYER_IDS.every((id) => Boolean(map.getLayer(id)));
+  return styleReady(map) && TOOLTIP_LAYER_IDS.some((id) => Boolean(map.getLayer(id)));
 }
 
 export function useMapInteraction(map: MapLibreMap | null, isDrawing: boolean): void {
@@ -217,7 +250,11 @@ export function useMapInteraction(map: MapLibreMap | null, isDrawing: boolean): 
     };
 
     const presentHover = (feature: MapGeoJSONFeature): void => {
-      setHoverState(feature);
+      if (HOVER_HIGHLIGHT_LAYER_IDS.has(feature.layer.id)) {
+        setHoverState(feature);
+      } else {
+        clearHoverState();
+      }
       showTooltip(feature);
     };
 
@@ -287,19 +324,25 @@ export function useMapInteraction(map: MapLibreMap | null, isDrawing: boolean): 
 
     const bind = (): void => {
       if (detach || !overlaysReady(map)) return;
-      for (const layerId of INTERACTIVE_LAYER_IDS) {
+      for (const layerId of TOOLTIP_LAYER_IDS) {
+        if (!map.getLayer(layerId)) continue;
         map.on('mouseenter', layerId, onEnter);
         map.on('mousemove', layerId, onMove);
         map.on('mouseleave', layerId, onLeave);
-        map.on('click', layerId, onFeatureClick);
+        if (CLICK_INSPECT_LAYER_IDS.has(layerId)) {
+          map.on('click', layerId, onFeatureClick);
+        }
       }
       map.on('click', onBackgroundClick);
       detach = () => {
-        for (const layerId of INTERACTIVE_LAYER_IDS) {
+        for (const layerId of TOOLTIP_LAYER_IDS) {
+          if (!map.getLayer(layerId)) continue;
           map.off('mouseenter', layerId, onEnter);
           map.off('mousemove', layerId, onMove);
           map.off('mouseleave', layerId, onLeave);
-          map.off('click', layerId, onFeatureClick);
+          if (CLICK_INSPECT_LAYER_IDS.has(layerId)) {
+            map.off('click', layerId, onFeatureClick);
+          }
         }
         map.off('click', onBackgroundClick);
       };
