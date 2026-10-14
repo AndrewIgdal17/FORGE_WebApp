@@ -2,8 +2,8 @@
 
 The browser sends a GeoJSON MultiLineString in EPSG:4326. PostGIS measures
 the line and the county intersections in EPSG:5070 (meters). NLCD land-cover
-samples classify terrain. Mountain and rolling-hills stay at zero until 3DEP
-slope sampling exists; every other unclassified pixel is scrubbed flat.
+samples classify terrain. 3DEP slope sampling classifies unresolved pixels as
+mountain (>8%), rolling hills (2–8%), or scrubbed flat (<2%).
 """
 
 from __future__ import annotations
@@ -41,6 +41,7 @@ router = APIRouter()
 METERS_PER_MILE = 1609.344
 SAMPLE_SPACING_M = 30.0
 DEFAULT_NLCD_PATH = "/gis-data/nlcd/nlcd_2021_land_cover_cog.tif"
+DEFAULT_SLOPE_PATH = "/gis-data/slope/slope_conus_cog.tif"
 TERRAIN_LAYER = "terrain/nlcd"
 ROW_LAYER = "row/blm"
 TERRAIN_CATEGORIES = (
@@ -73,6 +74,9 @@ _NLCD_TO_TERRAIN = {
 _rules_cache: list[dict[str, Any]] | None = None
 _nlcd_dataset: Any = None
 _nlcd_lock = threading.Lock()
+_slope_dataset: Any = None
+_slope_lock = threading.Lock()
+_slope_unavailable = False
 _bearer = HTTPBearer(auto_error=False)
 
 # Length is ST_Length of the EPSG:5070 geometry (meters). Casting that
@@ -177,8 +181,8 @@ def load_mapping_rules() -> list[dict[str, Any]]:
 def classify_nlcd(code: int) -> str:
     """Map one NLCD class to a terrain category.
 
-    Slope categories (mountain, rolling hills) and subsea are not assigned
-    here. 3DEP sampling is deferred, and subsea comes from construction type.
+    Unlisted classes stay scrubbed_flat. ``sample_terrain`` may reclassify
+    those points from the slope COG. Subsea comes from construction type.
     """
     return _NLCD_TO_TERRAIN.get(int(code), "scrubbed_flat")
 
@@ -227,6 +231,10 @@ def nlcd_path() -> str:
     return os.environ.get("FORGE_NLCD_PATH", DEFAULT_NLCD_PATH)
 
 
+def slope_path() -> str:
+    return os.environ.get("FORGE_SLOPE_PATH", DEFAULT_SLOPE_PATH)
+
+
 def _pixel_code(sample: Any) -> int | None:
     value = sample[0]
     mask = getattr(sample, "mask", None)
@@ -234,6 +242,23 @@ def _pixel_code(sample: Any) -> int | None:
         return None
     try:
         return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _slope_value(sample: Any) -> float | None:
+    """Extract percent slope from a rasterio sample. Returns None on NoData.
+
+    The slope COG stores NoData as -9999. Any negative value is missing slope,
+    not a real grade. A pixel of 0% is flat and must not be treated as NoData.
+    """
+    value = sample[0]
+    mask = getattr(sample, "mask", None)
+    if mask is not None and bool(mask[0]):
+        return None
+    try:
+        val = float(value)
+        return val if val >= 0 else None
     except (TypeError, ValueError):
         return None
 
@@ -254,17 +279,66 @@ def _open_nlcd() -> Any:
     return dataset
 
 
+def _open_slope() -> Any | None:
+    """Open the slope COG once. Returns None if unavailable.
+
+    Caller must hold ``_slope_lock``. A missing file is logged once; later
+    calls skip the warning and leave scrubbed_flat unchanged.
+    """
+    global _slope_dataset, _slope_unavailable
+    if rasterio is None or _slope_unavailable:
+        return None
+    if _slope_dataset is not None:
+        return _slope_dataset
+    path = slope_path()
+    if not os.path.isfile(path):
+        logger.warning(
+            "Slope COG not found at %s; mountain/rolling_hills will be 0", path
+        )
+        _slope_unavailable = True
+        return None
+    dataset = rasterio.open(path)
+    logger.info("Opened slope raster %s crs=%s", path, dataset.crs)
+    _slope_dataset = dataset
+    return dataset
+
+
 def sample_terrain(points: list[tuple[float, float, float]]) -> list[tuple[str, float]]:
-    """Classify NLCD at EPSG:5070 sample points. ``points`` are (x, y, spacing_m)."""
+    """Classify NLCD + slope at EPSG:5070 sample points.
+
+    ``points`` are (x, y, spacing_m). Slope overrides only ``scrubbed_flat``:
+    above 8% is mountain, 2–8% is rolling hills, below 2% stays scrubbed flat.
+    """
     if not points:
         return []
+    coords = [(x, y) for x, y, _spacing in points]
+
     with _nlcd_lock:
         dataset = _open_nlcd()
-        samples = list(dataset.sample([(x, y) for x, y, _spacing in points]))
+        nlcd_samples = list(dataset.sample(coords))
+
+    with _slope_lock:
+        slope_ds = _open_slope()
+        slope_samples = (
+            list(slope_ds.sample(coords)) if slope_ds else [None] * len(coords)
+        )
+
     classified: list[tuple[str, float]] = []
-    for sample, (_x, _y, spacing_m) in zip(samples, points, strict=True):
-        code = _pixel_code(sample)
+    for nlcd_sample, slope_sample, (_x, _y, spacing_m) in zip(
+        nlcd_samples, slope_samples, points, strict=True
+    ):
+        code = _pixel_code(nlcd_sample)
         category = "scrubbed_flat" if code is None else classify_nlcd(code)
+
+        # Slope only governs when NLCD doesn't assign a specific category.
+        if category == "scrubbed_flat" and slope_sample is not None:
+            slope_val = _slope_value(slope_sample)
+            if slope_val is not None:
+                if slope_val > 8.0:
+                    category = "mountain"
+                elif slope_val >= 2.0:
+                    category = "rolling_hills"
+
         classified.append((category, float(spacing_m)))
     return classified
 
@@ -289,7 +363,7 @@ async def analyze_route(
     payload: AnalyzeRequest,
     user: dict = Depends(_require_auth),
 ) -> JSONResponse:
-    """Intersect a route with counties and NLCD, then map miles to input paths."""
+    """Intersect a route with counties, NLCD, and slope, then map miles to input paths."""
     user_id = user.get("sub")
     if user_id:
         request.state.user_id = user_id
