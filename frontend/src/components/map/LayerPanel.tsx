@@ -65,9 +65,9 @@ function StackedDots({ colors }: { colors: readonly string[] }): ReactElement {
   );
 }
 
-const COMING_SOON: readonly { label: string; detail: string }[] = [
-  { label: 'Wildfire (FSim)', detail: 'Raster · Integration planned' },
-  { label: 'Wetlands (NWI)', detail: '31 GB downloaded · Loading pipeline designed' },
+const COMING_SOON: readonly string[] = [
+  'Wildfire (FSim)',
+  'Wetlands (NWI)',
 ];
 
 function LayerSwatch({ overlay }: { overlay: MapOverlay }): ReactElement {
@@ -304,11 +304,8 @@ export function LayerPanel(): ReactElement {
         Coming Soon
       </h3>
       <ul className="grid gap-2">
-        {COMING_SOON.map((item) => (
-          <li key={item.label} className="px-1">
-            <div className="text-sm text-slate-400">{item.label}</div>
-            <div className="text-[11px] leading-snug text-slate-400">{item.detail}</div>
-          </li>
+        {COMING_SOON.map((label) => (
+          <li key={label} className="px-1 text-sm text-slate-400">{label}</li>
         ))}
       </ul>
     </section>
