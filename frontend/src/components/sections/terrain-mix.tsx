@@ -65,6 +65,7 @@ function formatFixed(value: number): string {
 
 interface TerrainRowProps {
   terrain: TerrainId;
+  readOnly?: boolean;
 }
 
 function storedOrDefault(state: {
@@ -77,7 +78,7 @@ function storedOrDefault(state: {
   return getValueAtPath(state.defaults, path);
 }
 
-function TerrainRow({ terrain }: TerrainRowProps): ReactElement {
+function TerrainRow({ terrain, readOnly = false }: TerrainRowProps): ReactElement {
   const label = TERRAIN_LABELS[terrain];
   const milesPath = terrainMilesPath(terrain);
   const multPath = multiplierPath(terrain);
@@ -97,6 +98,7 @@ function TerrainRow({ terrain }: TerrainRowProps): ReactElement {
           path={milesPath}
           label={`${label} miles`}
           min={0}
+          readOnly={readOnly}
         />
       </td>
       <td className={`px-2 py-1.5 ${cellFieldClass}`}>
@@ -114,7 +116,7 @@ function TerrainRow({ terrain }: TerrainRowProps): ReactElement {
   );
 }
 
-export function TerrainMix(): ReactElement {
+export function TerrainMix({ milesFromRoute = false }: { milesFromRoute?: boolean }): ReactElement {
   const constructionType = useFormStore((state) =>
     state.getFieldValue(CONSTRUCTION_TYPE_PATH),
   );
@@ -154,7 +156,11 @@ export function TerrainMix(): ReactElement {
           </thead>
           <tbody>
             {terrains.map((terrain) => (
-              <TerrainRow key={terrain} terrain={terrain} />
+              <TerrainRow
+                key={terrain}
+                terrain={terrain}
+                readOnly={milesFromRoute && totalMiles > 0}
+              />
             ))}
           </tbody>
           <tfoot>

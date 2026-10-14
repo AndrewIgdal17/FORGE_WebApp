@@ -15,24 +15,43 @@ import { useFormStore } from '@/stores/form-store';
 export interface MapPanelProps {
   createMode?: boolean;
   existingRoute?: MultiLineString | null;
+  onRouteChange?: (route: MultiLineString | null, segments: unknown[] | null) => void;
 }
 
-export function MapPanel({ createMode = true, existingRoute = null }: MapPanelProps): ReactElement {
+function segmentsFor(
+  route: MultiLineString,
+  intersections: AnalyzeResponse['intersections'],
+): unknown[] {
+  const coordinates = route.coordinates[0] ?? [];
+  return [
+    {
+      id: 0,
+      geometry: { type: 'LineString', coordinates },
+      intersections,
+    },
+  ];
+}
+
+export function MapPanel({
+  createMode = true,
+  existingRoute = null,
+  onRouteChange,
+}: MapPanelProps): ReactElement {
   const [map, setMap] = useState<MapLibreMap | null>(null);
   const [clearedExisting, setClearedExisting] = useState(false);
   const [finishedRoute, setFinishedRoute] = useState<MultiLineString | null>(null);
   const [analyzed, setAnalyzed] = useState<AnalyzeResponse | null>(null);
-  const seededMap = useRef<MapLibreMap | null>(null);
   const wasDrawingRef = useRef(false);
   const requestId = useRef(0);
+  const onRouteChangeRef = useRef(onRouteChange);
+  onRouteChangeRef.current = onRouteChange;
 
   const { mode, setMode, routeGeoJSON, undo, redo, reset, isDrawing } = useRouteDraw(map);
   const { analyze, loading, error } = useRouteAnalyze();
 
   useLayoutEffect(() => {
-    if (!map || seededMap.current === map) return;
-    seededMap.current = map;
-    if (!createMode) setMode('select');
+    if (!map) return;
+    setMode(createMode ? 'linestring' : 'select');
   }, [map, createMode, setMode]);
 
   useEffect(() => {
@@ -66,6 +85,7 @@ export function MapPanel({ createMode = true, existingRoute = null }: MapPanelPr
     void analyze(finishedRoute).then((response) => {
       if (cancelled || id !== requestId.current || !response) return;
       setAnalyzed(response);
+      onRouteChangeRef.current?.(finishedRoute, segmentsFor(finishedRoute, response.intersections));
       useFormStore.getState().applyChanges(response.changes);
     });
     return () => {
@@ -81,6 +101,7 @@ export function MapPanel({ createMode = true, existingRoute = null }: MapPanelPr
     setFinishedRoute(null);
     setAnalyzed(null);
     setClearedExisting(true);
+    onRouteChangeRef.current?.(null, null);
     reset();
   }
 

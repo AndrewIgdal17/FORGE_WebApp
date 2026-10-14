@@ -25,6 +25,7 @@ import { WildfireRisk } from '@/components/sections/wildfire-risk';
 
 export interface SectionDispatcherProps {
   subItemId: string;
+  milesFromRoute?: boolean;
 }
 
 /**
@@ -33,7 +34,10 @@ export interface SectionDispatcherProps {
  * section: the workspace mounts `MapPanel` for that id. Maintenance panels
  * are separate sections that the sidebar does not list as their own sub-items.
  */
-export function SectionDispatcher({ subItemId }: SectionDispatcherProps): ReactElement {
+export function SectionDispatcher({
+  subItemId,
+  milesFromRoute = false,
+}: SectionDispatcherProps): ReactElement {
   switch (subItemId) {
     case 'technology':
       return <TechnologySection />;
@@ -44,9 +48,9 @@ export function SectionDispatcher({ subItemId }: SectionDispatcherProps): ReactE
     case 'converter-details':
       return <ConverterDetails />;
     case 'terrain-mix':
-      return <TerrainMix />;
+      return <TerrainMix milesFromRoute={milesFromRoute} />;
     case 'rights-of-way':
-      return <RightsOfWay />;
+      return <RightsOfWay milesFromRoute={milesFromRoute} />;
     case 'economic-details':
       return <EconomicDetails />;
     case 'system-constraints':

@@ -14,6 +14,9 @@ export interface WorkspaceHeaderProps {
   onRename: (name: string) => void;
   onExportForge: () => void;
   onExportCsv: () => void;
+  createMode?: boolean;
+  canCreate?: boolean;
+  onCreate?: () => void;
 }
 
 export function WorkspaceHeader({
@@ -25,6 +28,9 @@ export function WorkspaceHeader({
   onRename,
   onExportForge,
   onExportCsv,
+  createMode = false,
+  canCreate = false,
+  onCreate,
 }: WorkspaceHeaderProps): ReactElement {
   const hasScenario = scenarioName.trim().length > 0;
   const [editing, setEditing] = useState(false);
@@ -52,12 +58,16 @@ export function WorkspaceHeader({
     function onKeyDown(event: globalThis.KeyboardEvent): void {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
+        if (createMode) {
+          if (canCreate) onCreate?.();
+          return;
+        }
         if (hasScenario) onSave();
       }
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [hasScenario, onSave]);
+  }, [canCreate, createMode, hasScenario, onCreate, onSave]);
 
   function commitRename(value: string): void {
     setEditing(false);
@@ -107,11 +117,13 @@ export function WorkspaceHeader({
             type="button"
             className={cn(
               'truncate text-left text-sm font-semibold text-slate-900',
-              hasScenario && 'rounded-sm border-b border-dashed border-slate-300 hover:border-slate-500',
+              hasScenario &&
+                !createMode &&
+                'rounded-sm border-b border-dashed border-slate-300 hover:border-slate-500',
             )}
             disabled={!hasScenario}
             onClick={() => {
-              if (!hasScenario) return;
+              if (!hasScenario || createMode) return;
               setMenuOpen(false);
               setEditing(true);
             }}
@@ -134,38 +146,46 @@ export function WorkspaceHeader({
       <BcrScoreboard results={results} />
 
       <div className="relative flex" ref={menuRoot}>
-        <Button
-          type="button"
-          size="sm"
-          className="rounded-r-none"
-          disabled={!hasScenario}
-          onClick={onSave}
-        >
-          {unsavedChanges ? 'Save' : 'Saved'}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="rounded-l-none px-2"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          aria-label="Save and export"
-          disabled={!hasScenario}
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          ▾
-        </Button>
-        {menuOpen ? (
-          <div
-            role="menu"
-            className="absolute right-0 top-full z-20 mt-1 w-44 rounded-md border border-slate-200 bg-white py-1 shadow-md"
-          >
-            <MenuItem label="Save to Memory" onClick={() => closeAnd(onSave)} />
-            <MenuItem label="Export .forge" onClick={() => closeAnd(onExportForge)} />
-            <MenuItem label="Export .csv" onClick={() => closeAnd(onExportCsv)} />
-          </div>
-        ) : null}
+        {createMode ? (
+          <Button type="button" size="sm" disabled={!canCreate} onClick={() => onCreate?.()}>
+            Create
+          </Button>
+        ) : (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              className="rounded-r-none"
+              disabled={!hasScenario}
+              onClick={onSave}
+            >
+              {unsavedChanges ? 'Save' : 'Saved'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="rounded-l-none px-2"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label="Save and export"
+              disabled={!hasScenario}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              ▾
+            </Button>
+            {menuOpen ? (
+              <div
+                role="menu"
+                className="absolute right-0 top-full z-20 mt-1 w-44 rounded-md border border-slate-200 bg-white py-1 shadow-md"
+              >
+                <MenuItem label="Save to Memory" onClick={() => closeAnd(onSave)} />
+                <MenuItem label="Export .forge" onClick={() => closeAnd(onExportForge)} />
+                <MenuItem label="Export .csv" onClick={() => closeAnd(onExportCsv)} />
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
     </header>
   );

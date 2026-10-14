@@ -112,6 +112,8 @@ export interface ScenarioCreate {
   source: string;
   defaults_id: string;
   changes: Record<string, unknown>;
+  route?: Record<string, unknown> | null;
+  segments?: unknown[] | null;
 }
 
 export interface ScenarioUpdate {
@@ -119,6 +121,8 @@ export interface ScenarioUpdate {
   name?: string;
   defaults_id?: string;
   changes?: Record<string, unknown>;
+  route?: Record<string, unknown> | null;
+  segments?: unknown[] | null;
 }
 
 export interface ScenarioResponse {
@@ -136,6 +140,8 @@ export interface ScenarioResponse {
   revision: number;
   created_at: string;
   updated_at: string;
+  route: Record<string, unknown> | null;
+  segments: unknown[] | null;
 }
 
 export class ApiError extends Error {

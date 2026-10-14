@@ -93,6 +93,7 @@ interface ZoneRowProps {
   rowWidthFeet: number | null;
   showAcquisition: boolean;
   canRemove: boolean;
+  milesReadOnly?: boolean;
   onRemove: (zone: number) => void;
 }
 
@@ -101,6 +102,7 @@ function ZoneRow({
   rowWidthFeet,
   showAcquisition,
   canRemove,
+  milesReadOnly = false,
   onRemove,
 }: ZoneRowProps): ReactElement {
   const milesPath = zonePath(zone, 'miles');
@@ -116,7 +118,12 @@ function ZoneRow({
         {zone}
       </th>
       <td className={`px-2 py-1.5 ${cellFieldClass}`}>
-        <NumberField path={milesPath} label={`Zone ${zone} miles`} min={0} />
+        <NumberField
+          path={milesPath}
+          label={`Zone ${zone} miles`}
+          min={0}
+          readOnly={milesReadOnly}
+        />
       </td>
       <td className="px-3 py-2 text-right text-sm tabular-nums text-slate-700">{acresLabel}</td>
       <td className={`px-2 py-1.5 ${cellFieldClass}`}>
@@ -154,7 +161,11 @@ function ZoneRow({
   );
 }
 
-export function RightsOfWay(): ReactElement {
+export function RightsOfWay({
+  milesFromRoute = false,
+}: {
+  milesFromRoute?: boolean;
+}): ReactElement {
   const data = useFormStore((state) => state.data);
   const setFieldValue = useFormStore((state) => state.setFieldValue);
   const lookups = useFormStore((state) => state.lookups);
@@ -287,6 +298,7 @@ export function RightsOfWay(): ReactElement {
                 rowWidthFeet={rowWidthFeet}
                 showAcquisition={showAcquisition}
                 canRemove={visibleZones.length > 1}
+                milesReadOnly={milesFromRoute && terrainMilesTotal > 0}
                 onRemove={removeZone}
               />
             ))}

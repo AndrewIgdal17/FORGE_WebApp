@@ -10,6 +10,7 @@ import type { ScenarioResponse } from '@/lib/api';
 import { acceptedForge, diffChanges, forgeDocument } from '@/lib/changes';
 import { csvEscape, parseCsvLine } from '@/lib/csv';
 import { flattenObject, getValueAtPath, setValueAtPath } from '@/lib/path';
+import { routeFromSegments } from '@/lib/route-geometry';
 import { supabase } from '@/lib/supabase';
 
 export interface Scenario {
@@ -28,6 +29,13 @@ export interface Scenario {
   updated_at: string;
   user_id: string;
   ownerUsername?: string;
+  route: Record<string, unknown> | null;
+  segments: unknown[] | null;
+}
+
+export interface ScenarioGeometry {
+  route: Record<string, unknown> | null;
+  segments: unknown[] | null;
 }
 
 export interface ScenarioDraft {
@@ -49,11 +57,14 @@ interface ScenarioStore {
     name: string,
     source: string,
     changes: Record<string, unknown>,
+    route?: Record<string, unknown> | null,
+    segments?: unknown[] | null,
   ) => Promise<Scenario>;
   saveScenario: (
     id: string,
     changes: Record<string, unknown>,
     revision: number,
+    geometry?: ScenarioGeometry,
   ) => Promise<Scenario>;
   renameScenario: (
     id: string,
@@ -133,6 +144,33 @@ function asRecordOrNull(value: unknown): Record<string, unknown> | null {
   return isRecord(value) ? value : null;
 }
 
+/** PostGIS `select('*')` returns geometry as a hex EWKB string, not GeoJSON. */
+function asRoute(value: unknown): Record<string, unknown> | null {
+  if (typeof value === 'string' || !isRecord(value)) return null;
+  return value;
+}
+
+function asSegments(value: unknown): unknown[] | null {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || value.length === 0) return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function routePayload(
+  route: Record<string, unknown> | null,
+  segments: unknown[] | null,
+): Record<string, unknown> | null {
+  if (route) return deepClone(route);
+  const rebuilt = routeFromSegments(segments);
+  if (!rebuilt) return null;
+  return { type: rebuilt.type, coordinates: rebuilt.coordinates };
+}
+
 function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -154,6 +192,8 @@ function fromResponse(row: ScenarioResponse, ownerUsername?: string): Scenario {
     updated_at: row.updated_at,
     user_id: row.user_id,
     ownerUsername,
+    route: asRoute(row.route),
+    segments: asSegments(row.segments),
   };
 }
 
@@ -178,6 +218,8 @@ function rowToScenario(
     updated_at: typeof row.updated_at === 'string' ? row.updated_at : '',
     user_id: userId,
     ownerUsername: usernames.get(userId),
+    route: asRoute(row.route),
+    segments: asSegments(row.segments),
   };
 }
 
@@ -600,13 +642,15 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
     });
   },
 
-  createScenario: async (name, source, changes) => {
+  createScenario: async (name, source, changes, route, segments) => {
     const defaults = await getDefaults();
     const row = await createScenarioApi({
       name,
       source,
       defaults_id: defaults.calculator.defaults_id,
       changes,
+      ...(route !== undefined ? { route } : {}),
+      ...(segments !== undefined ? { segments } : {}),
     });
     const ownerUsername = get().scenarios.find(
       (scenario) => scenario.user_id === row.user_id,
@@ -616,13 +660,16 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
     return scenario;
   },
 
-  saveScenario: async (id, changes, revision) => {
+  saveScenario: async (id, changes, revision, geometry) => {
     const current = get().scenarios.find((scenario) => scenario.id === id);
     const row = await updateScenarioApi(id, {
       revision,
       changes,
       ...(current
         ? { name: current.name, defaults_id: current.defaults_id }
+        : {}),
+      ...(geometry
+        ? { route: geometry.route, segments: geometry.segments }
         : {}),
     });
     const scenario = fromResponse(row, current?.ownerUsername);
@@ -649,7 +696,13 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
       `${source.name} (copy)`,
       get().scenarios.map((scenario) => scenario.name),
     );
-    return get().createScenario(name, 'manual', deepClone(source.changes));
+    return get().createScenario(
+      name,
+      'manual',
+      deepClone(source.changes),
+      routePayload(source.route, source.segments),
+      source.segments == null ? null : deepClone(source.segments),
+    );
   },
 
   deleteScenario: async (id) => {

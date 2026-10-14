@@ -3,11 +3,9 @@ import type { ChangeEvent, ReactElement } from 'react';
 import { useNavigate } from 'react-router';
 import { AuthGuard } from '@/components/auth-guard';
 import { AppNav } from '@/components/layout/app-nav';
-import { ScenarioWizard } from '@/components/scenarios/scenario-wizard';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import { getDefaults } from '@/lib/api';
-import { diffChanges } from '@/lib/changes';
 import {
   importCsvFile,
   importForgeFile,
@@ -29,7 +27,6 @@ export default function HomePage(): ReactElement {
   const duplicateScenario = useScenarioStore((state) => state.duplicateScenario);
   const setActiveScenario = useScenarioStore((state) => state.setActiveScenario);
 
-  const [wizardOpen, setWizardOpen] = useState(false);
   const [defaults, setDefaults] = useState<Record<string, unknown> | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -53,27 +50,6 @@ export default function HomePage(): ReactElement {
       cancelled = true;
     };
   }, [loadScenarios]);
-
-  async function handleWizardComplete(
-    name: string,
-    fullInputs: Record<string, unknown>,
-  ): Promise<void> {
-    if (!defaults) {
-      toast.error('Reference data is not loaded yet. Please wait a moment and try again.');
-      return;
-    }
-    setBusy(true);
-    try {
-      const changes = diffChanges(defaults, fullInputs);
-      const scenario = await createScenario(name, 'wizard', changes);
-      setActiveScenario(scenario.id);
-      navigate('/app/workspace');
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function handleFileSelected(event: ChangeEvent<HTMLInputElement>): Promise<void> {
     const input = event.currentTarget;
@@ -139,8 +115,8 @@ export default function HomePage(): ReactElement {
             <Button
               type="button"
               size="lg"
-              disabled={defaults === null || busy}
-              onClick={() => setWizardOpen(true)}
+              disabled={busy}
+              onClick={() => navigate('/app/workspace?new=1')}
               className="h-12 bg-forge-primary text-base font-semibold text-white shadow-md hover:bg-forge-primary-hover"
             >
               + New Scenario
@@ -202,14 +178,6 @@ export default function HomePage(): ReactElement {
           aria-label="Load scenario from file"
           onChange={(event) => {
             void handleFileSelected(event);
-          }}
-        />
-        <ScenarioWizard
-          open={wizardOpen}
-          onOpenChange={setWizardOpen}
-          defaultsSnapshot={defaults}
-          onComplete={(name, fullInputs) => {
-            void handleWizardComplete(name, fullInputs);
           }}
         />
       </div>

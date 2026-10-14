@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
+import type { MultiLineString } from 'geojson';
 import { toast } from 'sonner';
 import { AuthGuard } from '@/components/auth-guard';
 import { AppNav } from '@/components/layout/app-nav';
@@ -21,9 +22,16 @@ import { ApiError, calculate } from '@/lib/api';
 import { diffChanges } from '@/lib/changes';
 import { debounce } from '@/lib/debounce';
 import { getValueAtPath } from '@/lib/path';
+import { scenarioMapRoute } from '@/lib/route-geometry';
 import { useFormStore } from '@/stores/form-store';
 import { exportAsCsv, exportAsForge, useScenarioStore } from '@/stores/scenario-store';
-import type { Scenario } from '@/stores/scenario-store';
+import type { Scenario, ScenarioGeometry } from '@/stores/scenario-store';
+
+interface WizardDraft {
+  name: string;
+  source: string;
+  fullInputs: Record<string, unknown>;
+}
 
 const PROJECT = '01_project_technical_details.project';
 const ROW_ROOT = '11_project_row_details.right_of_way';
@@ -165,7 +173,7 @@ export default function WorkspacePage(): ReactElement {
 }
 
 function WorkspaceBody(): ReactElement {
-  const { view, subItemId, setView, selectSubItem } = useNavigation();
+  const { view, subItemId, setView, selectSubItem, openInputsSubItem } = useNavigation();
 
   const data = useFormStore((state) => state.data);
   const defaults = useFormStore((state) => state.defaults);
@@ -186,8 +194,10 @@ function WorkspaceBody(): ReactElement {
 
   const [ready, setReady] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [draft, setDraft] = useState<WizardDraft | null>(null);
   const [calculationStatus, setCalculationStatus] = useState('Not calculated');
   const [perspective, setPerspective] = useState<PerspectiveKey>('societal');
+  const [drawn, setDrawn] = useState<ScenarioGeometry | undefined>(undefined);
 
   const baselineRef = useRef<string | null>(null);
   const lastStatusRef = useRef('Not calculated');
@@ -323,11 +333,11 @@ function WorkspaceBody(): ReactElement {
     }
     if (baselineRef.current === null) {
       baselineRef.current = current;
-      setUnsavedChanges(false);
+      setUnsavedChanges(drawn !== undefined);
       return;
     }
-    setUnsavedChanges(current !== baselineRef.current);
-  }, [activeScenarioId, data, ready, setUnsavedChanges]);
+    setUnsavedChanges(drawn !== undefined || current !== baselineRef.current);
+  }, [activeScenarioId, data, drawn, ready, setUnsavedChanges]);
 
   useEffect(() => {
     function onBeforeUnload(event: BeforeUnloadEvent): void {
@@ -342,11 +352,12 @@ function WorkspaceBody(): ReactElement {
   async function handleSave(): Promise<void> {
     const active = useScenarioStore.getState().getActiveScenario();
     if (!active || savingRef.current) return;
-    if (!useScenarioStore.getState().unsavedChanges) return;
+    if (!useScenarioStore.getState().unsavedChanges && drawn === undefined) return;
     savingRef.current = true;
     try {
       const changes = useFormStore.getState().getChanges();
-      await saveScenario(active.id, changes, active.revision);
+      await saveScenario(active.id, changes, active.revision, drawn);
+      setDrawn(undefined);
       baselineRef.current = JSON.stringify(changes);
       const latest = JSON.stringify(useFormStore.getState().getChanges());
       setUnsavedChanges(latest !== baselineRef.current);
@@ -396,28 +407,72 @@ function WorkspaceBody(): ReactElement {
     exportAsCsv(scenario, defaults);
   }
 
-  function handleWizardComplete(
+  const handleRouteChange = useCallback(
+    (route: MultiLineString | null, segments: unknown[] | null): void => {
+      setDrawn({
+        route: route ? { type: route.type, coordinates: route.coordinates } : null,
+        segments,
+      });
+      if (useScenarioStore.getState().activeScenarioId) {
+        setUnsavedChanges(true);
+      }
+    },
+    [setUnsavedChanges],
+  );
+
+  function beginDraft(
     name: string,
+    source: string,
     fullInputs: Record<string, unknown>,
-    metadata: { timestamp: string; source: string },
   ): void {
     const snapshot = useFormStore.getState().defaults;
     if (!snapshot) {
       toast.error('Reference data is not loaded yet.');
       return;
     }
-    void (async () => {
-      try {
-        const scenario = await createScenario(
-          name,
-          metadata.source || 'wizard',
-          diffChanges(snapshot, fullInputs),
-        );
-        applyScenario(scenario);
-      } catch (error) {
-        toast.error(errorMessage(error));
-      }
-    })();
+    setDrawn(undefined);
+    useScenarioStore.setState({
+      activeScenarioId: null,
+      unsavedChanges: false,
+      savedResults: null,
+    });
+    loadScenarioChanges(diffChanges(snapshot, fullInputs));
+    setDraft({ name, source, fullInputs });
+    lastStatusRef.current = 'Not calculated';
+    setCalculationStatus('Not calculated');
+    openInputsSubItem('routing', 'route');
+  }
+
+  function handleWizardComplete(
+    name: string,
+    fullInputs: Record<string, unknown>,
+    metadata: { timestamp: string; source: string },
+  ): void {
+    beginDraft(name, metadata.source || 'wizard', fullInputs);
+  }
+
+  async function handleCreate(): Promise<void> {
+    if (!draft || savingRef.current) return;
+    const form = useFormStore.getState();
+    if (!form.data || terrainMilesTotal(form.data) <= 0) return;
+    savingRef.current = true;
+    try {
+      const scenario = await createScenario(
+        draft.name,
+        draft.source,
+        form.getChanges(),
+        drawn?.route ?? null,
+        drawn?.segments ?? null,
+      );
+      setDraft(null);
+      setDrawn(undefined);
+      applyScenario(scenario);
+      toast.success('Scenario created');
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      savingRef.current = false;
+    }
   }
 
   function handleResultsNavigate(nextSubItemId: string): void {
@@ -443,6 +498,12 @@ function WorkspaceBody(): ReactElement {
   const projectFields = useFormStore.getState().getProjectFields();
   const reconductoring = useFormStore.getState().isReconductoring();
   const showRouteMap = view === 'inputs' && subItemId === 'route';
+  const createMode = draft !== null && activeScenarioId === null;
+  const milesFromRoute =
+    draft !== null ||
+    activeScenario?.route != null ||
+    (Array.isArray(activeScenario?.segments) && activeScenario.segments.length > 0);
+  const canCreate = createMode && terrainMilesTotal(data ?? {}) > 0;
 
   return (
     <div className="flex h-screen flex-col bg-slate-50">
@@ -452,14 +513,17 @@ function WorkspaceBody(): ReactElement {
       ) : (
         <>
           <WorkspaceHeader
-            scenarioName={activeScenario?.name ?? ''}
+            scenarioName={draft?.name ?? activeScenario?.name ?? ''}
             unsavedChanges={unsavedChanges}
             calculationStatus={calculationStatus}
-            results={activeScenario?.results ?? null}
+            results={createMode ? null : (activeScenario?.results ?? null)}
             onSave={() => { void handleSave(); }}
             onRename={(name) => { void handleRename(name); }}
             onExportForge={handleExportForge}
             onExportCsv={handleExportCsv}
+            createMode={createMode}
+            canCreate={canCreate}
+            onCreate={() => { void handleCreate(); }}
           />
           <div className="flex min-h-0 flex-1">
             <Sidebar validation={validation} />
@@ -474,7 +538,13 @@ function WorkspaceBody(): ReactElement {
               {view === 'inputs' ? (
                 showRouteMap ? (
                   <div className="relative flex-1 min-h-0 overflow-hidden">
-                    <MapPanel />
+                    <MapPanel
+                      createMode={draft !== null}
+                      existingRoute={
+                        draft ? scenarioMapRoute(drawn ?? null) : scenarioMapRoute(activeScenario)
+                      }
+                      onRouteChange={handleRouteChange}
+                    />
                   </div>
                 ) : (
                   <>
@@ -483,7 +553,9 @@ function WorkspaceBody(): ReactElement {
                       savedResults={savedResults}
                       onNavigateResults={handleStripNavigate}
                     />
-                    {subItemId ? <SectionDispatcher subItemId={subItemId} /> : null}
+                    {subItemId ? (
+                      <SectionDispatcher subItemId={subItemId} milesFromRoute={milesFromRoute} />
+                    ) : null}
                   </>
                 )
               ) : null}

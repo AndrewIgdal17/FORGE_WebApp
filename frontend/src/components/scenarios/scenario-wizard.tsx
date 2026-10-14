@@ -22,7 +22,7 @@ import {
   CAPACITY_OPTIONS_BY_AC_DC,
   CONDUCTOR_TYPE_BY_CONSTRUCTION,
 } from '@/data/configs';
-import { getValueAtPath, setValueAtPath } from '@/lib/path';
+import { setValueAtPath } from '@/lib/path';
 import { cn } from '@/lib/utils';
 
 export interface ScenarioWizardProps {
@@ -38,19 +38,7 @@ export interface ScenarioWizardProps {
 
 type ProjectType = 'greenfield' | 'reconductoring';
 type AcDc = '' | 'AC' | 'DC';
-type StepKind = 'name' | 'project' | 'existing' | 'route';
-
-interface TerrainOption {
-  key: string;
-  label: string;
-}
-
-interface RowZone {
-  miles: number;
-  acquisitionCost: number;
-  rentCost: number;
-  holdCost: number;
-}
+type StepKind = 'name' | 'project' | 'existing';
 
 interface WizardState {
   step: number;
@@ -69,9 +57,6 @@ interface WizardState {
   constructionYears: number;
   delayYears: number;
   projectLifetime: number;
-  terrainMiles: Record<string, number>;
-  zones: RowZone[];
-  visibleZones: number;
   snapshotError: string;
 }
 
@@ -83,41 +68,6 @@ const CONSTRUCTION_TYPES = [
 ] as const;
 
 const CONVERTER_OPTIONS = ['LCC Converter', 'VSC Converter'] as const;
-
-const TERRAINS: readonly TerrainOption[] = [
-  { key: 'forested', label: 'Forested' },
-  { key: 'scrubbed_flat', label: 'Scrubbed Flat' },
-  { key: 'wetland', label: 'Wetland' },
-  { key: 'farmland', label: 'Farmland' },
-  { key: 'desert_barren', label: 'Desert/Barren' },
-  { key: 'urban', label: 'Urban' },
-  { key: 'rolling_hills', label: 'Rolling Hills' },
-  { key: 'mountain', label: 'Mountain' },
-  { key: 'subsea', label: 'Subsea' },
-];
-
-/** BLM zone schedule used when the defaults snapshot has no cost for a zone. */
-const ZONE_COST_DEFAULTS: readonly (readonly [number, number, number])[] = [
-  [299, 8, 0.8],
-  [579, 15, 2],
-  [1132, 30, 3],
-  [1706, 45, 4],
-  [2350, 62, 6],
-  [3394, 89, 9],
-  [4746, 125, 12],
-  [6583, 173, 17],
-  [16279, 428, 43],
-  [50000, 1315, 132],
-  [100000, 2630, 263],
-  [250000, 6575, 658],
-  [500000, 13150, 1315],
-  [750000, 19725, 1972],
-  [1000000, 26300, 2630],
-];
-
-const ZONE_COUNT = 15;
-const INITIAL_VISIBLE_ZONES = 5;
-const MILES_TOLERANCE = 0.01;
 
 const STEP_COPY: Record<StepKind, { title: string; description: string }> = {
   name: {
@@ -133,41 +83,9 @@ const STEP_COPY: Record<StepKind, { title: string; description: string }> = {
     title: 'Existing line details',
     description: 'Construction years, delay years, and lifetime for the existing line.',
   },
-  route: {
-    title: 'Define your route',
-    description: 'Terrain miles must equal right-of-way miles.',
-  },
 };
 
-function emptyTerrainMiles(): Record<string, number> {
-  const miles: Record<string, number> = {};
-  for (const terrain of TERRAINS) miles[terrain.key] = 0;
-  return miles;
-}
-
-function readNumber(
-  snapshot: Record<string, unknown> | null,
-  path: string,
-  fallback: number,
-): number {
-  if (!snapshot) return fallback;
-  const value = getValueAtPath(snapshot, path);
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-}
-
-function initialZones(snapshot: Record<string, unknown> | null): RowZone[] {
-  return ZONE_COST_DEFAULTS.map(([acquisitionCost, rentCost, holdCost], index) => {
-    const base = `11_project_row_details.right_of_way.zone_${index + 1}`;
-    return {
-      miles: 0,
-      acquisitionCost: readNumber(snapshot, `${base}.acquisition_cost`, acquisitionCost),
-      rentCost: readNumber(snapshot, `${base}.rent_cost`, rentCost),
-      holdCost: readNumber(snapshot, `${base}.hold_cost`, holdCost),
-    };
-  });
-}
-
-function createInitialState(snapshot: Record<string, unknown> | null): WizardState {
+function createInitialState(): WizardState {
   return {
     step: 0,
     name: '',
@@ -185,52 +103,19 @@ function createInitialState(snapshot: Record<string, unknown> | null): WizardSta
     constructionYears: 3,
     delayYears: 0,
     projectLifetime: 40,
-    terrainMiles: emptyTerrainMiles(),
-    zones: initialZones(snapshot),
-    visibleZones: INITIAL_VISIBLE_ZONES,
     snapshotError: '',
   };
 }
 
 function totalSteps(projectType: ProjectType): number {
-  return projectType === 'reconductoring' ? 4 : 3;
+  return projectType === 'reconductoring' ? 3 : 2;
 }
 
 function stepKindAt(step: number, projectType: ProjectType): StepKind {
   if (step <= 0) return 'name';
   if (step === 1) return 'project';
-  if (projectType === 'reconductoring' && step === 2) return 'existing';
-  return 'route';
-}
-
-function visibleTerrains(constructionType: string): readonly TerrainOption[] {
-  if (constructionType === 'Subsea') {
-    return TERRAINS.filter((terrain) => terrain.key === 'subsea');
-  }
-  return TERRAINS.filter((terrain) => terrain.key !== 'subsea');
-}
-
-function terrainTotal(state: WizardState): number {
-  return visibleTerrains(state.constructionType).reduce(
-    (sum, terrain) => sum + (state.terrainMiles[terrain.key] || 0),
-    0,
-  );
-}
-
-function rowTotal(state: WizardState): number {
-  return state.zones
-    .slice(0, state.visibleZones)
-    .reduce((sum, zone) => sum + (zone.miles || 0), 0);
-}
-
-function totalsMatch(state: WizardState): boolean {
-  return Math.abs(terrainTotal(state) - rowTotal(state)) <= MILES_TOLERANCE;
-}
-
-function hasTerrainMiles(state: WizardState): boolean {
-  return visibleTerrains(state.constructionType).some(
-    (terrain) => (state.terrainMiles[terrain.key] || 0) > 0,
-  );
+  if (projectType === 'reconductoring') return 'existing';
+  return 'project';
 }
 
 function dcFieldsValid(
@@ -262,10 +147,6 @@ function existingStepValid(state: WizardState): boolean {
   return state.constructionYears >= 1 && state.delayYears >= 0 && state.projectLifetime >= 1;
 }
 
-function routeStepValid(state: WizardState): boolean {
-  return hasTerrainMiles(state) && totalsMatch(state);
-}
-
 function validateCurrentStep(state: WizardState): boolean {
   const kind = stepKindAt(state.step, state.projectType);
   switch (kind) {
@@ -275,19 +156,7 @@ function validateCurrentStep(state: WizardState): boolean {
       return projectStepValid(state);
     case 'existing':
       return existingStepValid(state);
-    case 'route':
-      return routeStepValid(state);
   }
-}
-
-function formatMiles(value: number): string {
-  return value.toFixed(2).replace(/\.?0+$/, '');
-}
-
-function parseNonNegative(raw: string): number {
-  const value = Number.parseFloat(raw);
-  if (Number.isNaN(value)) return 0;
-  return Math.max(0, value);
 }
 
 function parseInteger(raw: string): number {
@@ -309,7 +178,6 @@ function mergeWizardIntoSnapshot(
   state: WizardState,
 ): Record<string, unknown> {
   const full = JSON.parse(JSON.stringify(snapshot)) as Record<string, unknown>;
-  const visible = new Set(visibleTerrains(state.constructionType).map((terrain) => terrain.key));
 
   setValueAtPath(full, '01_project_technical_details.project.construction_type', state.constructionType);
   setValueAtPath(full, '01_project_technical_details.project.ac_dc', state.acDc);
@@ -327,8 +195,8 @@ function mergeWizardIntoSnapshot(
   );
   setValueAtPath(
     full,
-    '01_project_technical_details.project.reconductoring',
-    state.projectType === 'reconductoring',
+    '01_project_technical_details.project.project_type',
+    state.projectType,
   );
   setValueAtPath(
     full,
@@ -362,24 +230,6 @@ function mergeWizardIntoSnapshot(
       );
     }
   }
-
-  for (const terrain of TERRAINS) {
-    const miles = visible.has(terrain.key) ? state.terrainMiles[terrain.key] || 0 : 0;
-    setValueAtPath(
-      full,
-      `02_project_physical_details.terrain.terrain_miles.${terrain.key}`,
-      miles,
-    );
-  }
-
-  state.zones.forEach((zone, index) => {
-    const base = `11_project_row_details.right_of_way.zone_${index + 1}`;
-    const visibleZone = index < state.visibleZones;
-    setValueAtPath(full, `${base}.miles`, visibleZone ? zone.miles || 0 : 0);
-    setValueAtPath(full, `${base}.acquisition_cost`, zone.acquisitionCost);
-    setValueAtPath(full, `${base}.rent_cost`, zone.rentCost);
-    setValueAtPath(full, `${base}.hold_cost`, zone.holdCost);
-  });
 
   return full;
 }
@@ -763,178 +613,6 @@ function ExistingLineStep({
   );
 }
 
-function RouteStep({
-  state,
-  onChange,
-}: {
-  state: WizardState;
-  onChange: (patch: Partial<WizardState>) => void;
-}): ReactElement {
-  const terrains = visibleTerrains(state.constructionType);
-  const terrainMilesTotal = terrainTotal(state);
-  const rowMilesTotal = rowTotal(state);
-  const showMismatch =
-    (terrainMilesTotal > 0 || rowMilesTotal > 0) &&
-    Math.abs(terrainMilesTotal - rowMilesTotal) > MILES_TOLERANCE;
-  const visibleZones = state.zones.slice(0, state.visibleZones);
-
-  function setTerrain(key: string, miles: number): void {
-    onChange({ terrainMiles: { ...state.terrainMiles, [key]: miles } });
-  }
-
-  function setZone(index: number, patch: Partial<RowZone>): void {
-    const zones = state.zones.map((zone, zoneIndex) =>
-      zoneIndex === index ? { ...zone, ...patch } : zone,
-    );
-    onChange({ zones });
-  }
-
-  return (
-    <div className="grid gap-6">
-      <div className="grid gap-2">
-        <h3 className="text-sm font-medium">Terrain miles</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th className="py-2 pr-3 font-medium">Terrain</th>
-                <th className="py-2 font-medium">Miles</th>
-              </tr>
-            </thead>
-            <tbody>
-              {terrains.map((terrain) => (
-                <tr key={terrain.key} className="border-b border-border/60">
-                  <td className="py-2 pr-3">{terrain.label}</td>
-                  <td className="py-2">
-                    <Input
-                      type="number"
-                      min={0}
-                      step="any"
-                      aria-label={`${terrain.label} miles`}
-                      value={state.terrainMiles[terrain.key] || 0}
-                      onChange={(event) => setTerrain(terrain.key, parseNonNegative(event.target.value))}
-                    />
-                  </td>
-                </tr>
-              ))}
-              <tr>
-                <td className="py-2 pr-3 font-medium">Total</td>
-                <td className="py-2 font-medium tabular-nums">{formatMiles(terrainMilesTotal)} mi</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="grid gap-2">
-        <h3 className="text-sm font-medium">ROW zones</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th className="py-2 pr-3 font-medium">Zone</th>
-                <th className="py-2 pr-3 font-medium">Miles</th>
-                <th className="py-2 pr-3 font-medium">Acquisition</th>
-                <th className="py-2 pr-3 font-medium">Rent</th>
-                <th className="py-2 font-medium">Hold</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleZones.map((zone, index) => (
-                <tr key={index} className="border-b border-border/60">
-                  <td className="py-2 pr-3 whitespace-nowrap">Zone {index + 1}</td>
-                  <td className="py-2 pr-3">
-                    <Input
-                      type="number"
-                      min={0}
-                      step="any"
-                      aria-label={`Zone ${index + 1} miles`}
-                      value={zone.miles || 0}
-                      onChange={(event) =>
-                        setZone(index, { miles: parseNonNegative(event.target.value) })
-                      }
-                    />
-                  </td>
-                  <td className="py-2 pr-3">
-                    <Input
-                      type="number"
-                      min={0}
-                      step="any"
-                      aria-label={`Zone ${index + 1} acquisition cost`}
-                      value={zone.acquisitionCost}
-                      onChange={(event) =>
-                        setZone(index, { acquisitionCost: parseNonNegative(event.target.value) })
-                      }
-                    />
-                  </td>
-                  <td className="py-2 pr-3">
-                    <Input
-                      type="number"
-                      min={0}
-                      step="any"
-                      aria-label={`Zone ${index + 1} rent cost`}
-                      value={zone.rentCost}
-                      onChange={(event) =>
-                        setZone(index, { rentCost: parseNonNegative(event.target.value) })
-                      }
-                    />
-                  </td>
-                  <td className="py-2">
-                    <Input
-                      type="number"
-                      min={0}
-                      step="any"
-                      aria-label={`Zone ${index + 1} hold cost`}
-                      value={zone.holdCost}
-                      onChange={(event) =>
-                        setZone(index, { holdCost: parseNonNegative(event.target.value) })
-                      }
-                    />
-                  </td>
-                </tr>
-              ))}
-              <tr>
-                <td className="py-2 pr-3 font-medium">Total</td>
-                <td className="py-2 font-medium tabular-nums" colSpan={4}>
-                  {formatMiles(rowMilesTotal)} miles
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div className="flex gap-2">
-          {state.visibleZones < ZONE_COUNT ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() =>
-                onChange({ visibleZones: Math.min(state.visibleZones + 1, ZONE_COUNT) })
-              }
-            >
-              + Add Zone
-            </Button>
-          ) : null}
-          {state.visibleZones > 1 ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onChange({ visibleZones: state.visibleZones - 1 })}
-            >
-              Remove Zone
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      {showMismatch ? (
-        <p className="text-sm text-destructive" role="alert">
-          Terrain miles ({formatMiles(terrainMilesTotal)}) and ROW miles (
-          {formatMiles(rowMilesTotal)}) must match.
-        </p>
-      ) : null}
-    </div>
-  );
-}
 
 export function ScenarioWizard({
   open,
@@ -942,11 +620,11 @@ export function ScenarioWizard({
   defaultsSnapshot,
   onComplete,
 }: ScenarioWizardProps): ReactElement {
-  const [state, setState] = useState<WizardState>(() => createInitialState(defaultsSnapshot));
+  const [state, setState] = useState<WizardState>(() => createInitialState());
   const [seenOpen, setSeenOpen] = useState(open);
   if (open !== seenOpen) {
     setSeenOpen(open);
-    if (open) setState(createInitialState(defaultsSnapshot));
+    if (open) setState(createInitialState());
   }
 
   const steps = totalSteps(state.projectType);
@@ -1010,7 +688,6 @@ export function ScenarioWizard({
         ) : null}
         {kind === 'project' ? <ProjectStep state={state} onChange={patch} /> : null}
         {kind === 'existing' ? <ExistingLineStep state={state} onChange={patch} /> : null}
-        {kind === 'route' ? <RouteStep state={state} onChange={patch} /> : null}
 
         {state.snapshotError ? (
           <p className="text-sm text-destructive" role="alert">
@@ -1025,7 +702,7 @@ export function ScenarioWizard({
             </Button>
           ) : null}
           <Button type="button" disabled={!canAdvance} onClick={onLast ? complete : goNext}>
-            {onLast ? 'Create Scenario →' : 'Next →'}
+            {onLast ? 'Draw Route →' : 'Next →'}
           </Button>
         </DialogFooter>
       </DialogContent>

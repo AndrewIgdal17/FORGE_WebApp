@@ -11,6 +11,7 @@ export interface NumberFieldProps {
   min?: number;
   max?: number;
   step?: number;
+  readOnly?: boolean;
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -44,6 +45,7 @@ export function NumberField({
   min,
   max,
   step,
+  readOnly = false,
 }: NumberFieldProps): ReactElement {
   const value = useFormStore((state) => state.getFieldValue(path));
   const setFieldValue = useFormStore((state) => state.setFieldValue);
@@ -65,18 +67,26 @@ export function NumberField({
 
   return (
     <FormField label={label} htmlFor={path} helpText={helpText}>
-      <Input
-        id={path}
-        type="text"
-        inputMode="decimal"
-        min={min}
-        max={max}
-        step={step}
-        value={focused ? draft : formatNumberDisplay(value)}
-        onFocus={handleFocus}
-        onBlur={() => setFocused(false)}
-        onChange={handleChange}
-      />
+      <div className="flex items-center gap-2">
+        <Input
+          id={path}
+          type="text"
+          inputMode="decimal"
+          min={min}
+          max={max}
+          step={step}
+          disabled={readOnly}
+          value={focused && !readOnly ? draft : formatNumberDisplay(value)}
+          onFocus={readOnly ? undefined : handleFocus}
+          onBlur={() => setFocused(false)}
+          onChange={readOnly ? undefined : handleChange}
+        />
+        {readOnly ? (
+          <span className="shrink-0 text-xs text-cyan-600 bg-cyan-50 px-1.5 py-0.5 rounded">
+            From route
+          </span>
+        ) : null}
+      </div>
     </FormField>
   );
 }
