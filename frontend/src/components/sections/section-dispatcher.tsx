@@ -29,8 +29,9 @@ export interface SectionDispatcherProps {
 
 /**
  * Maps an inputs sidebar sub-item to its form section.
- * The 20 IDs come from `SIDEBAR_SECTIONS.inputs`. Maintenance panels are
- * separate sections that the sidebar does not list as their own sub-items.
+ * Form IDs come from `SIDEBAR_SECTIONS.inputs`. `route` is not a form
+ * section: the workspace mounts `MapPanel` for that id. Maintenance panels
+ * are separate sections that the sidebar does not list as their own sub-items.
  */
 export function SectionDispatcher({ subItemId }: SectionDispatcherProps): ReactElement {
   switch (subItemId) {

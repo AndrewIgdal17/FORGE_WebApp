@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { toast } from 'sonner';
 import { AuthGuard } from '@/components/auth-guard';
 import { AppNav } from '@/components/layout/app-nav';
+import { MapPanel } from '@/components/map/MapPanel';
 import type { PerspectiveKey } from '@/components/results/perspective-toggle';
 import { PerspectiveToggle } from '@/components/results/perspective-toggle';
 import { ResultsDispatcher } from '@/components/results/results-dispatcher';
@@ -441,6 +442,7 @@ function WorkspaceBody(): ReactElement {
   const taxonomy = isRecord(taxonomyState) ? taxonomyState : undefined;
   const projectFields = useFormStore.getState().getProjectFields();
   const reconductoring = useFormStore.getState().isReconductoring();
+  const showRouteMap = view === 'inputs' && subItemId === 'route';
 
   return (
     <div className="flex h-screen flex-col bg-slate-50">
@@ -461,17 +463,29 @@ function WorkspaceBody(): ReactElement {
           />
           <div className="flex min-h-0 flex-1">
             <Sidebar validation={validation} />
-            <main className="min-w-0 flex-1 overflow-y-auto p-6">
-              <ContentHeader />
+            <main
+              className={
+                showRouteMap
+                  ? 'relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
+                  : 'min-w-0 flex-1 overflow-y-auto p-6'
+              }
+            >
+              {showRouteMap ? null : <ContentHeader />}
               {view === 'inputs' ? (
-                <>
-                  <ContributionStrip
-                    results={activeScenario?.results ?? null}
-                    savedResults={savedResults}
-                    onNavigateResults={handleStripNavigate}
-                  />
-                  {subItemId ? <SectionDispatcher subItemId={subItemId} /> : null}
-                </>
+                showRouteMap ? (
+                  <div className="relative flex-1 min-h-0 overflow-hidden">
+                    <MapPanel />
+                  </div>
+                ) : (
+                  <>
+                    <ContributionStrip
+                      results={activeScenario?.results ?? null}
+                      savedResults={savedResults}
+                      onNavigateResults={handleStripNavigate}
+                    />
+                    {subItemId ? <SectionDispatcher subItemId={subItemId} /> : null}
+                  </>
+                )
               ) : null}
               {view === 'results' ? (
                 <>

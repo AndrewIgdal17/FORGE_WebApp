@@ -13,6 +13,7 @@ export interface NavigationState {
 export interface NavigationContextValue extends NavigationState {
   setView: (view: ViewType) => void;
   selectSubItem: (sectionId: string, subItemId: string) => void;
+  openInputsSubItem: (sectionId: string, subItemId: string) => void;
 }
 
 const INITIAL_STATE: NavigationState = {
@@ -59,6 +60,11 @@ export function NavigationProvider({ children }: { children: ReactNode }): React
     });
   }, []);
 
+  const openInputsSubItem = useCallback((sectionId: string, subItemId: string) => {
+    if (!isKnownSubItem('inputs', sectionId, subItemId)) return;
+    setState({ view: 'inputs', sectionId, subItemId });
+  }, []);
+
   const value = useMemo<NavigationContextValue>(
     () => ({
       view: state.view,
@@ -66,8 +72,9 @@ export function NavigationProvider({ children }: { children: ReactNode }): React
       subItemId: state.subItemId,
       setView,
       selectSubItem,
+      openInputsSubItem,
     }),
-    [state.view, state.sectionId, state.subItemId, setView, selectSubItem],
+    [state.view, state.sectionId, state.subItemId, setView, selectSubItem, openInputsSubItem],
   );
 
   return <NavigationContext.Provider value={value}>{children}</NavigationContext.Provider>;

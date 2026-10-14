@@ -40,6 +40,7 @@ export const SIDEBAR_SECTIONS: SidebarSections = {
       label: 'Routing & Terrain',
       color: '#0891b2',
       subItems: [
+        { id: 'route', label: 'Route' },
         { id: 'terrain-mix', label: 'Terrain Mix' },
         { id: 'rights-of-way', label: 'Rights of Way' },
       ],
