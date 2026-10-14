@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import type { Feature, FeatureCollection, LineString, MultiLineString, Point } from 'geojson';
+import type { ExpressionSpecification } from '@maplibre/maplibre-gl-style-spec';
 import { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
 import bbox from '@turf/bbox';
 import { forgeBasemapStyle } from '@/data/basemap-style';
+import {
+  SUBREGION_FILL_EXPRESSION,
+  VOLTAGE_COLOR_EXPRESSION,
+  VOLTAGE_WIDTH_EXPRESSION,
+} from '@/data/color-maps';
 import { useMapStore } from '@/stores/map-store';
 
 const TILE_ORIGIN = 'https://tiles.forge-calc.com';
@@ -18,7 +24,10 @@ export interface MapOverlay {
   label: string;
   swatchClass: string;
   kind: 'fill' | 'line';
+  /** Representative swatch. Grid and corridor paint is data-driven. */
   color: string;
+  borderColor?: string;
+  borderWidth?: number;
 }
 
 export const MAP_OVERLAYS: readonly MapOverlay[] = [
@@ -28,6 +37,8 @@ export const MAP_OVERLAYS: readonly MapOverlay[] = [
     swatchClass: 'bg-slate-400',
     kind: 'fill',
     color: '#94a3b8',
+    borderColor: '#cbd5e1',
+    borderWidth: 0.5,
   },
   {
     id: 'ref.corridors_hifld',
@@ -42,6 +53,8 @@ export const MAP_OVERLAYS: readonly MapOverlay[] = [
     swatchClass: 'bg-teal-500',
     kind: 'fill',
     color: '#14b8a6',
+    borderColor: '#64748b',
+    borderWidth: 1,
   },
 ];
 
@@ -72,6 +85,14 @@ function routeCollection(route: MultiLineString): FeatureCollection<LineString |
   return { type: 'FeatureCollection', features };
 }
 
+function paintExpression(expression: readonly unknown[]): ExpressionSpecification {
+  return expression as unknown as ExpressionSpecification;
+}
+
+function borderLayerId(overlayId: MapOverlay['id']): string {
+  return `${overlayId}-border`;
+}
+
 function addOverlays(map: MapLibreMap): void {
   const layers = useMapStore.getState().layers;
   for (const overlay of MAP_OVERLAYS) {
@@ -79,36 +100,62 @@ function addOverlays(map: MapLibreMap): void {
       map.addSource(overlay.id, {
         type: 'vector',
         url: `${TILE_ORIGIN}/${overlay.id}`,
+        promoteId: 'gid',
       });
     }
-    if (map.getLayer(overlay.id)) continue;
     const state = layers[overlay.id];
     const visibility = state?.visible === false ? 'none' : 'visible';
-    if (overlay.kind === 'fill') {
-      map.addLayer({
-        id: overlay.id,
-        type: 'fill',
-        source: overlay.id,
-        'source-layer': overlay.id,
-        layout: { visibility },
-        paint: {
-          'fill-color': overlay.color,
-          'fill-opacity': state?.opacity ?? 0.4,
-        },
-      });
-      continue;
+    if (!map.getLayer(overlay.id)) {
+      if (overlay.id === 'ref.subregions_egrid') {
+        map.addLayer({
+          id: overlay.id,
+          type: 'fill',
+          source: overlay.id,
+          'source-layer': overlay.id,
+          layout: { visibility },
+          paint: {
+            'fill-color': paintExpression(SUBREGION_FILL_EXPRESSION),
+            'fill-opacity': state?.opacity ?? 0.4,
+          },
+        });
+      } else if (overlay.id === 'ref.corridors_hifld') {
+        map.addLayer({
+          id: overlay.id,
+          type: 'line',
+          source: overlay.id,
+          'source-layer': overlay.id,
+          layout: { visibility },
+          paint: {
+            'line-color': paintExpression(VOLTAGE_COLOR_EXPRESSION),
+            'line-width': paintExpression(VOLTAGE_WIDTH_EXPRESSION),
+            'line-opacity': state?.opacity ?? 0.7,
+          },
+        });
+      } else {
+        map.addLayer({
+          id: overlay.id,
+          type: 'fill',
+          source: overlay.id,
+          'source-layer': overlay.id,
+          layout: { visibility },
+          paint: {
+            'fill-color': overlay.color,
+            'fill-opacity': state?.opacity ?? 0.4,
+          },
+        });
+      }
     }
+    if (overlay.borderColor === undefined || map.getLayer(borderLayerId(overlay.id))) continue;
     map.addLayer({
-      id: overlay.id,
+      id: borderLayerId(overlay.id),
       type: 'line',
       source: overlay.id,
       'source-layer': overlay.id,
       layout: { visibility },
       paint: {
-        'line-color': overlay.color,
-        'line-width': 2,
-        'line-opacity': state?.opacity ?? 0.7,
-        'line-dasharray': [4, 2],
+        'line-color': overlay.borderColor,
+        'line-width': overlay.borderWidth ?? 1,
+        'line-opacity': state?.opacity ?? 0.4,
       },
     });
   }
@@ -208,15 +255,21 @@ function fitExisting(
 function applyLayerState(map: MapLibreMap): void {
   const layers = useMapStore.getState().layers;
   for (const overlay of MAP_OVERLAYS) {
-    if (!map.getLayer(overlay.id)) continue;
     const state = layers[overlay.id];
     if (!state) continue;
-    map.setLayoutProperty(overlay.id, 'visibility', state.visible ? 'visible' : 'none');
-    if (overlay.kind === 'fill') {
-      map.setPaintProperty(overlay.id, 'fill-opacity', state.opacity);
-    } else {
-      map.setPaintProperty(overlay.id, 'line-opacity', state.opacity);
+    const visibility = state.visible ? 'visible' : 'none';
+    if (map.getLayer(overlay.id)) {
+      map.setLayoutProperty(overlay.id, 'visibility', visibility);
+      if (overlay.kind === 'fill') {
+        map.setPaintProperty(overlay.id, 'fill-opacity', state.opacity);
+      } else {
+        map.setPaintProperty(overlay.id, 'line-opacity', state.opacity);
+      }
     }
+    const borderId = borderLayerId(overlay.id);
+    if (!map.getLayer(borderId)) continue;
+    map.setLayoutProperty(borderId, 'visibility', visibility);
+    map.setPaintProperty(borderId, 'line-opacity', state.opacity);
   }
 }
 
