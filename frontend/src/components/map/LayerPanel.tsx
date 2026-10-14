@@ -2,13 +2,48 @@ import { useId, useState } from 'react';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { ChevronDown, ChevronUp, Eye, EyeOff, Layers } from 'lucide-react';
 import { MAP_OVERLAYS } from '@/components/map/RouteMap';
+import { SUBREGION_COLORS, VOLTAGE_STYLES } from '@/data/color-maps';
 import { useMapStore } from '@/stores/map-store';
 
 const PANEL =
   'absolute top-4 right-4 z-10 w-64 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-lg backdrop-blur-sm';
 
+function voltageColor(voltClass: string): string {
+  return VOLTAGE_STYLES.find((style) => style.voltClass === voltClass)?.color ?? '#94a3b8';
+}
+
+const CORRIDOR_SWATCH: readonly string[] = [
+  voltageColor('735 AND ABOVE'),
+  voltageColor('500'),
+  voltageColor('100-161'),
+];
+
+const REGION_SWATCH: readonly string[] = ['CAMX', 'ERCT', 'MROW'].map(
+  (code) => SUBREGION_COLORS[code] ?? '#d9d9d9',
+);
+
 function stopMapPointer(event: SyntheticEvent): void {
   event.stopPropagation();
+}
+
+function StackedDots({ colors }: { colors: readonly string[] }): ReactElement {
+  return (
+    <span className="flex shrink-0 flex-col gap-0.5" aria-hidden="true">
+      {colors.map((color, index) => (
+        <span
+          key={`${color}-${index}`}
+          className="size-1.5 rounded-full"
+          style={{ backgroundColor: color }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function LayerSwatch({ overlay }: { overlay: (typeof MAP_OVERLAYS)[number] }): ReactElement {
+  if (overlay.id === 'ref.corridors_hifld') return <StackedDots colors={CORRIDOR_SWATCH} />;
+  if (overlay.id === 'ref.subregions_egrid') return <StackedDots colors={REGION_SWATCH} />;
+  return <span className={`size-2.5 shrink-0 rounded-sm ${overlay.swatchClass}`} />;
 }
 
 export function LayerPanel(): ReactElement {
@@ -68,7 +103,7 @@ export function LayerPanel(): ReactElement {
                 {state.visible ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
               </button>
               <span className="flex items-center gap-2 text-sm text-slate-800">
-                <span className={`size-2.5 shrink-0 rounded-sm ${overlay.swatchClass}`} />
+                <LayerSwatch overlay={overlay} />
                 <span className="flex-1">{overlay.label}</span>
                 <span className="tabular-nums text-xs text-slate-500">{percent}%</span>
               </span>

@@ -4,6 +4,7 @@ import type { MultiLineString } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { DrawingToolbar } from '@/components/map/DrawingToolbar';
 import { LayerPanel } from '@/components/map/LayerPanel';
+import { MapLegend } from '@/components/map/MapLegend';
 import { MapTooltip } from '@/components/map/MapTooltip';
 import { ResetButton } from '@/components/map/ResetButton';
 import { RouteMap } from '@/components/map/RouteMap';
@@ -137,6 +138,7 @@ export function MapPanel({
         error={error}
       />
       <LayerPanel />
+      <MapLegend />
       <ResetButton visible={statsRoute !== null} onReset={handleReset} />
       <DrawingToolbar mode={mode} onMode={setMode} onUndo={undo} onRedo={redo} />
     </div>
