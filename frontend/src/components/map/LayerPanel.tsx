@@ -1,12 +1,13 @@
 import { useId, useState } from 'react';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, Eye, EyeOff, Layers } from 'lucide-react';
-import { MAP_OVERLAYS } from '@/components/map/RouteMap';
+import { MAP_OVERLAYS, PREVIEW_OVERLAYS } from '@/components/map/RouteMap';
+import type { MapOverlay } from '@/components/map/RouteMap';
 import { SUBREGION_COLORS, VOLTAGE_STYLES } from '@/data/color-maps';
 import { useMapStore } from '@/stores/map-store';
 
 const PANEL =
-  'absolute top-4 right-4 z-10 w-64 max-h-[min(32rem,calc(100%-2rem))] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white/90 p-3 shadow-lg backdrop-blur-sm';
+  'absolute top-4 right-4 z-10 w-80 max-h-[min(42rem,calc(100%-2rem))] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white/90 p-3 shadow-lg backdrop-blur-sm';
 
 interface AttributeOption {
   value: string;
@@ -64,7 +65,12 @@ function StackedDots({ colors }: { colors: readonly string[] }): ReactElement {
   );
 }
 
-function LayerSwatch({ overlay }: { overlay: (typeof MAP_OVERLAYS)[number] }): ReactElement {
+const COMING_SOON: readonly { label: string; detail: string }[] = [
+  { label: 'Wildfire (FSim)', detail: 'Raster · Integration planned' },
+  { label: 'Wetlands (NWI)', detail: '31 GB downloaded · Loading pipeline designed' },
+];
+
+function LayerSwatch({ overlay }: { overlay: MapOverlay }): ReactElement {
   if (overlay.id === 'ref.corridors_hifld') return <StackedDots colors={CORRIDOR_SWATCH} />;
   if (overlay.id === 'ref.subregions_egrid') return <StackedDots colors={REGION_SWATCH} />;
   return <span className={`size-2.5 shrink-0 rounded-sm ${overlay.swatchClass}`} />;
@@ -132,14 +138,99 @@ function AttributeChecklist({
   );
 }
 
-export function LayerPanel(): ReactElement {
-  const [minimized, setMinimized] = useState(false);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const baseId = useId();
+function OverlayRow({
+  overlay,
+  displayOnly,
+  baseId,
+  expanded,
+  onToggleExpanded,
+}: {
+  overlay: MapOverlay;
+  displayOnly: boolean;
+  baseId: string;
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
+}): ReactElement {
   const layers = useMapStore((state) => state.layers);
   const hiddenAttributes = useMapStore((state) => state.hiddenAttributes);
   const toggleLayer = useMapStore((state) => state.toggleLayer);
   const setOpacity = useMapStore((state) => state.setOpacity);
+  const fallback = displayOnly ? { visible: false, opacity: 0.6 } : { visible: true, opacity: 0.4 };
+  const state = layers[overlay.id] ?? fallback;
+  const sliderId = `${baseId}-${overlay.id}`;
+  const listId = `${baseId}-${overlay.id}-attributes`;
+  const percent = Math.round(state.opacity * 100);
+  const options = displayOnly ? [] : attributeOptions(overlay.id);
+  const open = expanded === true;
+
+  return (
+    <li className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
+      <button
+        type="button"
+        className="rounded-md p-1 text-slate-700 hover:bg-slate-100"
+        aria-pressed={state.visible}
+        aria-label={`${state.visible ? 'Hide' : 'Show'} ${overlay.label}`}
+        onClick={() => toggleLayer(overlay.id)}
+      >
+        {state.visible ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+      </button>
+      <span className="flex min-w-0 items-center gap-1.5 text-sm text-slate-800">
+        <LayerSwatch overlay={overlay} />
+        <span className="min-w-0 flex-1 truncate">{overlay.label}</span>
+        {displayOnly ? (
+          <span className="shrink-0 rounded bg-slate-100 px-1 py-px text-[10px] font-medium tracking-wide text-slate-400 uppercase">
+            Display only
+          </span>
+        ) : null}
+        {options.length > 0 ? (
+          <button
+            type="button"
+            className="rounded-md p-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+            aria-expanded={open}
+            aria-controls={listId}
+            aria-label={`${open ? 'Collapse' : 'Expand'} ${overlay.label} filters`}
+            onClick={onToggleExpanded}
+          >
+            {open ? (
+              <ChevronDown className="size-3.5" />
+            ) : (
+              <ChevronRight className="size-3.5" />
+            )}
+          </button>
+        ) : null}
+        <span className="shrink-0 tabular-nums text-xs text-slate-500">{percent}%</span>
+      </span>
+      <label className="sr-only" htmlFor={sliderId}>
+        {overlay.label} opacity
+      </label>
+      <input
+        id={sliderId}
+        className="col-start-2 h-1.5 w-full accent-slate-700"
+        type="range"
+        min={0}
+        max={1}
+        step={0.05}
+        value={state.opacity}
+        aria-valuetext={`${percent}%`}
+        onChange={(event) => setOpacity(overlay.id, Number(event.target.value))}
+      />
+      {open && options.length > 0 ? (
+        <AttributeChecklist
+          id={listId}
+          layerId={overlay.id}
+          layerLabel={overlay.label}
+          options={options}
+          hidden={hiddenAttributes[overlay.id] ?? []}
+        />
+      ) : null}
+    </li>
+  );
+}
+
+export function LayerPanel(): ReactElement {
+  const [minimized, setMinimized] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const baseId = useId();
 
   if (minimized) {
     return (
@@ -179,74 +270,46 @@ export function LayerPanel(): ReactElement {
           <ChevronDown className="size-4" />
         </button>
       </div>
+      <h3 className="text-xs font-medium uppercase tracking-wider text-slate-400 mt-3 mb-1 px-1">
+        Active
+      </h3>
       <ul className="grid gap-3">
-        {MAP_OVERLAYS.map((overlay) => {
-          const state = layers[overlay.id] ?? { visible: true, opacity: 0.4 };
-          const sliderId = `${baseId}-${overlay.id}`;
-          const listId = `${baseId}-${overlay.id}-attributes`;
-          const percent = Math.round(state.opacity * 100);
-          const options = attributeOptions(overlay.id);
-          const open = expanded[overlay.id] === true;
-          return (
-            <li key={overlay.id} className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
-              <button
-                type="button"
-                className="rounded-md p-1 text-slate-700 hover:bg-slate-100"
-                aria-pressed={state.visible}
-                aria-label={`${state.visible ? 'Hide' : 'Show'} ${overlay.label}`}
-                onClick={() => toggleLayer(overlay.id)}
-              >
-                {state.visible ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
-              </button>
-              <span className="flex items-center gap-1.5 text-sm text-slate-800">
-                <LayerSwatch overlay={overlay} />
-                <span className="flex-1">{overlay.label}</span>
-                {options.length > 0 ? (
-                  <button
-                    type="button"
-                    className="rounded-md p-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-                    aria-expanded={open}
-                    aria-controls={listId}
-                    aria-label={`${open ? 'Collapse' : 'Expand'} ${overlay.label} filters`}
-                    onClick={() =>
-                      setExpanded((current) => ({ ...current, [overlay.id]: !current[overlay.id] }))
-                    }
-                  >
-                    {open ? (
-                      <ChevronDown className="size-3.5" />
-                    ) : (
-                      <ChevronRight className="size-3.5" />
-                    )}
-                  </button>
-                ) : null}
-                <span className="tabular-nums text-xs text-slate-500">{percent}%</span>
-              </span>
-              <label className="sr-only" htmlFor={sliderId}>
-                {overlay.label} opacity
-              </label>
-              <input
-                id={sliderId}
-                className="col-start-2 h-1.5 w-full accent-slate-700"
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={state.opacity}
-                aria-valuetext={`${percent}%`}
-                onChange={(event) => setOpacity(overlay.id, Number(event.target.value))}
-              />
-              {open ? (
-                <AttributeChecklist
-                  id={listId}
-                  layerId={overlay.id}
-                  layerLabel={overlay.label}
-                  options={options}
-                  hidden={hiddenAttributes[overlay.id] ?? []}
-                />
-              ) : null}
-            </li>
-          );
-        })}
+        {MAP_OVERLAYS.map((overlay) => (
+          <OverlayRow
+            key={overlay.id}
+            overlay={overlay}
+            displayOnly={false}
+            baseId={baseId}
+            expanded={expanded[overlay.id] === true}
+            onToggleExpanded={() =>
+              setExpanded((current) => ({ ...current, [overlay.id]: !current[overlay.id] }))
+            }
+          />
+        ))}
+      </ul>
+      <h3 className="text-xs font-medium uppercase tracking-wider text-slate-400 mt-3 mb-1 px-1">
+        Preview
+      </h3>
+      <ul className="grid gap-3">
+        {PREVIEW_OVERLAYS.map((overlay) => (
+          <OverlayRow
+            key={overlay.id}
+            overlay={overlay}
+            displayOnly
+            baseId={baseId}
+          />
+        ))}
+      </ul>
+      <h3 className="text-xs font-medium uppercase tracking-wider text-slate-400 mt-3 mb-1 px-1">
+        Coming Soon
+      </h3>
+      <ul className="grid gap-2">
+        {COMING_SOON.map((item) => (
+          <li key={item.label} className="px-1">
+            <div className="text-sm text-slate-400">{item.label}</div>
+            <div className="text-[11px] leading-snug text-slate-400">{item.detail}</div>
+          </li>
+        ))}
       </ul>
     </section>
   );

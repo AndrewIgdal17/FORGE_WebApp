@@ -20,7 +20,12 @@ const ROUTE_WHITE = '#ffffff';
 const ROUTE_SOURCE_ID = 'forge-existing-route';
 
 export interface MapOverlay {
-  id: 'ref.counties_tiger' | 'ref.corridors_hifld' | 'ref.subregions_egrid';
+  id:
+    | 'ref.counties_tiger'
+    | 'ref.corridors_hifld'
+    | 'ref.subregions_egrid'
+    | 'ref.highways_nhs'
+    | 'ref.rail_tiger';
   label: string;
   swatchClass: string;
   kind: 'fill' | 'line';
@@ -55,6 +60,24 @@ export const MAP_OVERLAYS: readonly MapOverlay[] = [
     color: '#14b8a6',
     borderColor: '#64748b',
     borderWidth: 1,
+  },
+];
+
+/** Display-only reference lines. Not registered for hover or click. */
+export const PREVIEW_OVERLAYS: readonly MapOverlay[] = [
+  {
+    id: 'ref.highways_nhs',
+    label: 'Highways (NHS)',
+    swatchClass: 'bg-blue-500',
+    kind: 'line',
+    color: '#3b82f6',
+  },
+  {
+    id: 'ref.rail_tiger',
+    label: 'Rail Network',
+    swatchClass: 'bg-amber-700',
+    kind: 'line',
+    color: '#b45309',
   },
 ];
 
@@ -166,6 +189,34 @@ function addOverlays(map: MapLibreMap): void {
         'line-width': overlay.borderWidth ?? 1,
         'line-opacity': state?.opacity ?? 0.4,
       },
+    });
+  }
+  for (const overlay of PREVIEW_OVERLAYS) {
+    if (!map.getSource(overlay.id)) {
+      map.addSource(overlay.id, {
+        type: 'vector',
+        url: `${TILE_ORIGIN}/${overlay.id}`,
+        promoteId: 'gid',
+      });
+    }
+    const state = layers[overlay.id];
+    const visibility = state?.visible === false ? 'none' : 'visible';
+    if (map.getLayer(overlay.id)) continue;
+    const linePaint = {
+      'line-color': overlay.color,
+      'line-width': 1,
+      'line-opacity': state?.opacity ?? 0.6,
+    };
+    map.addLayer({
+      id: overlay.id,
+      type: 'line',
+      source: overlay.id,
+      'source-layer': overlay.id,
+      layout: { visibility },
+      paint:
+        overlay.id === 'ref.highways_nhs'
+          ? { ...linePaint, 'line-dasharray': [6, 3] }
+          : linePaint,
     });
   }
 }
@@ -296,7 +347,7 @@ function applyAttributeFilters(map: MapLibreMap): void {
 
 function applyLayerState(map: MapLibreMap): void {
   const layers = useMapStore.getState().layers;
-  for (const overlay of MAP_OVERLAYS) {
+  for (const overlay of [...MAP_OVERLAYS, ...PREVIEW_OVERLAYS]) {
     const state = layers[overlay.id];
     if (!state) continue;
     const visibility = state.visible ? 'visible' : 'none';

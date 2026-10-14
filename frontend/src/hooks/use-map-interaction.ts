@@ -9,6 +9,7 @@ import type {
 import { MAP_OVERLAYS } from '@/components/map/RouteMap';
 import { VOLTAGE_STYLES } from '@/data/color-maps';
 
+/** Analysis layers only. Preview overlays stay out of hover and click. */
 const INTERACTIVE_LAYER_IDS: readonly string[] = MAP_OVERLAYS
   .filter((overlay) => overlay.id !== 'ref.counties_tiger')
   .map((overlay) => overlay.id);
