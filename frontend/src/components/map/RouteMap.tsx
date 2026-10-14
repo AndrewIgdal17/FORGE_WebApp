@@ -261,6 +261,39 @@ function fitExisting(
   fitToRoute(map, route);
 }
 
+function exclusionFilter(
+  property: string,
+  hidden: readonly string[],
+): ExpressionSpecification | null {
+  if (hidden.length === 0) return null;
+  return paintExpression(['!', ['in', ['get', property], ['literal', [...hidden]]]]);
+}
+
+function setLayerFilter(
+  map: MapLibreMap,
+  layerId: string,
+  filter: ExpressionSpecification | null,
+): void {
+  if (!map.getLayer(layerId)) return;
+  map.setFilter(layerId, filter);
+}
+
+function applyAttributeFilters(map: MapLibreMap): void {
+  const hidden = useMapStore.getState().hiddenAttributes;
+
+  const corridorId = 'ref.corridors_hifld' as const;
+  setLayerFilter(
+    map,
+    corridorId,
+    exclusionFilter('volt_class', hidden[corridorId] ?? []),
+  );
+
+  const regionId = 'ref.subregions_egrid' as const;
+  const regionFilter = exclusionFilter('subregion', hidden[regionId] ?? []);
+  setLayerFilter(map, regionId, regionFilter);
+  setLayerFilter(map, borderLayerId(regionId), regionFilter);
+}
+
 function applyLayerState(map: MapLibreMap): void {
   const layers = useMapStore.getState().layers;
   for (const overlay of MAP_OVERLAYS) {
@@ -280,6 +313,7 @@ function applyLayerState(map: MapLibreMap): void {
     map.setLayoutProperty(borderId, 'visibility', visibility);
     map.setPaintProperty(borderId, 'line-opacity', state.opacity);
   }
+  applyAttributeFilters(map);
 }
 
 export function RouteMap({ onMap, existingRoute = null }: RouteMapProps): ReactElement {
@@ -290,6 +324,7 @@ export function RouteMap({ onMap, existingRoute = null }: RouteMapProps): ReactE
   const existingRouteRef = useRef(existingRoute);
   const [ready, setReady] = useState(false);
   const layers = useMapStore((state) => state.layers);
+  const hiddenAttributes = useMapStore((state) => state.hiddenAttributes);
   onMapRef.current = onMap;
   existingRouteRef.current = existingRoute;
 
@@ -341,7 +376,7 @@ export function RouteMap({ onMap, existingRoute = null }: RouteMapProps): ReactE
     const map = mapRef.current;
     if (!map || !ready) return;
     applyLayerState(map);
-  }, [layers, ready]);
+  }, [layers, hiddenAttributes, ready]);
 
   useEffect(() => {
     const map = mapRef.current;

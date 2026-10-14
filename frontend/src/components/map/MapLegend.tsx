@@ -14,11 +14,20 @@ function stopMapPointer(event: SyntheticEvent): void {
   event.stopPropagation();
 }
 
-function CorridorLegend(): ReactElement {
-  const rows = VOLTAGE_STYLES.filter((style) => {
+function visibleVoltageStyles(hidden: readonly string[]) {
+  return VOLTAGE_STYLES.filter((style) => {
     const voltClass = style.voltClass.trim();
-    return voltClass.length > 0 && voltClass !== 'NOT AVAILABLE';
+    return voltClass.length > 0 && voltClass !== 'NOT AVAILABLE' && !hidden.includes(style.voltClass);
   });
+}
+
+function visibleRegionEntries(hidden: readonly string[]): ReadonlyArray<readonly [string, string]> {
+  return Object.entries(SUBREGION_COLORS).filter(([code]) => !hidden.includes(code));
+}
+
+function CorridorLegend({ hidden }: { hidden: readonly string[] }): ReactElement | null {
+  const rows = visibleVoltageStyles(hidden);
+  if (rows.length === 0) return null;
 
   return (
     <div>
@@ -41,8 +50,9 @@ function CorridorLegend(): ReactElement {
   );
 }
 
-function RegionLegend(): ReactElement {
-  const entries = Object.entries(SUBREGION_COLORS);
+function RegionLegend({ hidden }: { hidden: readonly string[] }): ReactElement | null {
+  const entries = visibleRegionEntries(hidden);
+  if (entries.length === 0) return null;
 
   return (
     <div>
@@ -68,8 +78,13 @@ function RegionLegend(): ReactElement {
 export function MapLegend(): ReactElement {
   const [minimized, setMinimized] = useState(false);
   const layers = useMapStore((state) => state.layers);
+  const hiddenAttributes = useMapStore((state) => state.hiddenAttributes);
   const showCorridors = layers['ref.corridors_hifld']?.visible ?? true;
   const showRegions = layers['ref.subregions_egrid']?.visible ?? true;
+  const hiddenVoltages = hiddenAttributes['ref.corridors_hifld'] ?? [];
+  const hiddenRegions = hiddenAttributes['ref.subregions_egrid'] ?? [];
+  const corridorCount = showCorridors ? visibleVoltageStyles(hiddenVoltages).length : 0;
+  const regionCount = showRegions ? visibleRegionEntries(hiddenRegions).length : 0;
 
   if (minimized) {
     return (
@@ -106,10 +121,14 @@ export function MapLegend(): ReactElement {
         </button>
       </div>
       <div className="grid gap-3">
-        {showCorridors ? <CorridorLegend /> : null}
-        {showRegions ? <RegionLegend /> : null}
-        {!showCorridors && !showRegions ? (
-          <p className="text-xs text-slate-500">Turn on Corridors or Grid regions.</p>
+        {showCorridors ? <CorridorLegend hidden={hiddenVoltages} /> : null}
+        {showRegions ? <RegionLegend hidden={hiddenRegions} /> : null}
+        {corridorCount === 0 && regionCount === 0 ? (
+          <p className="text-xs text-slate-500">
+            {showCorridors || showRegions
+              ? 'All legend colors are hidden.'
+              : 'Turn on Corridors or Grid regions.'}
+          </p>
         ) : null}
       </div>
     </section>

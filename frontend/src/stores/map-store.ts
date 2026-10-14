@@ -7,8 +7,12 @@ export interface MapLayerState {
 
 export interface MapStore {
   layers: Record<string, MapLayerState>;
+  /** Attribute values hidden per layer. Empty array means every value is visible. */
+  hiddenAttributes: Record<string, string[]>;
   toggleLayer: (id: string) => void;
   setOpacity: (id: string, value: number) => void;
+  toggleAttribute: (layerId: string, value: string) => void;
+  setHiddenAttributes: (layerId: string, values: readonly string[]) => void;
 }
 
 const DEFAULT_LAYERS: Record<string, MapLayerState> = {
@@ -17,8 +21,14 @@ const DEFAULT_LAYERS: Record<string, MapLayerState> = {
   'ref.subregions_egrid': { visible: false, opacity: 0.3 },
 };
 
+const DEFAULT_HIDDEN_ATTRIBUTES: Record<string, string[]> = {
+  'ref.corridors_hifld': [],
+  'ref.subregions_egrid': [],
+};
+
 export const useMapStore = create<MapStore>((set) => ({
   layers: DEFAULT_LAYERS,
+  hiddenAttributes: DEFAULT_HIDDEN_ATTRIBUTES,
 
   toggleLayer: (id) => {
     set((state) => {
@@ -44,5 +54,29 @@ export const useMapStore = create<MapStore>((set) => ({
         },
       };
     });
+  },
+
+  toggleAttribute: (layerId, value) => {
+    set((state) => {
+      const current = state.hiddenAttributes[layerId] ?? [];
+      const hidden = current.includes(value)
+        ? current.filter((item) => item !== value)
+        : [...current, value];
+      return {
+        hiddenAttributes: {
+          ...state.hiddenAttributes,
+          [layerId]: hidden,
+        },
+      };
+    });
+  },
+
+  setHiddenAttributes: (layerId, values) => {
+    set((state) => ({
+      hiddenAttributes: {
+        ...state.hiddenAttributes,
+        [layerId]: [...values],
+      },
+    }));
   },
 }));

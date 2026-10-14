@@ -1,12 +1,36 @@
 import { useId, useState } from 'react';
 import type { ReactElement, SyntheticEvent } from 'react';
-import { ChevronDown, ChevronUp, Eye, EyeOff, Layers } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, Eye, EyeOff, Layers } from 'lucide-react';
 import { MAP_OVERLAYS } from '@/components/map/RouteMap';
 import { SUBREGION_COLORS, VOLTAGE_STYLES } from '@/data/color-maps';
 import { useMapStore } from '@/stores/map-store';
 
 const PANEL =
-  'absolute top-4 right-4 z-10 w-64 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-lg backdrop-blur-sm';
+  'absolute top-4 right-4 z-10 w-64 max-h-[min(32rem,calc(100%-2rem))] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white/90 p-3 shadow-lg backdrop-blur-sm';
+
+interface AttributeOption {
+  value: string;
+  label: string;
+  color: string;
+}
+
+function attributeOptions(overlayId: string): readonly AttributeOption[] {
+  if (overlayId === 'ref.corridors_hifld') {
+    return VOLTAGE_STYLES.map((style) => ({
+      value: style.voltClass,
+      label: style.label,
+      color: style.color,
+    }));
+  }
+  if (overlayId === 'ref.subregions_egrid') {
+    return Object.entries(SUBREGION_COLORS).map(([code, color]) => ({
+      value: code,
+      label: code,
+      color,
+    }));
+  }
+  return [];
+}
 
 function voltageColor(voltClass: string): string {
   return VOLTAGE_STYLES.find((style) => style.voltClass === voltClass)?.color ?? '#94a3b8';
@@ -46,10 +70,74 @@ function LayerSwatch({ overlay }: { overlay: (typeof MAP_OVERLAYS)[number] }): R
   return <span className={`size-2.5 shrink-0 rounded-sm ${overlay.swatchClass}`} />;
 }
 
+function AttributeChecklist({
+  id,
+  layerId,
+  layerLabel,
+  options,
+  hidden,
+}: {
+  id: string;
+  layerId: string;
+  layerLabel: string;
+  options: readonly AttributeOption[];
+  hidden: readonly string[];
+}): ReactElement {
+  const toggleAttribute = useMapStore((state) => state.toggleAttribute);
+  const setHiddenAttributes = useMapStore((state) => state.setHiddenAttributes);
+  const grid = layerId === 'ref.subregions_egrid';
+
+  return (
+    <div id={id} className="col-span-2 mt-1 border-t border-slate-100 pt-1.5">
+      <div className="mb-1 flex items-center justify-end gap-3">
+        <button
+          type="button"
+          className="text-[11px] font-medium text-slate-600 hover:text-slate-900"
+          onClick={() => setHiddenAttributes(layerId, [])}
+        >
+          Select all
+        </button>
+        <button
+          type="button"
+          className="text-[11px] font-medium text-slate-600 hover:text-slate-900"
+          onClick={() => setHiddenAttributes(layerId, options.map((option) => option.value))}
+        >
+          None
+        </button>
+      </div>
+      <ul
+        className={grid ? 'grid grid-cols-3 gap-x-2 gap-y-1' : 'grid gap-1'}
+        aria-label={`${layerLabel} attributes`}
+      >
+        {options.map((option) => (
+          <li key={option.value}>
+            <label className="flex min-w-0 cursor-pointer items-center gap-1 text-[11px] text-slate-700">
+              <input
+                type="checkbox"
+                className="size-3.5 shrink-0 accent-slate-700"
+                checked={!hidden.includes(option.value)}
+                onChange={() => toggleAttribute(layerId, option.value)}
+              />
+              <span
+                aria-hidden="true"
+                className="size-2 shrink-0 rounded-full ring-1 ring-slate-300"
+                style={{ backgroundColor: option.color }}
+              />
+              <span className="truncate">{option.label}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function LayerPanel(): ReactElement {
   const [minimized, setMinimized] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const baseId = useId();
   const layers = useMapStore((state) => state.layers);
+  const hiddenAttributes = useMapStore((state) => state.hiddenAttributes);
   const toggleLayer = useMapStore((state) => state.toggleLayer);
   const setOpacity = useMapStore((state) => state.setOpacity);
 
@@ -71,7 +159,12 @@ export function LayerPanel(): ReactElement {
   }
 
   return (
-    <section className={PANEL} aria-label="Map layers" onPointerDown={stopMapPointer}>
+    <section
+      className={PANEL}
+      aria-label="Map layers"
+      onPointerDown={stopMapPointer}
+      onWheel={stopMapPointer}
+    >
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
           <Layers className="size-4" />
@@ -90,7 +183,10 @@ export function LayerPanel(): ReactElement {
         {MAP_OVERLAYS.map((overlay) => {
           const state = layers[overlay.id] ?? { visible: true, opacity: 0.4 };
           const sliderId = `${baseId}-${overlay.id}`;
+          const listId = `${baseId}-${overlay.id}-attributes`;
           const percent = Math.round(state.opacity * 100);
+          const options = attributeOptions(overlay.id);
+          const open = expanded[overlay.id] === true;
           return (
             <li key={overlay.id} className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
               <button
@@ -102,9 +198,27 @@ export function LayerPanel(): ReactElement {
               >
                 {state.visible ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
               </button>
-              <span className="flex items-center gap-2 text-sm text-slate-800">
+              <span className="flex items-center gap-1.5 text-sm text-slate-800">
                 <LayerSwatch overlay={overlay} />
                 <span className="flex-1">{overlay.label}</span>
+                {options.length > 0 ? (
+                  <button
+                    type="button"
+                    className="rounded-md p-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                    aria-expanded={open}
+                    aria-controls={listId}
+                    aria-label={`${open ? 'Collapse' : 'Expand'} ${overlay.label} filters`}
+                    onClick={() =>
+                      setExpanded((current) => ({ ...current, [overlay.id]: !current[overlay.id] }))
+                    }
+                  >
+                    {open ? (
+                      <ChevronDown className="size-3.5" />
+                    ) : (
+                      <ChevronRight className="size-3.5" />
+                    )}
+                  </button>
+                ) : null}
                 <span className="tabular-nums text-xs text-slate-500">{percent}%</span>
               </span>
               <label className="sr-only" htmlFor={sliderId}>
@@ -121,6 +235,15 @@ export function LayerPanel(): ReactElement {
                 aria-valuetext={`${percent}%`}
                 onChange={(event) => setOpacity(overlay.id, Number(event.target.value))}
               />
+              {open ? (
+                <AttributeChecklist
+                  id={listId}
+                  layerId={overlay.id}
+                  layerLabel={overlay.label}
+                  options={options}
+                  hidden={hiddenAttributes[overlay.id] ?? []}
+                />
+              ) : null}
             </li>
           );
         })}
