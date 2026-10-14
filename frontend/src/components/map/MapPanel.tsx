@@ -103,6 +103,25 @@ export function MapPanel({
     setClearedExisting(true);
     onRouteChangeRef.current?.(null, null);
     reset();
+    const zeroChanges: Record<string, unknown> = {};
+    const terrainCategories = [
+      'forested',
+      'wetland',
+      'scrubbed_flat',
+      'urban',
+      'farmland',
+      'desert_barren',
+      'mountain',
+      'rolling_hills',
+      'subsea',
+    ];
+    for (const cat of terrainCategories) {
+      zeroChanges[`02_project_physical_details.terrain.terrain_miles.${cat}`] = 0;
+    }
+    for (let zone = 1; zone <= 15; zone += 1) {
+      zeroChanges[`11_project_row_details.right_of_way.zone_${zone}.miles`] = 0;
+    }
+    useFormStore.getState().applyChanges(zeroChanges);
   }
 
   return (

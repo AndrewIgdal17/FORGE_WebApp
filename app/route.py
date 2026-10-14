@@ -196,6 +196,19 @@ def miles_by_category(samples: list[tuple[str, float]]) -> dict[str, float]:
     }
 
 
+def zone_miles_from_rows(zone_rows: list[Any]) -> dict[str, float]:
+    """Miles for all 15 BLM zones. Zones the route misses stay at 0."""
+    zones = {f"zone_{i}": 0.0 for i in range(1, 16)}
+    for row in zone_rows:
+        miles = round(float(row["miles"]), 2)
+        zone_number = int(row["zone"])
+        if not 1 <= zone_number <= 15:
+            logger.warning("Ignoring BLM zone %s outside 1–15", zone_number)
+            continue
+        zones[f"zone_{zone_number}"] = miles
+    return zones
+
+
 def changes_for(intersections: dict[str, dict[str, float]]) -> dict[str, float]:
     """Copy intersection miles onto calculator paths using the direct rules."""
     changes: dict[str, float] = {}
@@ -328,16 +341,7 @@ async def analyze_route(
         )
 
     terrain = miles_by_category(samples)
-    zones: dict[str, float] = {}
-    for row in zone_rows:
-        miles = round(float(row["miles"]), 2)
-        if miles <= 0:
-            continue
-        zone_number = int(row["zone"])
-        if not 1 <= zone_number <= 15:
-            logger.warning("Ignoring BLM zone %s outside 1–15", zone_number)
-            continue
-        zones[f"zone_{zone_number}"] = miles
+    zones = zone_miles_from_rows(zone_rows)
 
     intersections = {TERRAIN_LAYER: terrain, ROW_LAYER: zones}
     body = {

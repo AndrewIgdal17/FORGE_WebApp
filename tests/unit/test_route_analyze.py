@@ -101,6 +101,22 @@ def test_terrain_miles_scale_sample_spacing_and_keep_empty_categories():
     assert set(miles) == set(TERRAIN_KEYS)
 
 
+def test_zone_miles_keep_every_zone_so_a_redraw_can_zero_old_counties():
+    from app.route import changes_for, zone_miles_from_rows
+
+    zones = zone_miles_from_rows([{"zone": 6, "miles": 80.004}, {"zone": 99, "miles": 3}])
+    assert zones["zone_6"] == 80.0
+    assert zones["zone_1"] == 0.0
+    assert zones["zone_15"] == 0.0
+    assert "zone_99" not in zones
+    assert set(zones) == {f"zone_{n}" for n in range(1, 16)}
+
+    changes = changes_for({"terrain/nlcd": {}, "row/blm": zones})
+    assert changes["11_project_row_details.right_of_way.zone_6.miles"] == 80.0
+    assert changes["11_project_row_details.right_of_way.zone_1.miles"] == 0.0
+    assert changes["11_project_row_details.right_of_way.zone_15.miles"] == 0.0
+
+
 def test_changes_copy_present_intersection_keys_onto_forge_paths():
     from app.route import changes_for
 

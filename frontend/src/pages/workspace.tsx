@@ -499,10 +499,11 @@ function WorkspaceBody(): ReactElement {
   const reconductoring = useFormStore.getState().isReconductoring();
   const showRouteMap = view === 'inputs' && subItemId === 'route';
   const createMode = draft !== null && activeScenarioId === null;
-  const milesFromRoute =
+  const savedRoutePresent =
     draft !== null ||
     activeScenario?.route != null ||
     (Array.isArray(activeScenario?.segments) && activeScenario.segments.length > 0);
+  const milesFromRoute = drawn !== undefined ? drawn.route != null : savedRoutePresent;
   const canCreate = createMode && terrainMilesTotal(data ?? {}) > 0;
 
   return (
