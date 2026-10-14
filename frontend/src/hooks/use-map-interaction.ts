@@ -7,10 +7,11 @@ import type {
   MapMouseEvent,
 } from 'maplibre-gl';
 import { MAP_OVERLAYS } from '@/components/map/RouteMap';
-import { STATEFP_TO_ABBR, VOLTAGE_STYLES } from '@/data/color-maps';
+import { VOLTAGE_STYLES } from '@/data/color-maps';
 
-const INTERACTIVE_LAYER_IDS: readonly string[] = MAP_OVERLAYS.map((overlay) => overlay.id);
-const SQ_METERS_PER_SQ_MILE = 2589988;
+const INTERACTIVE_LAYER_IDS: readonly string[] = MAP_OVERLAYS
+  .filter((overlay) => overlay.id !== 'ref.counties_tiger')
+  .map((overlay) => overlay.id);
 const POPUP_FONT = 'system-ui, sans-serif';
 
 interface HoverTarget {
@@ -37,12 +38,6 @@ function prop(properties: FeatureProps, key: string): string {
   return '';
 }
 
-function stateAbbr(statefp: string): string {
-  if (!statefp) return '';
-  const padded = statefp.padStart(2, '0');
-  return STATEFP_TO_ABBR[padded] ?? STATEFP_TO_ABBR[statefp] ?? '';
-}
-
 function voltageLabel(voltClass: string): string {
   if (!voltClass) return '';
   const key = voltClass.toLowerCase();
@@ -57,19 +52,6 @@ function formatVoltage(raw: string): string {
   return `${Math.round(value).toLocaleString('en-US')} kV`;
 }
 
-function formatLandArea(raw: string): string {
-  if (!raw) return '—';
-  const meters = Number(raw);
-  if (!Number.isFinite(meters)) return '—';
-  const sqMi = Math.round(meters / SQ_METERS_PER_SQ_MILE);
-  return `${sqMi.toLocaleString('en-US')} sq mi`;
-}
-
-function countyTooltip(properties: FeatureProps): string {
-  const name = prop(properties, 'namelsad') || 'County';
-  const abbr = stateAbbr(prop(properties, 'statefp'));
-  return abbr ? `${name}, ${abbr}` : name;
-}
 
 function corridorTooltip(properties: FeatureProps): string {
   const label = voltageLabel(prop(properties, 'volt_class')) || 'Corridor';
@@ -87,8 +69,6 @@ function gridTooltip(properties: FeatureProps): string {
 
 function tooltipText(feature: MapGeoJSONFeature): string {
   switch (feature.layer.id) {
-    case 'ref.counties_tiger':
-      return countyTooltip(feature.properties);
     case 'ref.corridors_hifld':
       return corridorTooltip(feature.properties);
     case 'ref.subregions_egrid':
@@ -114,16 +94,6 @@ function tooltipHtml(text: string): string {
 function inspectHtml(feature: MapGeoJSONFeature): string {
   const properties = feature.properties;
   switch (feature.layer.id) {
-    case 'ref.counties_tiger': {
-      const name = prop(properties, 'namelsad') || 'County';
-      const abbr = stateAbbr(prop(properties, 'statefp'));
-      return inspectCard(abbr ? `${name}, ${abbr}` : name, [
-        ['Name', name],
-        ['State', abbr || '—'],
-        ['GEOID', prop(properties, 'geoid') || '—'],
-        ['Land area', formatLandArea(prop(properties, 'aland'))],
-      ]);
-    }
     case 'ref.corridors_hifld': {
       const voltClass = prop(properties, 'volt_class');
       const label = voltageLabel(voltClass);

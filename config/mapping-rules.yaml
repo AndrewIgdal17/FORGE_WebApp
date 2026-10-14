@@ -1,0 +1,237 @@
+# FORGE GIS → Calculator Mapping Rules
+# v1, approved 2026-10-13
+#
+# These rules translate intersection results from the route analysis
+# endpoint into FORGE calculator input field paths. Each rule maps one
+# geographic measurement to one input field.
+#
+# Methodology note: these rules are methodology-adjacent — changing them
+# changes what numbers the calculator sees, which changes results. They
+# follow the same change discipline as methodology: document the rationale,
+# test the effect. Crosswalk rationale is in:
+#   Projects/FORGE/docs/design/2026-10-10__gis-route-drawing-design.md
+#   § "Terrain crosswalk (v1, approved 2026-10-13)"
+#
+# Adding a new GIS layer = adding entries here. No calculator change needed.
+
+# ============================================================================
+# TERRAIN MILES (from NLCD + 3DEP slope crosswalk)
+#
+# The route analysis endpoint densifies the route to 30m points, samples
+# NLCD land-cover class and 3DEP slope at each point, applies the precedence
+# crosswalk (wetland > forest > urban > farmland > desert > mountain >
+# rolling hills > scrubbed flat), and sums miles per category.
+#
+# The intersection results key is "terrain/nlcd_3dep".
+# ============================================================================
+
+terrain:
+  - layer: "terrain/nlcd_3dep"
+    key: "forested"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.forested"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "terrain/nlcd_3dep"
+    key: "wetland"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.wetland"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "terrain/nlcd_3dep"
+    key: "farmland"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.farmland"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "terrain/nlcd_3dep"
+    key: "urban"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.urban"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "terrain/nlcd_3dep"
+    key: "desert_barren"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.desert_barren"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "terrain/nlcd_3dep"
+    key: "mountain"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.mountain"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "terrain/nlcd_3dep"
+    key: "rolling_hills"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.rolling_hills"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "terrain/nlcd_3dep"
+    key: "scrubbed_flat"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.scrubbed_flat"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "terrain/nlcd_3dep"
+    key: "subsea"
+    forge_path: "02_project_physical_details.terrain.terrain_miles.subsea"
+    transform: "direct"
+    unit: "miles"
+
+# ============================================================================
+# ROW ZONE MILES (from Census counties + BLM zone crosswalk)
+#
+# The route analysis endpoint intersects the route with county polygons,
+# joins each county to its BLM zone via ref.blm_zone_crosswalk, and sums
+# miles per zone (1–15).
+#
+# The intersection results key is "row/blm_zone".
+# ============================================================================
+
+row_zones:
+  - layer: "row/blm_zone"
+    key: "zone_1"
+    forge_path: "11_project_row_details.right_of_way.zone_1.miles"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "row/blm_zone"
+    key: "zone_2"
+    forge_path: "11_project_row_details.right_of_way.zone_2.miles"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "row/blm_zone"
+    key: "zone_3"
+    forge_path: "11_project_row_details.right_of_way.zone_3.miles"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "row/blm_zone"
+    key: "zone_4"
+    forge_path: "11_project_row_details.right_of_way.zone_4.miles"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "row/blm_zone"
+    key: "zone_5"
+    forge_path: "11_project_row_details.right_of_way.zone_5.miles"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "row/blm_zone"
+    key: "zone_6"
+    forge_path: "11_project_row_details.right_of_way.zone_6.miles"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "row/blm_zone"
+    key: "zone_7"
+    forge_path: "11_project_row_details.right_of_way.zone_7.miles"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "row/blm_zone"
+    key: "zone_8"
+    forge_path: "11_project_row_details.right_of_way.zone_8.miles"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "row/blm_zone"
+    key: "zone_9"
+    forge_path: "11_project_row_details.right_of_way.zone_9.miles"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "row/blm_zone"
+    key: "zone_10"
+    forge_path: "11_project_row_details.right_of_way.zone_10.miles"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "row/blm_zone"
+    key: "zone_11"
+    forge_path: "11_project_row_details.right_of_way.zone_11.miles"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "row/blm_zone"
+    key: "zone_12"
+    forge_path: "11_project_row_details.right_of_way.zone_12.miles"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "row/blm_zone"
+    key: "zone_13"
+    forge_path: "11_project_row_details.right_of_way.zone_13.miles"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "row/blm_zone"
+    key: "zone_14"
+    forge_path: "11_project_row_details.right_of_way.zone_14.miles"
+    transform: "direct"
+    unit: "miles"
+
+  - layer: "row/blm_zone"
+    key: "zone_15"
+    forge_path: "11_project_row_details.right_of_way.zone_15.miles"
+    transform: "direct"
+    unit: "miles"
+
+# ============================================================================
+# TERRAIN CROSSWALK (NLCD class → FORGE category)
+#
+# Used by the route analysis endpoint's raster sampling logic, not by the
+# mapping rules engine. Included here as the canonical reference so the
+# crosswalk and the mapping rules live in one versioned file.
+#
+# Precedence order (higher priority wins):
+#   1. Subsea (construction type, not NLCD)
+#   2. Wetland (NLCD 90, 95)
+#   3. Forest (NLCD 41, 42, 43)
+#   4. Urban (NLCD 21, 22, 23, 24)
+#   5. Farmland (NLCD 81, 82)
+#   6. Desert/barren (NLCD 31)
+#   7. Mountain (slope > 8%, no land-cover claim above)
+#   8. Rolling hills (slope 2–8%, no land-cover claim above)
+#   9. Scrubbed flat (everything else)
+# ============================================================================
+
+terrain_crosswalk:
+  nlcd_to_category:
+    90: "wetland"        # Woody wetlands
+    95: "wetland"        # Emergent herbaceous wetlands
+    41: "forested"       # Deciduous forest
+    42: "forested"       # Evergreen forest
+    43: "forested"       # Mixed forest
+    21: "urban"          # Developed, open space
+    22: "urban"          # Developed, low intensity
+    23: "urban"          # Developed, medium intensity
+    24: "urban"          # Developed, high intensity
+    81: "farmland"       # Hay/pasture
+    82: "farmland"       # Cultivated crops
+    31: "desert_barren"  # Barren land (rock/sand/clay)
+
+  # NLCD classes not listed above fall through to slope-based classification:
+  #   slope > 8%  → mountain
+  #   slope 2–8%  → rolling_hills
+  #   slope < 2%  → scrubbed_flat
+  #
+  # Common fall-through classes:
+  #   52: Shrub/scrub
+  #   71: Grassland/herbaceous
+  #   11: Open water (should be excluded from route miles)
+  #   12: Perennial ice/snow (mountain by WECC convention)
+
+  slope_thresholds:
+    mountain_min_pct: 8.0
+    rolling_hills_min_pct: 2.0
+
+  special_cases:
+    # NLCD 12 (perennial ice/snow) → mountain regardless of slope
+    12: "mountain"
+    # NLCD 11 (open water) → excluded from terrain miles; flag for user review
+    11: "exclude"
