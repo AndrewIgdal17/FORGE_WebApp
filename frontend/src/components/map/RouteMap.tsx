@@ -25,10 +25,11 @@ export interface MapOverlay {
     | 'ref.corridors_hifld'
     | 'ref.subregions_egrid'
     | 'ref.highways_nhs'
-    | 'ref.rail_narn';
+    | 'ref.rail_narn'
+    | 'ref.substations_hifld';
   label: string;
   swatchClass: string;
-  kind: 'fill' | 'line';
+  kind: 'fill' | 'line' | 'circle';
   /** Representative swatch. Grid and corridor paint is data-driven. */
   color: string;
   borderColor?: string;
@@ -78,6 +79,13 @@ export const PREVIEW_OVERLAYS: readonly MapOverlay[] = [
     swatchClass: 'bg-amber-700',
     kind: 'line',
     color: '#b45309',
+  },
+  {
+    id: 'ref.substations_hifld',
+    label: 'Substations (HIFLD)',
+    swatchClass: 'bg-rose-500',
+    kind: 'circle',
+    color: '#f43f5e',
   },
 ];
 
@@ -246,24 +254,41 @@ function addOverlays(map: MapLibreMap): void {
     const state = layers[overlay.id];
     const visibility = state?.visible === false ? 'none' : 'visible';
     if (map.getLayer(overlay.id)) continue;
-    const linePaint = {
-      'line-color': overlay.color,
-      'line-width': 1,
-      'line-opacity': state?.opacity ?? 0.6,
-    };
-    map.addLayer({
-      id: overlay.id,
-      type: 'line',
-      source: overlay.id,
-      'source-layer': overlay.id,
-      layout: { visibility },
-      paint:
-        overlay.id === 'ref.highways_nhs'
-          ? { ...linePaint, 'line-dasharray': [6, 3] }
-          : linePaint,
-    });
-    if (HIT_TARGET_IDS.has(overlay.id)) {
-      addHitLayer(map, overlay.id, visibility);
+    if (overlay.kind === 'circle') {
+      map.addLayer({
+        id: overlay.id,
+        type: 'circle',
+        source: overlay.id,
+        'source-layer': overlay.id,
+        layout: { visibility },
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 2, 8, 3, 12, 5],
+          'circle-color': overlay.color,
+          'circle-opacity': state?.opacity ?? 0.8,
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 1,
+        },
+      });
+    } else {
+      const linePaint = {
+        'line-color': overlay.color,
+        'line-width': 1,
+        'line-opacity': state?.opacity ?? 0.6,
+      };
+      map.addLayer({
+        id: overlay.id,
+        type: 'line',
+        source: overlay.id,
+        'source-layer': overlay.id,
+        layout: { visibility },
+        paint:
+          overlay.id === 'ref.highways_nhs'
+            ? { ...linePaint, 'line-dasharray': [6, 3] }
+            : linePaint,
+      });
+      if (HIT_TARGET_IDS.has(overlay.id)) {
+        addHitLayer(map, overlay.id, visibility);
+      }
     }
   }
 }
@@ -400,6 +425,8 @@ function applyLayerState(map: MapLibreMap): void {
       map.setLayoutProperty(overlay.id, 'visibility', visibility);
       if (overlay.kind === 'fill') {
         map.setPaintProperty(overlay.id, 'fill-opacity', fillOpacityExpression(state.opacity));
+      } else if (overlay.kind === 'circle') {
+        map.setPaintProperty(overlay.id, 'circle-opacity', state.opacity);
       } else {
         map.setPaintProperty(overlay.id, 'line-opacity', state.opacity);
       }

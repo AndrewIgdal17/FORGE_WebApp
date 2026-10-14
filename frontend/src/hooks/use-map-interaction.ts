@@ -101,6 +101,19 @@ function railTooltip(properties: FeatureProps): string {
   return parts.length > 0 ? parts.join(' · ') : 'Rail';
 }
 
+function substationTooltip(properties: FeatureProps): string {
+  const name = prop(properties, 'name');
+  const type = prop(properties, 'type');
+  const maxVolt = prop(properties, 'max_volt');
+  if (!name || name.match(/^UNKNOWN\d*$/i)) {
+    return type === 'TAP' ? 'Tap point' : maxVolt ? `${maxVolt} kV` : 'Substation';
+  }
+  const parts = [name];
+  if (maxVolt && maxVolt !== '-999999') parts.push(`${maxVolt} kV`);
+  if (type === 'TAP') parts.push('Tap');
+  return parts.join(' · ');
+}
+
 function tooltipText(feature: MapGeoJSONFeature): string {
   switch (baseLayerId(feature.layer.id)) {
     case 'ref.corridors_hifld':
@@ -109,6 +122,8 @@ function tooltipText(feature: MapGeoJSONFeature): string {
       return highwayTooltip(feature.properties);
     case 'ref.rail_narn':
       return railTooltip(feature.properties);
+    case 'ref.substations_hifld':
+      return substationTooltip(feature.properties);
     default:
       return '';
   }
