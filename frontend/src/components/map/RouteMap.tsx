@@ -13,8 +13,8 @@ import {
 import { useMapStore } from '@/stores/map-store';
 
 const TILE_ORIGIN = 'https://tiles.forge-calc.com';
-const US_CENTER: [number, number] = [-98.5, 39.8];
-const US_ZOOM = 4;
+const US_CENTER: [number, number] = [-81.3412, 35.7332]; // Hickory, NC
+const US_ZOOM = 5;
 const ROUTE_BLUE = '#3b82f6';
 const ROUTE_WHITE = '#ffffff';
 const ROUTE_SOURCE_ID = 'forge-existing-route';
