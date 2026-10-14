@@ -6,16 +6,22 @@ import type {
   MapLayerMouseEvent,
   MapMouseEvent,
 } from 'maplibre-gl';
-import { MAP_OVERLAYS, PREVIEW_OVERLAYS } from '@/components/map/RouteMap';
+import { MAP_OVERLAYS, PREVIEW_OVERLAYS, hitLayerId, baseLayerId } from '@/components/map/RouteMap';
 import { VOLTAGE_STYLES } from '@/data/color-maps';
 
-/** Layers with hover tooltip + click inspect. Counties excluded (reference only). */
-const TOOLTIP_LAYER_IDS: readonly string[] = [
-  ...MAP_OVERLAYS.filter((o) => o.id !== 'ref.counties_tiger').map((o) => o.id),
-  ...PREVIEW_OVERLAYS.map((o) => o.id),
+/** Line layers that use invisible hit-target layers for hover. */
+const HIT_TARGET_IDS = new Set(['ref.corridors_hifld', 'ref.highways_nhs', 'ref.rail_narn']);
+
+/** The layer IDs we actually bind events on. Line layers use their -hit sibling. */
+const EVENT_LAYER_IDS: readonly string[] = [
+  ...MAP_OVERLAYS
+    .filter((o) => o.id !== 'ref.counties_tiger')
+    .map((o) => HIT_TARGET_IDS.has(o.id) ? hitLayerId(o.id) : o.id),
+  ...PREVIEW_OVERLAYS
+    .map((o) => HIT_TARGET_IDS.has(o.id) ? hitLayerId(o.id) : o.id),
 ];
 
-/** Layers with click-to-inspect popups. Grid regions + corridors. */
+/** Layers with click-to-inspect popups (by base ID). Grid regions + corridors. */
 const CLICK_INSPECT_LAYER_IDS = new Set<string>([
   'ref.corridors_hifld',
   'ref.subregions_egrid',
@@ -96,7 +102,7 @@ function railTooltip(properties: FeatureProps): string {
 }
 
 function tooltipText(feature: MapGeoJSONFeature): string {
-  switch (feature.layer.id) {
+  switch (baseLayerId(feature.layer.id)) {
     case 'ref.corridors_hifld':
       return corridorTooltip(feature.properties);
     case 'ref.highways_nhs':
@@ -123,7 +129,7 @@ function tooltipHtml(text: string): string {
 
 function inspectHtml(feature: MapGeoJSONFeature): string {
   const properties = feature.properties;
-  switch (feature.layer.id) {
+  switch (baseLayerId(feature.layer.id)) {
     case 'ref.corridors_hifld': {
       const voltClass = prop(properties, 'volt_class');
       const label = voltageLabel(voltClass);
@@ -166,12 +172,12 @@ function styleReady(map: MapLibreMap): boolean {
 
 function topFeature(map: MapLibreMap, point: MapMouseEvent['point']): MapGeoJSONFeature | null {
   if (!overlaysReady(map)) return null;
-  const hits = map.queryRenderedFeatures(point, { layers: [...TOOLTIP_LAYER_IDS] });
+  const hits = map.queryRenderedFeatures(point, { layers: [...EVENT_LAYER_IDS] });
   return hits[0] ?? null;
 }
 
 function overlaysReady(map: MapLibreMap): boolean {
-  return styleReady(map) && TOOLTIP_LAYER_IDS.some((id) => Boolean(map.getLayer(id)));
+  return styleReady(map) && EVENT_LAYER_IDS.some((id) => Boolean(map.getLayer(id)));
 }
 
 export function useMapInteraction(map: MapLibreMap | null, isDrawing: boolean): void {
@@ -250,7 +256,7 @@ export function useMapInteraction(map: MapLibreMap | null, isDrawing: boolean): 
     };
 
     const presentHover = (feature: MapGeoJSONFeature): void => {
-      if (HOVER_HIGHLIGHT_LAYER_IDS.has(feature.layer.id)) {
+      if (HOVER_HIGHLIGHT_LAYER_IDS.has(baseLayerId(feature.layer.id))) {
         setHoverState(feature);
       } else {
         clearHoverState();
@@ -324,23 +330,23 @@ export function useMapInteraction(map: MapLibreMap | null, isDrawing: boolean): 
 
     const bind = (): void => {
       if (detach || !overlaysReady(map)) return;
-      for (const layerId of TOOLTIP_LAYER_IDS) {
+      for (const layerId of EVENT_LAYER_IDS) {
         if (!map.getLayer(layerId)) continue;
         map.on('mouseenter', layerId, onEnter);
         map.on('mousemove', layerId, onMove);
         map.on('mouseleave', layerId, onLeave);
-        if (CLICK_INSPECT_LAYER_IDS.has(layerId)) {
+        if (CLICK_INSPECT_LAYER_IDS.has(baseLayerId(layerId))) {
           map.on('click', layerId, onFeatureClick);
         }
       }
       map.on('click', onBackgroundClick);
       detach = () => {
-        for (const layerId of TOOLTIP_LAYER_IDS) {
+        for (const layerId of EVENT_LAYER_IDS) {
           if (!map.getLayer(layerId)) continue;
           map.off('mouseenter', layerId, onEnter);
           map.off('mousemove', layerId, onMove);
           map.off('mouseleave', layerId, onLeave);
-          if (CLICK_INSPECT_LAYER_IDS.has(layerId)) {
+          if (CLICK_INSPECT_LAYER_IDS.has(baseLayerId(layerId))) {
             map.off('click', layerId, onFeatureClick);
           }
         }

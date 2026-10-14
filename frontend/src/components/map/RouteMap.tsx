@@ -125,6 +125,47 @@ function borderLayerId(overlayId: MapOverlay['id']): string {
   return `${overlayId}-border`;
 }
 
+export function hitLayerId(overlayId: string): string {
+  return `${overlayId}-hit`;
+}
+
+export function baseLayerId(id: string): string {
+  return id.endsWith('-hit') ? id.slice(0, -4) : id;
+}
+
+const HIT_TARGET_IDS = new Set<string>([
+  'ref.corridors_hifld',
+  'ref.highways_nhs',
+  'ref.rail_narn',
+]);
+
+const HIT_WIDTH_EXPRESSION = [
+  'interpolate', ['linear'], ['zoom'],
+  5, 6,
+  8, 10,
+  12, 14,
+];
+
+function addHitLayer(map: MapLibreMap, overlayId: string, visibility: 'visible' | 'none'): void {
+  const id = hitLayerId(overlayId);
+  if (map.getLayer(id)) return;
+  map.addLayer(
+    {
+      id,
+      type: 'line',
+      source: overlayId,
+      'source-layer': overlayId,
+      layout: { visibility },
+      paint: {
+        'line-color': '#000',
+        'line-opacity': 0,
+        'line-width': HIT_WIDTH_EXPRESSION as unknown as number,
+      },
+    },
+    overlayId,
+  );
+}
+
 function addOverlays(map: MapLibreMap): void {
   const layers = useMapStore.getState().layers;
   for (const overlay of MAP_OVERLAYS) {
@@ -177,6 +218,9 @@ function addOverlays(map: MapLibreMap): void {
         });
       }
     }
+    if (HIT_TARGET_IDS.has(overlay.id)) {
+      addHitLayer(map, overlay.id, visibility);
+    }
     if (overlay.borderColor === undefined || map.getLayer(borderLayerId(overlay.id))) continue;
     map.addLayer({
       id: borderLayerId(overlay.id),
@@ -218,6 +262,9 @@ function addOverlays(map: MapLibreMap): void {
           ? { ...linePaint, 'line-dasharray': [6, 3] }
           : linePaint,
     });
+    if (HIT_TARGET_IDS.has(overlay.id)) {
+      addHitLayer(map, overlay.id, visibility);
+    }
   }
 }
 
@@ -333,11 +380,9 @@ function applyAttributeFilters(map: MapLibreMap): void {
   const hidden = useMapStore.getState().hiddenAttributes;
 
   const corridorId = 'ref.corridors_hifld' as const;
-  setLayerFilter(
-    map,
-    corridorId,
-    exclusionFilter('volt_class', hidden[corridorId] ?? []),
-  );
+  const corridorFilter = exclusionFilter('volt_class', hidden[corridorId] ?? []);
+  setLayerFilter(map, corridorId, corridorFilter);
+  setLayerFilter(map, hitLayerId(corridorId), corridorFilter);
 
   const regionId = 'ref.subregions_egrid' as const;
   const regionFilter = exclusionFilter('subregion', hidden[regionId] ?? []);
@@ -360,9 +405,14 @@ function applyLayerState(map: MapLibreMap): void {
       }
     }
     const borderId = borderLayerId(overlay.id);
-    if (!map.getLayer(borderId)) continue;
-    map.setLayoutProperty(borderId, 'visibility', visibility);
-    map.setPaintProperty(borderId, 'line-opacity', state.opacity);
+    if (map.getLayer(borderId)) {
+      map.setLayoutProperty(borderId, 'visibility', visibility);
+      map.setPaintProperty(borderId, 'line-opacity', state.opacity);
+    }
+    const hitId = hitLayerId(overlay.id);
+    if (map.getLayer(hitId)) {
+      map.setLayoutProperty(hitId, 'visibility', visibility);
+    }
   }
   applyAttributeFilters(map);
 }
