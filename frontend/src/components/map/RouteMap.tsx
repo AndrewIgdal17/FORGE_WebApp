@@ -89,6 +89,15 @@ function paintExpression(expression: readonly unknown[]): ExpressionSpecificatio
   return expression as unknown as ExpressionSpecification;
 }
 
+function fillOpacityExpression(opacity: number): ExpressionSpecification {
+  return paintExpression([
+    'case',
+    ['boolean', ['feature-state', 'hover'], false],
+    Math.min(opacity + 0.2, 0.8),
+    opacity,
+  ]);
+}
+
 function borderLayerId(overlayId: MapOverlay['id']): string {
   return `${overlayId}-border`;
 }
@@ -115,7 +124,7 @@ function addOverlays(map: MapLibreMap): void {
           layout: { visibility },
           paint: {
             'fill-color': paintExpression(SUBREGION_FILL_EXPRESSION),
-            'fill-opacity': state?.opacity ?? 0.4,
+            'fill-opacity': fillOpacityExpression(state?.opacity ?? 0.4),
           },
         });
       } else if (overlay.id === 'ref.corridors_hifld') {
@@ -140,7 +149,7 @@ function addOverlays(map: MapLibreMap): void {
           layout: { visibility },
           paint: {
             'fill-color': overlay.color,
-            'fill-opacity': state?.opacity ?? 0.4,
+            'fill-opacity': fillOpacityExpression(state?.opacity ?? 0.4),
           },
         });
       }
@@ -261,7 +270,7 @@ function applyLayerState(map: MapLibreMap): void {
     if (map.getLayer(overlay.id)) {
       map.setLayoutProperty(overlay.id, 'visibility', visibility);
       if (overlay.kind === 'fill') {
-        map.setPaintProperty(overlay.id, 'fill-opacity', state.opacity);
+        map.setPaintProperty(overlay.id, 'fill-opacity', fillOpacityExpression(state.opacity));
       } else {
         map.setPaintProperty(overlay.id, 'line-opacity', state.opacity);
       }

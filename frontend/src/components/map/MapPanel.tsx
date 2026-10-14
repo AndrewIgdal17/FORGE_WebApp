@@ -4,6 +4,7 @@ import type { MultiLineString } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { DrawingToolbar } from '@/components/map/DrawingToolbar';
 import { LayerPanel } from '@/components/map/LayerPanel';
+import { MapTooltip } from '@/components/map/MapTooltip';
 import { ResetButton } from '@/components/map/ResetButton';
 import { RouteMap } from '@/components/map/RouteMap';
 import { RouteStats } from '@/components/map/RouteStats';
@@ -127,6 +128,7 @@ export function MapPanel({
   return (
     <div className="relative h-full min-h-0 w-full flex-1 overflow-hidden">
       <RouteMap onMap={setMap} existingRoute={showExisting} />
+      <MapTooltip map={map} isDrawing={isDrawing} />
       <RouteStats
         route={statsRoute}
         isDrawing={isDrawing}
