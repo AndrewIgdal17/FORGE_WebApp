@@ -64,17 +64,13 @@ function corridorTooltip(properties: FeatureProps): string {
   return parts.join(' · ');
 }
 
-function gridTooltip(properties: FeatureProps): string {
-  return prop(properties, 'subregion') || 'Grid region';
-}
-
 function tooltipText(feature: MapGeoJSONFeature): string {
   switch (feature.layer.id) {
     case 'ref.corridors_hifld':
       return corridorTooltip(feature.properties);
-    case 'ref.subregions_egrid':
-      return gridTooltip(feature.properties);
     default:
+      // Grid regions: no hover tooltip (click-to-inspect only).
+      // The hover highlight still shows via setHoverState.
       return '';
   }
 }
