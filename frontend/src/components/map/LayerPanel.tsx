@@ -7,7 +7,7 @@ import { SUBREGION_COLORS, VOLTAGE_STYLES } from '@/data/color-maps';
 import { useMapStore } from '@/stores/map-store';
 
 const PANEL =
-  'absolute top-4 right-4 z-10 w-80 max-h-[min(42rem,calc(100%-2rem))] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white/90 p-3 shadow-lg backdrop-blur-sm';
+  'absolute top-4 right-4 z-10 w-80 max-h-[min(42rem,calc(100%-2rem))] overflow-x-clip overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white/90 p-3 shadow-lg backdrop-blur-sm';
 
 const LAYER_DESCRIPTIONS: Record<string, string> = {
   'ref.corridors_hifld':
