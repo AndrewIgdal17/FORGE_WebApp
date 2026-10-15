@@ -65,11 +65,6 @@ function StackedDots({ colors }: { colors: readonly string[] }): ReactElement {
   );
 }
 
-const COMING_SOON: readonly string[] = [
-  'Wildfire (FSim)',
-  'Wetlands (NWI)',
-];
-
 function LayerSwatch({ overlay }: { overlay: MapOverlay }): ReactElement {
   if (overlay.id === 'ref.corridors_hifld') return <StackedDots colors={CORRIDOR_SWATCH} />;
   if (overlay.id === 'ref.subregions_egrid') return <StackedDots colors={REGION_SWATCH} />;
@@ -228,7 +223,7 @@ function OverlayRow({
 }
 
 export function LayerPanel(): ReactElement {
-  const [minimized, setMinimized] = useState(false);
+  const [minimized, setMinimized] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const baseId = useId();
 
@@ -298,14 +293,6 @@ export function LayerPanel(): ReactElement {
             displayOnly
             baseId={baseId}
           />
-        ))}
-      </ul>
-      <h3 className="text-xs font-medium uppercase tracking-wider text-slate-400 mt-3 mb-1 px-1">
-        Coming Soon
-      </h3>
-      <ul className="grid gap-2">
-        {COMING_SOON.map((label) => (
-          <li key={label} className="px-1 text-sm text-slate-400">{label}</li>
         ))}
       </ul>
     </section>
