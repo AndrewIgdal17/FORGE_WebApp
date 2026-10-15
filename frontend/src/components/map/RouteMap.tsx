@@ -76,10 +76,6 @@ export const MAP_OVERLAYS: readonly MapOverlay[] = [
     borderColor: '#64748b',
     borderWidth: 1,
   },
-];
-
-/** Display-only reference layers. Not registered for hover or click. */
-export const PREVIEW_OVERLAYS: readonly MapOverlay[] = [
   {
     id: 'ref.blm_zones',
     label: 'BLM Zones',
@@ -89,6 +85,10 @@ export const PREVIEW_OVERLAYS: readonly MapOverlay[] = [
     borderColor: '#92400e',
     borderWidth: 0.5,
   },
+];
+
+/** Display-only reference layers. Not registered for hover or click. */
+export const PREVIEW_OVERLAYS: readonly MapOverlay[] = [
   {
     id: 'ref.highways_nhs',
     label: 'Highways (NHS)',

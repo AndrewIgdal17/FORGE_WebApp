@@ -50,6 +50,48 @@ function CorridorLegend({ hidden }: { hidden: readonly string[] }): ReactElement
   );
 }
 
+const BLM_ZONE_LEGEND: ReadonlyArray<{ zone: number; color: string }> = [
+  { zone: 1, color: '#fef3c7' },
+  { zone: 2, color: '#fde68a' },
+  { zone: 3, color: '#fde68a' },
+  { zone: 4, color: '#fcd34d' },
+  { zone: 5, color: '#fbbf24' },
+  { zone: 6, color: '#f9a80d' },
+  { zone: 7, color: '#f59e0b' },
+  { zone: 8, color: '#e78e08' },
+  { zone: 9, color: '#d97706' },
+  { zone: 10, color: '#c26a06' },
+  { zone: 11, color: '#b45309' },
+  { zone: 12, color: '#a34604' },
+  { zone: 13, color: '#92400e' },
+  { zone: 14, color: '#854d0e' },
+  { zone: 15, color: '#78350f' },
+];
+
+function BLMZoneLegend(): ReactElement {
+  return (
+    <div>
+      <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+        BLM Zones
+      </h3>
+      <div className="flex items-center gap-0.5">
+        {BLM_ZONE_LEGEND.map(({ zone, color }) => (
+          <div
+            key={zone}
+            title={`Zone ${zone}`}
+            className="h-3 flex-1 first:rounded-l last:rounded-r"
+            style={{ backgroundColor: color }}
+          />
+        ))}
+      </div>
+      <div className="mt-0.5 flex justify-between text-[10px] text-slate-500">
+        <span>1</span>
+        <span>15</span>
+      </div>
+    </div>
+  );
+}
+
 function RegionLegend({ hidden }: { hidden: readonly string[] }): ReactElement | null {
   const entries = visibleRegionEntries(hidden);
   if (entries.length === 0) return null;
@@ -81,6 +123,7 @@ export function MapLegend(): ReactElement {
   const hiddenAttributes = useMapStore((state) => state.hiddenAttributes);
   const showCorridors = layers['ref.corridors_hifld']?.visible ?? true;
   const showRegions = layers['ref.subregions_egrid']?.visible ?? true;
+  const showBLMZones = layers['ref.blm_zones']?.visible ?? false;
   const hiddenVoltages = hiddenAttributes['ref.corridors_hifld'] ?? [];
   const hiddenRegions = hiddenAttributes['ref.subregions_egrid'] ?? [];
   const corridorCount = showCorridors ? visibleVoltageStyles(hiddenVoltages).length : 0;
@@ -123,11 +166,10 @@ export function MapLegend(): ReactElement {
       <div className="grid gap-3">
         {showCorridors ? <CorridorLegend hidden={hiddenVoltages} /> : null}
         {showRegions ? <RegionLegend hidden={hiddenRegions} /> : null}
-        {corridorCount === 0 && regionCount === 0 ? (
+        {showBLMZones ? <BLMZoneLegend /> : null}
+        {corridorCount === 0 && regionCount === 0 && !showBLMZones ? (
           <p className="text-xs text-slate-500">
-            {showCorridors || showRegions
-              ? 'All legend colors are hidden.'
-              : 'Turn on Corridors or Grid regions.'}
+            Turn on Corridors, Grid regions, or BLM Zones.
           </p>
         ) : null}
       </div>
