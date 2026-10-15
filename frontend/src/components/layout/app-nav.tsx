@@ -9,11 +9,14 @@ const NAV_LINKS = [
   { href: '/app/scenarios-manager', label: 'Scenarios' },
 ] as const;
 
+const ADMIN_EMAIL = 'andrewigdal17@gmail.com';
+
 export function AppNav(): ReactElement {
-  const { profile, signOut } = useAuth();
+  const { session, profile, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const username = profile?.username || '';
+  const isAdmin = session?.user?.email === ADMIN_EMAIL;
 
   async function handleLogOut(): Promise<void> {
     await signOut();
@@ -45,6 +48,18 @@ export function AppNav(): ReactElement {
             </Link>
           );
         })}
+        {isAdmin ? (
+          <Link
+            to="/app/dev-map"
+            aria-current={location.pathname === '/app/dev-map' ? 'page' : undefined}
+            className={cn(
+              'border-b-2 border-transparent px-3 py-2 font-medium text-amber-600/70 no-underline transition-[color,border-color] duration-150 hover:text-amber-700',
+              location.pathname === '/app/dev-map' && 'border-amber-600 font-bold text-amber-700',
+            )}
+          >
+            Dev Map
+          </Link>
+        ) : null}
       </div>
       <div className="ml-auto flex items-center gap-3">
         <span>{username}</span>
