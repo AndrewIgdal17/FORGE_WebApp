@@ -235,6 +235,18 @@ function addOverlays(map: MapLibreMap): void {
             'line-opacity': state?.opacity ?? 0.7,
           },
         });
+      } else if (overlay.id === 'ref.blm_zones') {
+        map.addLayer({
+          id: overlay.id,
+          type: 'fill',
+          source: overlay.id,
+          'source-layer': overlay.id,
+          layout: { visibility },
+          paint: {
+            'fill-color': paintExpression(BLM_ZONE_FILL),
+            'fill-opacity': fillOpacityExpression(state?.opacity ?? 0.6),
+          },
+        });
       } else {
         map.addLayer({
           id: overlay.id,
@@ -300,9 +312,7 @@ function addOverlays(map: MapLibreMap): void {
         'source-layer': overlay.id,
         layout: { visibility },
         paint: {
-          'fill-color': overlay.id === 'ref.blm_zones'
-            ? BLM_ZONE_FILL
-            : overlay.color,
+          'fill-color': overlay.color,
           'fill-opacity': state?.opacity ?? 0.4,
         },
       });
