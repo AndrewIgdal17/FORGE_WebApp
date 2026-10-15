@@ -9,6 +9,41 @@ import { useMapStore } from '@/stores/map-store';
 const PANEL =
   'absolute top-4 right-4 z-10 w-80 max-h-[min(42rem,calc(100%-2rem))] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white/90 p-3 shadow-lg backdrop-blur-sm';
 
+const LAYER_DESCRIPTIONS: Record<string, string> = {
+  'ref.corridors_hifld':
+    'Existing high-voltage transmission lines from the Homeland Infrastructure Foundation-Level Database. Color indicates voltage class.',
+  'ref.subregions_egrid':
+    'EPA eGRID subregions \u2014 areas that share a common electricity generation mix.',
+  'ref.blm_zones':
+    'Bureau of Land Management land-value zones (1\u201315), derived from county-level appraisals. Zone 1 is the cheapest land; zone 15 is the most expensive.',
+  'ref.highways_nhs': 'National Highway System routes from the Federal Highway Administration.',
+  'ref.rail_narn': 'Freight and passenger rail lines from the FRA National Rail Network.',
+  'ref.substations_hifld':
+    'Electric power substations from the Homeland Infrastructure Foundation-Level Database.',
+};
+
+function LayerInfo({ id }: { id: string }): ReactElement | null {
+  const tooltipId = useId();
+  const description = LAYER_DESCRIPTIONS[id];
+  if (description === undefined) return null;
+
+  return (
+    <span className="forge-tip">
+      <button
+        type="button"
+        className="forge-tip-mark"
+        aria-label="Layer information"
+        aria-describedby={tooltipId}
+      >
+        i
+      </button>
+      <span id={tooltipId} className="forge-tip-panel" role="tooltip">
+        {description}
+      </span>
+    </span>
+  );
+}
+
 interface AttributeOption {
   value: string;
   label: string;
@@ -159,7 +194,7 @@ function OverlayRow({
   const open = expanded === true;
 
   return (
-    <li className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
+    <li className="relative z-0 grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1 hover:z-20 focus-within:z-20">
       <button
         type="button"
         className="rounded-md p-1 text-slate-700 hover:bg-slate-100"
@@ -172,6 +207,7 @@ function OverlayRow({
       <span className="flex min-w-0 items-center gap-1.5 text-sm text-slate-800">
         <LayerSwatch overlay={overlay} />
         <span className="min-w-0 flex-1 truncate">{overlay.label}</span>
+        <LayerInfo id={overlay.id} />
         {displayOnly ? (
           <span className="shrink-0 rounded bg-slate-100 px-1 py-px text-[10px] font-medium tracking-wide text-slate-400 uppercase">
             Display only
