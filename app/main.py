@@ -57,7 +57,7 @@ def _calc_semaphore() -> asyncio.Semaphore:
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# React frontend (all page routes: /, /signup, /login, /app, /app/workspace, /app/scenarios-manager)
+# React frontend (all page routes: /, /signup, /login, /app, /app/workspace, /app/scenarios-manager, /app/dev-map)
 REACT_DIST = BASE_DIR / "frontend" / "dist"
 REACT_INDEX = REACT_DIST / "index.html"
 
@@ -295,6 +295,12 @@ async def serve_workspace() -> FileResponse:
 @app.get("/app/scenarios-manager", response_class=FileResponse)
 async def serve_scenarios_manager() -> FileResponse:
     """Serve the scenario manager."""
+    return _serve_react()
+
+
+@app.get("/app/dev-map", response_class=FileResponse)
+async def serve_dev_map() -> FileResponse:
+    """Serve the admin map testing page."""
     return _serve_react()
 
 

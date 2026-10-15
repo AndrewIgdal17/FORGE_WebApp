@@ -9,6 +9,7 @@ import LoginPage from '@/pages/login';
 import HomePage from '@/pages/home';
 import ScenariosManagerPage from '@/pages/scenarios-manager';
 import WorkspacePage from '@/pages/workspace';
+import DevMapPage from '@/pages/dev-map';
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
               <Route path="/app" element={<HomePage />} />
               <Route path="/app/scenarios-manager" element={<ScenariosManagerPage />} />
               <Route path="/app/workspace" element={<WorkspacePage />} />
+              <Route path="/app/dev-map" element={<DevMapPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </BrowserRouter>
