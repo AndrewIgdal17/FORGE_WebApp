@@ -34,7 +34,6 @@ const BLM_ZONE_FILL: ExpressionSpecification = [
 
 export interface MapOverlay {
   id:
-    | 'ref.counties_tiger'
     | 'ref.corridors_hifld'
     | 'ref.subregions_egrid'
     | 'ref.highways_nhs'
@@ -51,15 +50,6 @@ export interface MapOverlay {
 }
 
 export const MAP_OVERLAYS: readonly MapOverlay[] = [
-  {
-    id: 'ref.counties_tiger',
-    label: 'Counties',
-    swatchClass: 'bg-slate-400',
-    kind: 'fill',
-    color: '#94a3b8',
-    borderColor: '#cbd5e1',
-    borderWidth: 0.5,
-  },
   {
     id: 'ref.corridors_hifld',
     label: 'Corridors',

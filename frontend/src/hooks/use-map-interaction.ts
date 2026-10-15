@@ -15,7 +15,6 @@ const HIT_TARGET_IDS = new Set(['ref.corridors_hifld', 'ref.highways_nhs', 'ref.
 /** The layer IDs we actually bind events on. Line layers use their -hit sibling. */
 const EVENT_LAYER_IDS: readonly string[] = [
   ...MAP_OVERLAYS
-    .filter((o) => o.id !== 'ref.counties_tiger')
     .map((o) => HIT_TARGET_IDS.has(o.id) ? hitLayerId(o.id) : o.id),
   ...PREVIEW_OVERLAYS
     .map((o) => HIT_TARGET_IDS.has(o.id) ? hitLayerId(o.id) : o.id),
@@ -29,7 +28,6 @@ const CLICK_INSPECT_LAYER_IDS = new Set<string>([
 
 /** Layers with hover highlight (feature-state). Fill layers only. */
 const HOVER_HIGHLIGHT_LAYER_IDS = new Set<string>([
-  'ref.counties_tiger',
   'ref.subregions_egrid',
 ]);
 const POPUP_FONT = 'system-ui, sans-serif';

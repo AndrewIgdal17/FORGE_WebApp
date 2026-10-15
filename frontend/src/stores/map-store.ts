@@ -16,7 +16,6 @@ export interface MapStore {
 }
 
 const DEFAULT_LAYERS: Record<string, MapLayerState> = {
-  'ref.counties_tiger': { visible: true, opacity: 0.4 },
   'ref.corridors_hifld': { visible: true, opacity: 0.7 },
   'ref.subregions_egrid': { visible: false, opacity: 0.3 },
   'ref.blm_zones': { visible: false, opacity: 0.6 },
