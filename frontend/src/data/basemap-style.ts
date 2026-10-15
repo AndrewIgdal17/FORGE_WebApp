@@ -11,6 +11,10 @@ export function forgeBasemapStyle(): StyleSpecification {
         type: 'vector',
         url: `${TILES_URL}/basemap`,
       },
+      nhd: {
+        type: 'vector',
+        url: `${TILES_URL}/ref.waterbodies_nhd,ref.flowlines_nhd`,
+      },
     },
     layers: [
       {
@@ -30,7 +34,26 @@ export function forgeBasemapStyle(): StyleSpecification {
         type: 'fill',
         source: 'basemap',
         'source-layer': 'water',
+        layout: { visibility: 'none' },
         paint: { 'fill-color': '#dbeafe' },
+      },
+      {
+        id: 'water-nhd',
+        type: 'fill',
+        source: 'nhd',
+        'source-layer': 'ref.waterbodies_nhd',
+        paint: { 'fill-color': '#dbeafe' },
+      },
+      {
+        id: 'water-nhd-rivers',
+        type: 'line',
+        source: 'nhd',
+        'source-layer': 'ref.flowlines_nhd',
+        minzoom: 8,
+        paint: {
+          'line-color': '#93c5fd',
+          'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.5, 12, 2, 16, 6],
+        },
       },
       {
         id: 'landuse',
