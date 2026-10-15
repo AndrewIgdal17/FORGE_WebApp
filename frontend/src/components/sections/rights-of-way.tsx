@@ -31,7 +31,7 @@ const ROW_ROOT = '11_project_row_details.right_of_way';
 const ROW_RENT_ESCALATION_PATH = '11_project_row_details.row_rent_escalation_real';
 const MAX_ZONES = 15;
 const MIN_VISIBLE_ZONES = 3;
-const MILES_TOLERANCE = 0.01;
+const MILES_TOLERANCE = 0.5;
 const ZONE_FIELDS = ['miles', 'acquisition_cost', 'rent_cost', 'hold_cost'] as const;
 
 const cellFieldClass = '[&_label]:sr-only';

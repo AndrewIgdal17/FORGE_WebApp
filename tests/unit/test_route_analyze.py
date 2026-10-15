@@ -117,6 +117,37 @@ def test_zone_miles_keep_every_zone_so_a_redraw_can_zero_old_counties():
     assert changes["11_project_row_details.right_of_way.zone_15.miles"] == 0.0
 
 
+def test_normalize_zone_miles_scales_to_terrain_total():
+    from app.route import normalize_zone_miles
+
+    terrain = {"forested": 60.0, "farmland": 40.0, "wetland": 0.0}
+    zones = {f"zone_{n}": 0.0 for n in range(1, 16)}
+    zones["zone_6"] = 80.0
+    zones["zone_7"] = 40.0
+    scaled = normalize_zone_miles(zones, terrain)
+    assert sum(scaled.values()) == pytest.approx(100.0, abs=0.01)
+    assert scaled["zone_6"] == pytest.approx(66.67, abs=0.01)
+    assert scaled["zone_7"] == pytest.approx(33.33, abs=0.01)
+    assert scaled["zone_1"] == 0.0
+
+
+def test_normalize_zone_miles_skips_when_zone_total_is_zero():
+    from app.route import normalize_zone_miles
+
+    terrain = {"forested": 10.0}
+    zones = {f"zone_{n}": 0.0 for n in range(1, 16)}
+    assert normalize_zone_miles(zones, terrain) == zones
+
+
+def test_normalize_zone_miles_skips_when_terrain_total_is_zero():
+    from app.route import normalize_zone_miles
+
+    terrain = {"forested": 0.0, "farmland": 0.0}
+    zones = {f"zone_{n}": 0.0 for n in range(1, 16)}
+    zones["zone_6"] = 12.5
+    assert normalize_zone_miles(zones, terrain) == zones
+
+
 def test_changes_copy_present_intersection_keys_onto_forge_paths():
     from app.route import changes_for
 

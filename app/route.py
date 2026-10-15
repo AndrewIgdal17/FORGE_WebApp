@@ -213,6 +213,23 @@ def zone_miles_from_rows(zone_rows: list[Any]) -> dict[str, float]:
     return zones
 
 
+def normalize_zone_miles(
+    zones: dict[str, float], terrain: dict[str, float]
+) -> dict[str, float]:
+    """Scale zone miles so they sum to the terrain total.
+
+    NLCD raster sampling and PostGIS vector intersection produce independent
+    totals. Scaling keeps the zone mix and makes the rounded sums match.
+    Skip when either total is 0 (no terrain samples or no zone intersections).
+    """
+    terrain_total = sum(terrain.values())
+    zone_total = sum(zones.values())
+    if terrain_total <= 0 or zone_total <= 0:
+        return zones
+    scale = terrain_total / zone_total
+    return {key: round(value * scale, 2) for key, value in zones.items()}
+
+
 def changes_for(intersections: dict[str, dict[str, float]]) -> dict[str, float]:
     """Copy intersection miles onto calculator paths using the direct rules."""
     changes: dict[str, float] = {}
@@ -416,6 +433,7 @@ async def analyze_route(
 
     terrain = miles_by_category(samples)
     zones = zone_miles_from_rows(zone_rows)
+    zones = normalize_zone_miles(zones, terrain)
 
     intersections = {TERRAIN_LAYER: terrain, ROW_LAYER: zones}
     body = {

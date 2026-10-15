@@ -35,7 +35,7 @@ interface WizardDraft {
 
 const PROJECT = '01_project_technical_details.project';
 const ROW_ROOT = '11_project_row_details.right_of_way';
-const MILES_TOLERANCE = 0.01;
+const MILES_TOLERANCE = 0.5;
 const ZONE_COUNT = 15;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
