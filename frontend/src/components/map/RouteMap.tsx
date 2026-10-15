@@ -19,6 +19,19 @@ const ROUTE_BLUE = '#3b82f6';
 const ROUTE_WHITE = '#ffffff';
 const ROUTE_SOURCE_ID = 'forge-existing-route';
 
+/** Data-driven fill: warm sequential palette for BLM zones 1–15. */
+const BLM_ZONE_FILL: ExpressionSpecification = [
+  'interpolate', ['linear'], ['get', 'zone'],
+  1, '#fef3c7',   // lightest (cheapest land)
+  3, '#fde68a',
+  5, '#fbbf24',
+  7, '#f59e0b',
+  9, '#d97706',
+  11, '#b45309',
+  13, '#92400e',
+  15, '#78350f',  // darkest (most expensive land)
+];
+
 export interface MapOverlay {
   id:
     | 'ref.counties_tiger'
@@ -26,7 +39,8 @@ export interface MapOverlay {
     | 'ref.subregions_egrid'
     | 'ref.highways_nhs'
     | 'ref.rail_narn'
-    | 'ref.substations_hifld';
+    | 'ref.substations_hifld'
+    | 'ref.blm_zones';
   label: string;
   swatchClass: string;
   kind: 'fill' | 'line' | 'circle';
@@ -64,8 +78,17 @@ export const MAP_OVERLAYS: readonly MapOverlay[] = [
   },
 ];
 
-/** Display-only reference lines. Not registered for hover or click. */
+/** Display-only reference layers. Not registered for hover or click. */
 export const PREVIEW_OVERLAYS: readonly MapOverlay[] = [
+  {
+    id: 'ref.blm_zones',
+    label: 'BLM Zones',
+    swatchClass: 'bg-amber-400',
+    kind: 'fill',
+    color: '#fbbf24',
+    borderColor: '#92400e',
+    borderWidth: 0.5,
+  },
   {
     id: 'ref.highways_nhs',
     label: 'Highways (NHS)',
@@ -269,6 +292,34 @@ function addOverlays(map: MapLibreMap): void {
           'circle-stroke-width': 1,
         },
       });
+    } else if (overlay.kind === 'fill') {
+      map.addLayer({
+        id: overlay.id,
+        type: 'fill',
+        source: overlay.id,
+        'source-layer': overlay.id,
+        layout: { visibility },
+        paint: {
+          'fill-color': overlay.id === 'ref.blm_zones'
+            ? BLM_ZONE_FILL
+            : overlay.color,
+          'fill-opacity': state?.opacity ?? 0.4,
+        },
+      });
+      if (overlay.borderColor) {
+        map.addLayer({
+          id: borderLayerId(overlay.id),
+          type: 'line',
+          source: overlay.id,
+          'source-layer': overlay.id,
+          layout: { visibility },
+          paint: {
+            'line-color': overlay.borderColor,
+            'line-width': overlay.borderWidth ?? 0.5,
+            'line-opacity': state?.opacity ?? 0.4,
+          },
+        });
+      }
     } else {
       const linePaint = {
         'line-color': overlay.color,
