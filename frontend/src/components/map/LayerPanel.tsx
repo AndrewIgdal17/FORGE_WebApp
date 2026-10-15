@@ -3,11 +3,12 @@ import type { ReactElement, SyntheticEvent } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, Eye, EyeOff, Layers } from 'lucide-react';
 import { MAP_OVERLAYS, PREVIEW_OVERLAYS } from '@/components/map/RouteMap';
 import type { MapOverlay } from '@/components/map/RouteMap';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { SUBREGION_COLORS, VOLTAGE_STYLES } from '@/data/color-maps';
 import { useMapStore } from '@/stores/map-store';
 
 const PANEL =
-  'absolute top-4 right-4 z-10 w-80 max-h-[min(42rem,calc(100%-2rem))] overflow-x-clip overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white/90 p-3 shadow-lg backdrop-blur-sm';
+  'absolute top-4 right-4 z-10 w-80 max-h-[min(42rem,calc(100%-2rem))] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white/90 p-3 shadow-lg backdrop-blur-sm';
 
 const LAYER_DESCRIPTIONS: Record<string, string> = {
   'ref.corridors_hifld':
@@ -23,24 +24,21 @@ const LAYER_DESCRIPTIONS: Record<string, string> = {
 };
 
 function LayerInfo({ id }: { id: string }): ReactElement | null {
-  const tooltipId = useId();
   const description = LAYER_DESCRIPTIONS[id];
   if (description === undefined) return null;
 
   return (
-    <span className="forge-tip">
-      <button
-        type="button"
-        className="forge-tip-mark"
+    <Tooltip>
+      <TooltipTrigger
+        className="forge-info-mark"
         aria-label="Layer information"
-        aria-describedby={tooltipId}
       >
         i
-      </button>
-      <span id={tooltipId} className="forge-tip-panel" role="tooltip">
+      </TooltipTrigger>
+      <TooltipContent side="bottom" align="end" sideOffset={6} className="forge-info-content">
         {description}
-      </span>
-    </span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
