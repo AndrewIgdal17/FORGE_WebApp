@@ -172,8 +172,37 @@ export default function WorkspacePage(): ReactElement {
   );
 }
 
+const SIDEBAR_STORAGE_KEY = 'forge-sidebar-collapsed';
+
 function WorkspaceBody(): ReactElement {
   const { view, subItemId, setView, selectSubItem, openInputsSubItem } = useNavigation();
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return sessionStorage.getItem(SIDEBAR_STORAGE_KEY) === '1'; }
+    catch { return false; }
+  });
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try { sessionStorage.setItem(SIDEBAR_STORAGE_KEY, next ? '1' : '0'); }
+      catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent): void {
+      if (e.key !== '[') return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' || target.isContentEditable)) return;
+      e.preventDefault();
+      toggleSidebar();
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [toggleSidebar]);
 
   const data = useFormStore((state) => state.data);
   const defaults = useFormStore((state) => state.defaults);
@@ -527,7 +556,7 @@ function WorkspaceBody(): ReactElement {
             onCreate={() => { void handleCreate(); }}
           />
           <div className="flex min-h-0 flex-1">
-            <Sidebar validation={validation} />
+            <Sidebar validation={validation} collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
             <main
               className={
                 showRouteMap
