@@ -374,8 +374,8 @@ export function useMapInteraction(map: MapLibreMap | null, isDrawing: boolean): 
     return () => {
       map.off('idle', bind);
       map.off('style.load', bind);
-      detach?.();
       try {
+        detach?.();
         clearHoverState();
         hoverPopupRef.current?.remove();
         inspectPopupRef.current?.remove();
