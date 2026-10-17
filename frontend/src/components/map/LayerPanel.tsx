@@ -11,16 +11,16 @@ const PANEL =
   'absolute top-4 right-4 z-10 w-80 max-h-[min(42rem,calc(100%-2rem))] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white/90 p-3 shadow-lg backdrop-blur-sm';
 
 const LAYER_DESCRIPTIONS: Record<string, string> = {
-  'ref.corridors_hifld':
-    'Existing high-voltage transmission lines from the Homeland Infrastructure Foundation-Level Database. Color indicates voltage class.',
+  'ref.corridors':
+    'Existing high-voltage transmission lines from merged HIFLD and OpenStreetMap data. Color indicates voltage class.',
   'ref.subregions_egrid':
     'EPA eGRID subregions \u2014 areas that share a common electricity generation mix.',
   'ref.blm_zones':
     'Bureau of Land Management land-value zones (1\u201315), derived from county-level appraisals. Zone 1 is the cheapest land; zone 15 is the most expensive.',
   'ref.highways_nhs': 'National Highway System routes from the Federal Highway Administration.',
   'ref.rail_narn': 'Freight and passenger rail lines from the FRA National Rail Network.',
-  'ref.substations_hifld':
-    'Electric power substations from the Homeland Infrastructure Foundation-Level Database.',
+  'ref.substations_display':
+    'Electric power substations from merged HIFLD and OpenStreetMap data.',
 };
 
 function LayerInfo({ id }: { id: string }): ReactElement | null {
@@ -49,7 +49,7 @@ interface AttributeOption {
 }
 
 function attributeOptions(overlayId: string): readonly AttributeOption[] {
-  if (overlayId === 'ref.corridors_hifld') {
+  if (overlayId === 'ref.corridors') {
     return VOLTAGE_STYLES.map((style) => ({
       value: style.voltClass,
       label: style.label,
@@ -99,7 +99,7 @@ function StackedDots({ colors }: { colors: readonly string[] }): ReactElement {
 }
 
 function LayerSwatch({ overlay }: { overlay: MapOverlay }): ReactElement {
-  if (overlay.id === 'ref.corridors_hifld') return <StackedDots colors={CORRIDOR_SWATCH} />;
+  if (overlay.id === 'ref.corridors') return <StackedDots colors={CORRIDOR_SWATCH} />;
   if (overlay.id === 'ref.subregions_egrid') return <StackedDots colors={REGION_SWATCH} />;
   return <span className={`size-2.5 shrink-0 rounded-sm ${overlay.swatchClass}`} />;
 }

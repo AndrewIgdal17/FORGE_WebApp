@@ -16,16 +16,16 @@ export interface MapStore {
 }
 
 const DEFAULT_LAYERS: Record<string, MapLayerState> = {
-  'ref.corridors_hifld': { visible: true, opacity: 0.7 },
+  'ref.corridors': { visible: true, opacity: 0.7 },
   'ref.subregions_egrid': { visible: false, opacity: 0.3 },
   'ref.blm_zones': { visible: false, opacity: 0.6 },
   'ref.highways_nhs': { visible: false, opacity: 0.6 },
   'ref.rail_narn': { visible: false, opacity: 0.6 },
-  'ref.substations_hifld': { visible: false, opacity: 0.8 },
+  'ref.substations_display': { visible: false, opacity: 0.8 },
 };
 
 const DEFAULT_HIDDEN_ATTRIBUTES: Record<string, string[]> = {
-  'ref.corridors_hifld': [],
+  'ref.corridors': [],
   'ref.subregions_egrid': [],
 };
 

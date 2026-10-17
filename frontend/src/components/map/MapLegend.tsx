@@ -121,10 +121,10 @@ export function MapLegend(): ReactElement {
   const [minimized, setMinimized] = useState(false);
   const layers = useMapStore((state) => state.layers);
   const hiddenAttributes = useMapStore((state) => state.hiddenAttributes);
-  const showCorridors = layers['ref.corridors_hifld']?.visible ?? true;
+  const showCorridors = layers['ref.corridors']?.visible ?? true;
   const showRegions = layers['ref.subregions_egrid']?.visible ?? true;
   const showBLMZones = layers['ref.blm_zones']?.visible ?? false;
-  const hiddenVoltages = hiddenAttributes['ref.corridors_hifld'] ?? [];
+  const hiddenVoltages = hiddenAttributes['ref.corridors'] ?? [];
   const hiddenRegions = hiddenAttributes['ref.subregions_egrid'] ?? [];
   const corridorCount = showCorridors ? visibleVoltageStyles(hiddenVoltages).length : 0;
   const regionCount = showRegions ? visibleRegionEntries(hiddenRegions).length : 0;

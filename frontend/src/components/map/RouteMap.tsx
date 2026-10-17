@@ -34,11 +34,11 @@ const BLM_ZONE_FILL: ExpressionSpecification = [
 
 export interface MapOverlay {
   id:
-    | 'ref.corridors_hifld'
+    | 'ref.corridors'
     | 'ref.subregions_egrid'
     | 'ref.highways_nhs'
     | 'ref.rail_narn'
-    | 'ref.substations_hifld'
+    | 'ref.substations_display'
     | 'ref.blm_zones';
   label: string;
   swatchClass: string;
@@ -51,7 +51,7 @@ export interface MapOverlay {
 
 export const MAP_OVERLAYS: readonly MapOverlay[] = [
   {
-    id: 'ref.corridors_hifld',
+    id: 'ref.corridors',
     label: 'Corridors',
     swatchClass: 'bg-orange-500',
     kind: 'line',
@@ -94,8 +94,8 @@ export const PREVIEW_OVERLAYS: readonly MapOverlay[] = [
     color: '#b45309',
   },
   {
-    id: 'ref.substations_hifld',
-    label: 'Substations (HIFLD)',
+    id: 'ref.substations_display',
+    label: 'Substations',
     swatchClass: 'bg-rose-500',
     kind: 'circle',
     color: '#f43f5e',
@@ -155,7 +155,7 @@ export function baseLayerId(id: string): string {
 }
 
 const HIT_TARGET_IDS = new Set<string>([
-  'ref.corridors_hifld',
+  'ref.corridors',
   'ref.highways_nhs',
   'ref.rail_narn',
 ]);
@@ -212,7 +212,7 @@ function addOverlays(map: MapLibreMap): void {
             'fill-opacity': fillOpacityExpression(state?.opacity ?? 0.4),
           },
         });
-      } else if (overlay.id === 'ref.corridors_hifld') {
+      } else if (overlay.id === 'ref.corridors') {
         map.addLayer({
           id: overlay.id,
           type: 'line',
@@ -455,7 +455,7 @@ function setLayerFilter(
 function applyAttributeFilters(map: MapLibreMap): void {
   const hidden = useMapStore.getState().hiddenAttributes;
 
-  const corridorId = 'ref.corridors_hifld' as const;
+  const corridorId = 'ref.corridors' as const;
   const corridorFilter = exclusionFilter('volt_class', hidden[corridorId] ?? []);
   setLayerFilter(map, corridorId, corridorFilter);
   setLayerFilter(map, hitLayerId(corridorId), corridorFilter);

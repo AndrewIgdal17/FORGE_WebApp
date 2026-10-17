@@ -10,7 +10,7 @@ import { MAP_OVERLAYS, PREVIEW_OVERLAYS, hitLayerId, baseLayerId } from '@/compo
 import { VOLTAGE_STYLES } from '@/data/color-maps';
 
 /** Line layers that use invisible hit-target layers for hover. */
-const HIT_TARGET_IDS = new Set(['ref.corridors_hifld', 'ref.highways_nhs', 'ref.rail_narn']);
+const HIT_TARGET_IDS = new Set(['ref.corridors', 'ref.highways_nhs', 'ref.rail_narn']);
 
 /** The layer IDs we actually bind events on. Line layers use their -hit sibling. */
 const EVENT_LAYER_IDS: readonly string[] = [
@@ -22,7 +22,7 @@ const EVENT_LAYER_IDS: readonly string[] = [
 
 /** Layers with click-to-inspect popups (by base ID). Grid regions + corridors. */
 const CLICK_INSPECT_LAYER_IDS = new Set<string>([
-  'ref.corridors_hifld',
+  'ref.corridors',
   'ref.subregions_egrid',
 ]);
 
@@ -114,13 +114,13 @@ function substationTooltip(properties: FeatureProps): string {
 
 function tooltipText(feature: MapGeoJSONFeature): string {
   switch (baseLayerId(feature.layer.id)) {
-    case 'ref.corridors_hifld':
+    case 'ref.corridors':
       return corridorTooltip(feature.properties);
     case 'ref.highways_nhs':
       return highwayTooltip(feature.properties);
     case 'ref.rail_narn':
       return railTooltip(feature.properties);
-    case 'ref.substations_hifld':
+    case 'ref.substations_display':
       return substationTooltip(feature.properties);
     default:
       return '';
@@ -143,7 +143,7 @@ function tooltipHtml(text: string): string {
 function inspectHtml(feature: MapGeoJSONFeature): string {
   const properties = feature.properties;
   switch (baseLayerId(feature.layer.id)) {
-    case 'ref.corridors_hifld': {
+    case 'ref.corridors': {
       const voltClass = prop(properties, 'volt_class');
       const label = voltageLabel(voltClass);
       return inspectCard(label || 'Corridor', [
