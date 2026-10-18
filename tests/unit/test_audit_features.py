@@ -8,8 +8,12 @@ from app.audit_features import FEATURE_NAMES, compute_features, features_to_arra
 
 
 def test_feature_names_include_area_degree_and_nlcd():
-    assert len(FEATURE_NAMES) == 17
-    assert FEATURE_NAMES[-3:] == ("sub_area_sqm", "corridor_degree", "nlcd_class")
+    assert len(FEATURE_NAMES) == 23
+    assert "sub_area_sqm" in FEATURE_NAMES
+    assert "corridor_degree" in FEATURE_NAMES
+    assert "nlcd_class" in FEATURE_NAMES
+    assert "hifld_name_has_digits" in FEATURE_NAMES
+    assert "matched_name_known_prefix" in FEATURE_NAMES
 
 
 def test_compute_features_keeps_new_values():
@@ -28,14 +32,13 @@ def test_compute_features_keeps_new_values():
         corridor_degree=4,
         nlcd_class=23,
     )
-    assert len(features) == 17
+    assert len(features) == 23
     assert list(features) == list(FEATURE_NAMES)
     assert features["sub_area_sqm"] == 5000.0
     assert features["corridor_degree"] == 4.0
     assert features["nlcd_class"] == 23.0
     vector = features_to_array(features)
-    assert vector.shape == (17,)
-    assert vector[-3:].tolist() == [5000.0, 4.0, 23.0]
+    assert vector.shape == (23,)
 
 
 def test_new_features_default_to_zero():

@@ -26,6 +26,12 @@ FEATURE_NAMES = (
     "sub_area_sqm",
     "corridor_degree",
     "nlcd_class",
+    "hifld_name_has_digits",
+    "matched_name_has_digits",
+    "hifld_name_word_count",
+    "matched_name_word_count",
+    "hifld_name_known_prefix",
+    "matched_name_known_prefix",
 )
 
 _PLACEHOLDER_RE = re.compile(
@@ -54,10 +60,30 @@ def _clean_name(name: str | None) -> str:
     return str(name).strip()
 
 
+_KNOWN_PREFIX_RE = re.compile(
+    r"^(UNKNOWN|TAP|DEADEND|DEAD END|NOT AVAILABLE|RISER)",
+    re.IGNORECASE,
+)
+
+_HAS_DIGITS_RE = re.compile(r"\d")
+
+
 def _is_placeholder(name: str) -> bool:
     if not name:
         return False
     return bool(_PLACEHOLDER_RE.match(name))
+
+
+def _has_digits(name: str) -> bool:
+    return bool(_HAS_DIGITS_RE.search(name)) if name else False
+
+
+def _word_count(name: str) -> int:
+    return len(name.split()) if name else 0
+
+
+def _has_known_prefix(name: str) -> bool:
+    return bool(_KNOWN_PREFIX_RE.match(name)) if name else False
 
 
 def _token_overlap(left: str, right: str) -> float:
@@ -123,6 +149,12 @@ def compute_features(
         "sub_area_sqm": sub_area_sqm,
         "corridor_degree": corridor_degree,
         "nlcd_class": nlcd_class,
+        "hifld_name_has_digits": float(_has_digits(left)),
+        "matched_name_has_digits": float(_has_digits(right)),
+        "hifld_name_word_count": float(_word_count(left)),
+        "matched_name_word_count": float(_word_count(right)),
+        "hifld_name_known_prefix": float(_has_known_prefix(left)),
+        "matched_name_known_prefix": float(_has_known_prefix(right)),
     }
     return {name: _finite(features[name]) for name in FEATURE_NAMES}
 
