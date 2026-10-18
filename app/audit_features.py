@@ -23,6 +23,9 @@ FEATURE_NAMES = (
     "hifld_type_code",
     "corridor_source_code",
     "state_match",
+    "sub_area_sqm",
+    "corridor_degree",
+    "nlcd_class",
 )
 
 _PLACEHOLDER_RE = re.compile(
@@ -77,8 +80,11 @@ def compute_features(
     hifld_type: str | None,
     corridor_source: str,
     state_match: bool,
+    sub_area_sqm: float | None = None,
+    corridor_degree: float | None = None,
+    nlcd_class: float | None = None,
 ) -> dict[str, float]:
-    """Return the 14 audit features as finite floats, in FEATURE_NAMES order."""
+    """Return the audit features as finite floats, in FEATURE_NAMES order."""
     left = _clean_name(hifld_name)
     right = _clean_name(matched_name)
     both_present = bool(left) and bool(right)
@@ -114,10 +120,13 @@ def compute_features(
         "hifld_type_code": HIFLD_TYPE_CODES.get(type_key, 4),
         "corridor_source_code": SOURCE_CODES.get(source_key, 1),
         "state_match": bool(state_match),
+        "sub_area_sqm": sub_area_sqm,
+        "corridor_degree": corridor_degree,
+        "nlcd_class": nlcd_class,
     }
     return {name: _finite(features[name]) for name in FEATURE_NAMES}
 
 
 def features_to_array(features: dict[str, float]) -> np.ndarray:
-    """Stack features in FEATURE_NAMES order into a length-14 float64 vector."""
+    """Stack features in FEATURE_NAMES order into one float64 vector."""
     return np.array([_finite(features[name]) for name in FEATURE_NAMES], dtype=np.float64)

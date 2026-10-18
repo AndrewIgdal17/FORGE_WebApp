@@ -1,9 +1,9 @@
 """Four-model ensemble for the substation-name audit.
 
-Trains logistic regression, random forest, XGBoost, and AdaBoost on the 14
-audit features. The ensemble is a majority vote. A tie goes to the tied label
-with the highest individual confidence. Predictions stay unavailable until 30
-decisions have been trained.
+Trains logistic regression, random forest, XGBoost, and AdaBoost on the
+audit features in ``FEATURE_NAMES``. The ensemble is a majority vote. A tie
+goes to the tied label with the highest individual confidence. Predictions
+stay unavailable until 30 decisions have been trained.
 
 `train` publishes a new model bundle in one assignment. An in-flight `predict`
 keeps the previous bundle and does not observe a half-updated set of models.
@@ -570,7 +570,7 @@ def _validate_training(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.nda
     features = np.asarray(X, dtype=np.float64)
     labels = np.asarray([str(value) for value in np.asarray(y).reshape(-1)])
     if features.ndim != 2:
-        raise ValueError("X must be a 2-d array of shape (n, 14)")
+        raise ValueError(f"X must be a 2-d array of shape (n, {len(FEATURE_NAMES)})")
     if features.shape[1] != len(FEATURE_NAMES):
         raise ValueError(f"X must have {len(FEATURE_NAMES)} features")
     if features.shape[0] == 0:
@@ -649,8 +649,9 @@ class AuditEnsemble:
     def train(self, X: np.ndarray, y: np.ndarray) -> None:
         """Train all 4 models.
 
-        `X` is `(n, 14)` and `y` is `accept` / `keep` / `skip`. Appends one
-        accuracy-history point when `n` is at least 30.
+        `X` has one column per name in ``FEATURE_NAMES`` and `y` is
+        `accept` / `keep` / `skip`. Appends one accuracy-history point when
+        `n` is at least 30.
         """
         features, labels = _validate_training(X, y)
         with _quiet():

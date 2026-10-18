@@ -30,6 +30,7 @@ from . import db as db_module
 from .audit_features import compute_features, features_to_array
 from .audit_models import AuditEnsemble
 from .models import sanitize_for_json
+from .route import _nlcd_lock, _open_nlcd, _pixel_code
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +167,15 @@ SELECT c.gid,
            FROM ref.counties_tiger ct
            WHERE ST_Intersects(ct.geom, ep.geom)
            LIMIT 1
-       ) AS corridor_statefp
+       ) AS corridor_statefp,
+       ST_Area(s.geom) AS sub_area_sqm,
+       (
+           SELECT count(*)
+           FROM ref.corridors
+           WHERE node_a = s.gid OR node_b = s.gid
+       ) AS corridor_degree,
+       ST_X(ep.geom) AS endpoint_x,
+       ST_Y(ep.geom) AS endpoint_y
 FROM picked p
 JOIN ref.corridors c ON c.gid = p.gid
 JOIN ref.substations s
@@ -205,7 +214,15 @@ SELECT d.decision,
            FROM ref.counties_tiger ct
            WHERE ST_Intersects(ct.geom, ep.geom)
            LIMIT 1
-       ) AS corridor_statefp
+       ) AS corridor_statefp,
+       ST_Area(s.geom) AS sub_area_sqm,
+       (
+           SELECT count(*)
+           FROM ref.corridors
+           WHERE node_a = s.gid OR node_b = s.gid
+       ) AS corridor_degree,
+       ST_X(ep.geom) AS endpoint_x,
+       ST_Y(ep.geom) AS endpoint_y
 FROM ref.audit_decisions d
 JOIN ref.corridors c ON c.gid = d.corridor_gid
 JOIN ref.substations s
@@ -284,7 +301,55 @@ def _state_match(statefp: Any, sub_state: Any) -> bool:
     return code == str(sub_state).strip().upper()
 
 
-def _features_from_row(row: Any) -> dict[str, float]:
+# Set after the NLCD COG is missing or rasterio is not installed, so later
+# decisions do not reopen a file that is not there.
+_nlcd_unavailable = False
+
+
+def _nlcd_classes(points: list[tuple[Any, Any]]) -> list[float]:
+    """NLCD class codes at EPSG:5070 coordinates. Missing samples are 0."""
+    global _nlcd_unavailable
+    classes = [0.0] * len(points)
+    if _nlcd_unavailable or not points:
+        return classes
+
+    coords: list[tuple[float, float]] = []
+    indexes: list[int] = []
+    for index, (x, y) in enumerate(points):
+        if x is None or y is None:
+            continue
+        try:
+            coords.append((float(x), float(y)))
+        except (TypeError, ValueError):
+            continue
+        indexes.append(index)
+    if not coords:
+        return classes
+
+    try:
+        with _nlcd_lock:
+            dataset = _open_nlcd()
+            samples = list(dataset.sample(coords))
+    except FileNotFoundError as exc:
+        _nlcd_unavailable = True
+        logger.warning("NLCD raster not found (%s); nlcd_class stays 0", exc)
+        return classes
+    except RuntimeError as exc:
+        _nlcd_unavailable = True
+        logger.warning("NLCD sampling unavailable (%s); nlcd_class stays 0", exc)
+        return classes
+    except Exception:
+        logger.exception("NLCD sampling failed; nlcd_class stays 0")
+        return classes
+
+    for index, sample in zip(indexes, samples, strict=True):
+        code = _pixel_code(sample)
+        if code is not None:
+            classes[index] = float(code)
+    return classes
+
+
+def _features_from_row(row: Any, nlcd_class: float) -> dict[str, float]:
     voltage = row["voltage_kv"]
     return compute_features(
         hifld_name=row["hifld_name"],
@@ -297,6 +362,9 @@ def _features_from_row(row: Any) -> dict[str, float]:
         hifld_type=row["hifld_type"],
         corridor_source=row["source"] or "",
         state_match=_state_match(row["corridor_statefp"], row["sub_state"]),
+        sub_area_sqm=row["sub_area_sqm"],
+        corridor_degree=row["corridor_degree"],
+        nlcd_class=nlcd_class,
     )
 
 
@@ -314,8 +382,8 @@ def _optional_number(value: Any) -> float | None:
     return float(value)
 
 
-def _mismatch_payload(row: Any) -> dict[str, Any]:
-    features = _features_from_row(row)
+def _mismatch_payload(row: Any, nlcd_class: float) -> dict[str, Any]:
+    features = _features_from_row(row, nlcd_class)
     voltage = row["voltage_kv"]
     return {
         "done": False,
@@ -408,7 +476,16 @@ async def _retrain(conn: asyncpg.Connection) -> None:
         )
     if not rows:
         return
-    matrix = np.vstack([features_to_array(_features_from_row(row)) for row in rows])
+    classes = await asyncio.to_thread(
+        _nlcd_classes,
+        [(row["endpoint_x"], row["endpoint_y"]) for row in rows],
+    )
+    matrix = np.vstack(
+        [
+            features_to_array(_features_from_row(row, classes[index]))
+            for index, row in enumerate(rows)
+        ]
+    )
     labels = np.array([row["decision"] for row in rows])
     await asyncio.to_thread(ensemble.train, matrix, labels)
 
@@ -436,7 +513,10 @@ async def _next_row(conn: asyncpg.Connection) -> dict[str, Any]:
     row = await conn.fetchrow(_NEXT_SQL)
     if row is None:
         return {"done": True}
-    return _mismatch_payload(row)
+    classes = await asyncio.to_thread(
+        _nlcd_classes, [(row["endpoint_x"], row["endpoint_y"])]
+    )
+    return _mismatch_payload(row, classes[0])
 
 
 async def warm_ensemble() -> None:
