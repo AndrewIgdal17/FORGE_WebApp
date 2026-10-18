@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { Map as MapIcon, Satellite } from 'lucide-react';
 import type { Map as MapLibreMap } from 'maplibre-gl';
@@ -9,16 +9,21 @@ const BUTTON =
 
 export interface SatelliteToggleProps {
   map: MapLibreMap | null;
+  preferSatellite?: boolean;
 }
 
 function stopMapPointer(event: SyntheticEvent): void {
   event.stopPropagation();
 }
 
-export function SatelliteToggle({ map }: SatelliteToggleProps): ReactElement {
+export function SatelliteToggle({
+  map,
+  preferSatellite = false,
+}: SatelliteToggleProps): ReactElement {
   const [trackedMap, setTrackedMap] = useState(map);
   const [enabled, setEnabled] = useState(true);
   const [styleEpoch, setStyleEpoch] = useState(0);
+  const appliedPreference = useRef(false);
 
   if (trackedMap !== map) {
     setTrackedMap(map);
@@ -38,6 +43,21 @@ export function SatelliteToggle({ map }: SatelliteToggleProps): ReactElement {
   }, [map]);
 
   const ready = map !== null && (map.isStyleLoaded() || styleEpoch > 0);
+
+  useEffect(() => {
+    appliedPreference.current = false;
+  }, [map]);
+
+  useEffect(() => {
+    if (!preferSatellite) {
+      appliedPreference.current = false;
+      return;
+    }
+    if (!map || !ready || appliedPreference.current) return;
+    if (!setSatelliteBasemap(map, true)) return;
+    appliedPreference.current = true;
+    setEnabled(true);
+  }, [map, preferSatellite, ready]);
 
   function toggle(): void {
     if (!map) return;

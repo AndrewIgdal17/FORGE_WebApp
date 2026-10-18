@@ -1,4 +1,4 @@
-import type { Geometry, MultiLineString } from 'geojson';
+import type { Geometry, MultiLineString, Polygon } from 'geojson';
 
 import { supabase } from '@/lib/supabase';
 
@@ -331,6 +331,7 @@ export interface AuditMismatch {
   distance_m: number;
   corridor_miles: number;
   match_tier: number;
+  sub_area_sqm: number;
   voltage_match: number;
   state_match: boolean;
   corridor_geojson: Geometry | null;
@@ -361,8 +362,38 @@ export function isAuditMismatch(value: AuditNextResponse): value is AuditMismatc
   return value.done === false;
 }
 
-export async function getAuditNext(): Promise<AuditNextResponse> {
-  return apiFetch<AuditNextResponse>('/api/audit/next');
+export interface AuditNextTarget {
+  corridorGid: number;
+  endpoint: AuditEndpointId;
+}
+
+export async function getAuditNext(target?: AuditNextTarget): Promise<AuditNextResponse> {
+  if (!target) return apiFetch<AuditNextResponse>('/api/audit/next');
+  const params = new URLSearchParams({
+    corridor_gid: String(target.corridorGid),
+    endpoint: target.endpoint,
+  });
+  return apiFetch<AuditNextResponse>(`/api/audit/next?${params.toString()}`);
+}
+
+export interface AuditSavePolygonRequest {
+  sub_gid: number;
+  polygon: Polygon;
+}
+
+export interface AuditSavePolygonResponse {
+  sub_gid: number;
+  sub_area_sqm: number;
+  sub_geojson: Polygon;
+}
+
+export async function saveAuditPolygon(
+  payload: AuditSavePolygonRequest,
+): Promise<AuditSavePolygonResponse> {
+  return apiFetch<AuditSavePolygonResponse>('/api/audit/save-polygon', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function getAuditStats(): Promise<AuditStats> {

@@ -60,9 +60,9 @@ def test_new_features_default_to_zero():
 
 
 def test_audit_sql_selects_area_degree_and_endpoint():
-    from app.audit import _NEXT_SQL, _TRAINING_SQL
+    from app.audit import _NEXT_SQL, _SPECIFIC_SQL, _TRAINING_SQL
 
-    for sql in (_NEXT_SQL, _TRAINING_SQL):
+    for sql in (_NEXT_SQL, _SPECIFIC_SQL, _TRAINING_SQL):
         assert "ST_Area(s.geom) AS sub_area_sqm" in sql
         assert "node_a = s.gid OR node_b = s.gid" in sql
         assert "AS corridor_degree" in sql

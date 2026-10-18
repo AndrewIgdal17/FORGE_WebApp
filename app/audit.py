@@ -1,15 +1,17 @@
 """Admin-only substation-name audit API.
 
-Three routes, all gated to one operator email:
+Four routes, all gated to one operator email:
 
 - ``GET /api/audit/next`` — one unreviewed mismatch, plus ensemble predictions
 - ``POST /api/audit/decide`` — store a decision and retrain
+- ``POST /api/audit/save-polygon`` — replace a substation point with a yard polygon
 - ``GET /api/audit/stats`` — decision counts and accuracy history
 
 The ensemble lives on this module. The first request, and startup when the
 database pool is already open, retrain from ``ref.audit_decisions`` once that
 table has at least 30 rows. Writes use the API pool (``forge_api``), which
-has ``SELECT`` and ``INSERT`` on ``ref.audit_decisions``.
+has ``SELECT`` and ``INSERT`` on ``ref.audit_decisions``, ``INSERT`` on
+``ref.audit_polygon_log``, and ``UPDATE`` on ``ref.substations.geom``.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 from typing import Any, Literal
 
 import asyncpg
@@ -133,14 +136,7 @@ eligible AS (
 )
 """
 
-_NEXT_SQL = f"""
-WITH {_CANDIDATE_CTES},
-picked AS (
-    SELECT gid, endpoint
-    FROM eligible
-    ORDER BY random()
-    LIMIT 1
-)
+_MISMATCH_SELECT = """
 SELECT c.gid,
        p.endpoint,
        c.volt_class,
@@ -187,6 +183,67 @@ JOIN LATERAL (
            END AS geom
 ) ep ON true
 """
+
+_NEXT_SQL = f"""
+WITH {_CANDIDATE_CTES},
+picked AS (
+    SELECT gid, endpoint
+    FROM eligible
+    ORDER BY random()
+    LIMIT 1
+)
+{_MISMATCH_SELECT}
+"""
+
+# Same mismatch row as ``_NEXT_SQL``, for one corridor endpoint still in the queue.
+_SPECIFIC_SQL = f"""
+WITH picked AS (
+    SELECT c.gid, $2::text AS endpoint
+    FROM ref.corridors c
+    WHERE c.gid = $1
+      AND (
+            ($2 = 'a' AND c.sub_1_flag = 'mismatch')
+         OR ($2 = 'b' AND c.sub_2_flag = 'mismatch')
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM ref.audit_decisions d
+          WHERE d.corridor_gid = c.gid AND d.endpoint = $2
+      )
+)
+{_MISMATCH_SELECT}
+"""
+
+# GeoJSON is EPSG:4326. ``ref.substations.geom`` is EPSG:5070.
+_SAVE_POLYGON_SQL = """
+WITH incoming AS (
+    SELECT ST_Transform(
+        ST_SetSRID(ST_GeomFromGeoJSON($1::text), 4326),
+        5070
+    ) AS geom
+),
+valid AS (
+    SELECT geom
+    FROM incoming
+    WHERE ST_IsValid(geom)
+      AND NOT ST_IsEmpty(geom)
+      AND ST_GeometryType(geom) = 'ST_Polygon'
+      AND ST_Area(geom) > 0
+)
+UPDATE ref.substations AS s
+SET geom = valid.geom
+FROM valid
+WHERE s.gid = $2
+RETURNING s.gid AS sub_gid,
+          ST_Area(s.geom) AS sub_area_sqm,
+          ST_AsGeoJSON(ST_Transform(s.geom, 4326)) AS sub_geojson
+"""
+
+_POLYGON_LOG_SQL = """
+INSERT INTO ref.audit_polygon_log (sub_gid)
+VALUES ($1)
+"""
+
+_SUBSTATION_EXISTS_SQL = "SELECT 1 FROM ref.substations WHERE gid = $1"
 
 _REMAINING_SQL = f"""
 WITH {_CANDIDATE_CTES}
@@ -265,6 +322,57 @@ class DecideRequest(BaseModel):
     corridor_gid: int
     endpoint: Literal["a", "b"]
     decision: Literal["accept", "keep", "skip"]
+
+
+class SavePolygonRequest(BaseModel):
+    sub_gid: int
+    polygon: dict[str, Any]
+
+
+_MAX_POLYGON_POSITIONS = 5000
+
+
+def _closed_ring(ring: Any) -> list[list[float]]:
+    """One closed GeoJSON ring of ``[longitude, latitude]`` positions."""
+    if not isinstance(ring, list) or len(ring) < 4:
+        raise ValueError("Each polygon ring needs at least four positions.")
+    positions: list[list[float]] = []
+    for raw in ring:
+        if not isinstance(raw, (list, tuple)) or len(raw) < 2:
+            raise ValueError("Each position needs a longitude and latitude.")
+        try:
+            lon = float(raw[0])
+            lat = float(raw[1])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Polygon coordinates must be numbers.") from exc
+        if not math.isfinite(lon) or not math.isfinite(lat):
+            raise ValueError("Polygon coordinates must be finite.")
+        if lon < -180 or lon > 180 or lat < -90 or lat > 90:
+            raise ValueError("Polygon coordinates must be longitude and latitude.")
+        positions.append([lon, lat])
+    if positions[0] != positions[-1]:
+        raise ValueError("Each polygon ring must be closed.")
+    return positions
+
+
+def polygon_geojson(value: Any) -> dict[str, Any]:
+    """Return a normalized EPSG:4326 Polygon, or raise ``ValueError``."""
+    if not isinstance(value, dict):
+        raise TypeError("Polygon must be a GeoJSON object.")
+    if value.get("type") != "Polygon":
+        raise ValueError("Geometry must be a GeoJSON Polygon.")
+    coordinates = value.get("coordinates")
+    if not isinstance(coordinates, list) or not coordinates:
+        raise ValueError("Polygon has no rings.")
+    rings: list[list[list[float]]] = []
+    total = 0
+    for ring in coordinates:
+        closed = _closed_ring(ring)
+        total += len(closed)
+        if total > _MAX_POLYGON_POSITIONS:
+            raise ValueError("Polygon has too many vertices.")
+        rings.append(closed)
+    return {"type": "Polygon", "coordinates": rings}
 
 
 def _voltage_tier(kv: float) -> str:
@@ -401,6 +509,7 @@ def _mismatch_payload(row: Any, nlcd_class: float) -> dict[str, Any]:
         "distance_m": float(row["distance_m"] or 0.0),
         "corridor_miles": float(row["corridor_miles"] or 0.0),
         "match_tier": int(row["match_tier"]),
+        "sub_area_sqm": float(row["sub_area_sqm"] or 0.0),
         "voltage_match": features["voltage_match"],
         "state_match": bool(features["state_match"]),
         "corridor_geojson": _geojson(row["corridor_geojson"]),
@@ -509,14 +618,76 @@ async def _stats(conn: asyncpg.Connection) -> dict[str, Any]:
     }
 
 
-async def _next_row(conn: asyncpg.Connection) -> dict[str, Any]:
-    row = await conn.fetchrow(_NEXT_SQL)
-    if row is None:
-        return {"done": True}
+async def _next_row(
+    conn: asyncpg.Connection,
+    *,
+    corridor_gid: int | None = None,
+    endpoint: str | None = None,
+) -> dict[str, Any] | None:
+    """One mismatch.
+
+    With no target, return a random queued row, or ``{"done": True}`` when the
+    queue is empty. With a target, return that row, or ``None`` when it is not
+    still an unreviewed mismatch.
+    """
+    if corridor_gid is None:
+        row = await conn.fetchrow(_NEXT_SQL)
+        if row is None:
+            return {"done": True}
+    else:
+        row = await conn.fetchrow(_SPECIFIC_SQL, corridor_gid, endpoint)
+        if row is None:
+            return None
     classes = await asyncio.to_thread(
         _nlcd_classes, [(row["endpoint_x"], row["endpoint_y"])]
     )
     return _mismatch_payload(row, classes[0])
+
+
+def _unprocessable(detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=detail,
+    )
+
+
+def _refresh_target(
+    corridor_gid: int | None,
+    endpoint: str | None,
+) -> tuple[int, str] | None:
+    """Validate the optional ``GET /api/audit/next`` refresh query."""
+    if corridor_gid is None and endpoint is None:
+        return None
+    if corridor_gid is None or endpoint is None:
+        raise _unprocessable("corridor_gid and endpoint must be provided together.")
+    if corridor_gid <= 0:
+        raise _unprocessable("corridor_gid must be positive.")
+    return corridor_gid, endpoint
+
+
+async def _save_polygon(
+    conn: asyncpg.Connection,
+    sub_gid: int,
+    polygon: dict[str, Any],
+) -> dict[str, Any]:
+    """Replace one substation geometry and log the edit. Rolls back together."""
+    geojson = json.dumps(polygon)
+    async with conn.transaction():
+        exists = await conn.fetchval(_SUBSTATION_EXISTS_SQL, sub_gid)
+        if exists is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Substation not found.",
+            )
+        row = await conn.fetchrow(_SAVE_POLYGON_SQL, geojson, sub_gid)
+        if row is None:
+            raise _unprocessable("Polygon is not a valid footprint.")
+        await conn.execute(_POLYGON_LOG_SQL, sub_gid)
+    return {
+        "sub_gid": int(row["sub_gid"]),
+        "sub_area_sqm": float(row["sub_area_sqm"] or 0.0),
+        "sub_geojson": _geojson(row["sub_geojson"]),
+    }
 
 
 async def warm_ensemble() -> None:
@@ -552,15 +723,35 @@ def _remember_user(request: Request, user: dict) -> None:
 @router.get("/api/audit/next")
 async def audit_next(
     request: Request,
+    corridor_gid: int | None = None,
+    endpoint: Literal["a", "b"] | None = None,
     user: dict = Depends(require_admin),
 ) -> JSONResponse:
-    """Return one random unreviewed mismatch, or ``{"done": true}``."""
+    """Return one unreviewed mismatch, or ``{"done": true}``.
+
+    Without query parameters, the row is random. With ``corridor_gid`` and
+    ``endpoint``, the row is that mismatch so a saved polygon can refresh
+    area, match tier, and predictions.
+    """
     _remember_user(request, user)
+    target = _refresh_target(corridor_gid, endpoint)
     await warm_ensemble()
     pool = _pool()
     try:
         async with _lock, pool.acquire() as conn:
-            body = await _next_row(conn)
+            if target is None:
+                body = await _next_row(conn)
+            else:
+                body = await _next_row(
+                    conn, corridor_gid=target[0], endpoint=target[1]
+                )
+            if body is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Mismatch not found.",
+                )
+    except HTTPException:
+        raise
     except asyncpg.PostgresError:
         logger.exception("GET /api/audit/next failed")
         raise HTTPException(
@@ -628,6 +819,36 @@ async def audit_decide(
 
     predictions = None if nxt.get("done") else nxt.get("predictions")
     return _json({"stats": stats, "predictions": predictions, "next": nxt})
+
+
+@router.post("/api/audit/save-polygon")
+async def audit_save_polygon(
+    request: Request,
+    payload: SavePolygonRequest,
+    user: dict = Depends(require_admin),
+) -> JSONResponse:
+    """Store a yard polygon on ``ref.substations`` and log the edit."""
+    _remember_user(request, user)
+    if payload.sub_gid <= 0:
+        raise _unprocessable("sub_gid must be positive.")
+    try:
+        polygon = polygon_geojson(payload.polygon)
+    except (TypeError, ValueError) as exc:
+        raise _unprocessable(str(exc)) from exc
+
+    pool = _pool()
+    try:
+        async with _lock, pool.acquire() as conn:
+            body = await _save_polygon(conn, payload.sub_gid, polygon)
+    except HTTPException:
+        raise
+    except asyncpg.PostgresError:
+        logger.exception("POST /api/audit/save-polygon failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not save the polygon.",
+        ) from None
+    return _json(body)
 
 
 @router.get("/api/audit/stats")

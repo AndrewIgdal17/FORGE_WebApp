@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import type { FeatureCollection, Geometry } from 'geojson';
+import type { FeatureCollection, Geometry, Polygon } from 'geojson';
 import { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
 import bbox from '@turf/bbox';
 import { SatelliteToggle } from '@/components/map/SatelliteToggle';
 import { forgeBasemapStyle } from '@/data/basemap-style';
+import { useAuditPolygonDraw } from '@/hooks/use-audit-polygon-draw';
 
 const US_CENTER: [number, number] = [-81.3412, 35.7332];
 const US_ZOOM = 5;
@@ -25,6 +26,9 @@ export interface AuditMapProps {
   corridor: Geometry | null;
   endpoint: Geometry | null;
   substation: Geometry | null;
+  fitToken: string;
+  drawing: boolean;
+  onDraftPolygon: (polygon: Polygon | null) => void;
 }
 
 interface AuditGeometries {
@@ -185,11 +189,23 @@ function fitAudit(
   );
 }
 
-export function AuditMap({ corridor, endpoint, substation }: AuditMapProps): ReactElement {
+export function AuditMap({
+  corridor,
+  endpoint,
+  substation,
+  fitToken,
+  drawing,
+  onDraftPolygon,
+}: AuditMapProps): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const fittedKey = useRef<string | null>(null);
+  const drawZoomed = useRef(false);
+  const holdView = useRef(false);
+  const fitTokenRef = useRef(fitToken);
+  const drawingRef = useRef(drawing);
   const geometriesRef = useRef<AuditGeometries>({ corridor, endpoint, substation });
+  drawingRef.current = drawing;
   const [ready, setReady] = useState(false);
   const [map, setMap] = useState<MapLibreMap | null>(null);
 
@@ -225,6 +241,7 @@ export function AuditMap({ corridor, endpoint, substation }: AuditMapProps): Rea
 
     const observer = new ResizeObserver(() => {
       map.resize();
+      if (drawingRef.current || holdView.current) return;
       fitAudit(map, geometriesRef.current.corridor, geometriesRef.current.substation, fittedKey);
     });
     observer.observe(container);
@@ -241,17 +258,41 @@ export function AuditMap({ corridor, endpoint, substation }: AuditMapProps): Rea
     };
   }, []);
 
+  const draftPolygon = useAuditPolygonDraw(ready ? map : null, drawing);
+
+  useEffect(() => {
+    onDraftPolygon(draftPolygon);
+  }, [draftPolygon, onDraftPolygon]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
     syncAuditData(map, { corridor, endpoint, substation });
+    if (fitTokenRef.current !== fitToken) {
+      holdView.current = false;
+      drawZoomed.current = false;
+      fitTokenRef.current = fitToken;
+    }
+    if (drawing) {
+      if (!drawZoomed.current) {
+        const corridorKey = fittedKey.current;
+        fittedKey.current = null;
+        fitAudit(map, null, substation, fittedKey);
+        fittedKey.current = corridorKey;
+        drawZoomed.current = true;
+        holdView.current = true;
+      }
+      return;
+    }
+    drawZoomed.current = false;
+    if (holdView.current) return;
     fitAudit(map, corridor, substation, fittedKey);
-  }, [corridor, endpoint, substation, ready]);
+  }, [corridor, endpoint, substation, fitToken, ready, drawing]);
 
   return (
     <>
       <div ref={containerRef} className="absolute inset-0 h-full w-full" />
-      <SatelliteToggle map={map} />
+      <SatelliteToggle map={map} preferSatellite={drawing} />
     </>
   );
 }

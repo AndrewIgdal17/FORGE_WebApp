@@ -13,14 +13,29 @@ const MODEL_ROWS = [
 const ACTION_BUTTON =
   'h-10 w-full cursor-pointer rounded-md text-sm font-semibold text-white transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forge-primary disabled:cursor-not-allowed disabled:opacity-50';
 
+const OUTLINE_BUTTON =
+  'h-8 w-full cursor-pointer rounded-md border border-forge-primary/40 bg-white text-sm font-medium text-forge-primary transition-colors hover:bg-forge-primary-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forge-primary disabled:cursor-not-allowed disabled:opacity-50';
+
+const SAVE_BUTTON =
+  'h-8 w-full cursor-pointer rounded-md bg-forge-primary text-sm font-medium text-white transition-colors hover:bg-forge-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forge-primary disabled:cursor-not-allowed disabled:opacity-50';
+
+const QUIET_BUTTON =
+  'h-8 w-full cursor-pointer rounded-md text-sm font-medium text-black/60 transition-colors hover:text-black/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forge-primary disabled:cursor-not-allowed disabled:opacity-50';
+
 export interface DecisionPanelProps {
   mismatch: AuditMismatch | null;
   done: boolean;
   loading: boolean;
   deciding: boolean;
+  drawing: boolean;
+  draftReady: boolean;
+  savingPolygon: boolean;
   reviewed: number;
   error: string | null;
   onDecide: (decision: AuditDecisionKind) => void;
+  onStartDraw: () => void;
+  onSavePolygon: () => void;
+  onCancelDraw: () => void;
 }
 
 function displayName(value: string | null): string {
@@ -49,6 +64,12 @@ function formatTier(tier: number): string {
   if (tier === 1) return '1 (inside)';
   if (tier === 2) return '2 (proximity)';
   return String(tier);
+}
+
+function formatArea(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '0 m²';
+  if (value < 10) return `${value.toFixed(1)} m²`;
+  return `${Math.round(value).toLocaleString('en-US')} m²`;
 }
 
 function decisionLabel(value: string): string {
@@ -125,10 +146,17 @@ export function DecisionPanel({
   done,
   loading,
   deciding,
+  drawing,
+  draftReady,
+  savingPolygon,
   reviewed,
   error,
   onDecide,
+  onStartDraw,
+  onSavePolygon,
+  onCancelDraw,
 }: DecisionPanelProps): ReactElement {
+  const decisionsLocked = deciding || drawing || savingPolygon;
   return (
     <section className="flex h-full flex-col bg-white">
       <header className="border-b border-black/[0.08] px-4 py-3">
@@ -165,6 +193,7 @@ export function DecisionPanel({
                 value={`${formatKv(mismatch.voltage_kv)} / ${formatKv(mismatch.sub_voltage_kv)}`}
               />
               <Field label="Match Tier" value={formatTier(mismatch.match_tier)} />
+              <Field label="Substation Area" value={formatArea(mismatch.sub_area_sqm)} />
               <Field label="Corridor Length" value={formatMiles(mismatch.corridor_miles)} />
               <Field label="Corridor Source" value={displayName(mismatch.source)} />
               <Field label="Endpoint" value={mismatch.endpoint.toUpperCase()} />
@@ -192,10 +221,46 @@ export function DecisionPanel({
               {error}
             </p>
           ) : null}
+          {drawing ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs leading-snug text-black/55">
+                {draftReady
+                  ? 'Polygon ready. Save it to replace the marker, or cancel to discard it.'
+                  : 'Trace the yard on the satellite image. Click the first corner again to close the polygon.'}
+              </p>
+              {draftReady ? (
+                <button
+                  type="button"
+                  className={SAVE_BUTTON}
+                  disabled={savingPolygon}
+                  onClick={onSavePolygon}
+                >
+                  {savingPolygon ? 'Saving…' : 'Save Polygon'}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={QUIET_BUTTON}
+                disabled={savingPolygon}
+                onClick={onCancelDraw}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className={OUTLINE_BUTTON}
+              disabled={deciding || savingPolygon}
+              onClick={onStartDraw}
+            >
+              Draw Polygon
+            </button>
+          )}
           <button
             type="button"
             className={`${ACTION_BUTTON} bg-emerald-600 hover:bg-emerald-700`}
-            disabled={deciding}
+            disabled={decisionsLocked}
             onClick={() => {
               onDecide('accept');
             }}
@@ -205,7 +270,7 @@ export function DecisionPanel({
           <button
             type="button"
             className={`${ACTION_BUTTON} bg-forge-primary hover:bg-forge-primary-hover`}
-            disabled={deciding}
+            disabled={decisionsLocked}
             onClick={() => {
               onDecide('keep');
             }}
@@ -215,7 +280,7 @@ export function DecisionPanel({
           <button
             type="button"
             className={`${ACTION_BUTTON} bg-neutral-500 hover:bg-neutral-600`}
-            disabled={deciding}
+            disabled={decisionsLocked}
             onClick={() => {
               onDecide('skip');
             }}
