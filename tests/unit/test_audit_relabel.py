@@ -16,7 +16,9 @@ from app.audit_models import CANONICAL_LABELS
 
 
 def test_relabel_is_a_canonical_label():
-    assert CANONICAL_LABELS == ("accept", "keep", "relabel", "skip")
+    assert "relabel" in CANONICAL_LABELS
+    assert "same_facility" in CANONICAL_LABELS
+    assert "different_facility" in CANONICAL_LABELS
 
 
 def test_relabel_keeps_the_typed_name():
