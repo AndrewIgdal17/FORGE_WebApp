@@ -220,6 +220,18 @@ export function DecisionPanel({
               <Field label="Corridor Length" value={formatMiles(mismatch.corridor_miles)} />
               <Field label="Corridor Source" value={displayName(mismatch.source)} />
               <Field label="Endpoint" value={mismatch.endpoint.toUpperCase()} />
+              {mismatch.endpoint_geojson && 'coordinates' in mismatch.endpoint_geojson ? (
+                <div className="mt-2">
+                  <a
+                    href={`https://www.google.com/maps/@${(mismatch.endpoint_geojson as { coordinates: number[] }).coordinates[1]},${(mismatch.endpoint_geojson as { coordinates: number[] }).coordinates[0]},18z`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-medium text-forge-primary hover:underline"
+                  >
+                    Open in Google Maps ↗
+                  </a>
+                </div>
+              ) : null}
             </dl>
             <div className="border-t border-black/[0.08] pt-3">
               <h2 className="mb-2 text-xs font-medium tracking-wide text-black/45 uppercase">
