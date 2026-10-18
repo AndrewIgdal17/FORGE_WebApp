@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ADMIN_EMAIL = "andrewigdal17@gmail.com"
-_DECISIONS = ("same_facility", "different_facility")
+_DECISIONS = ("same_facility_hifld", "same_facility_osm", "different_facility")
 _bearer = HTTPBearer(auto_error=False)
 
 ensemble = AuditEnsemble()
@@ -430,8 +430,8 @@ async def require_admin(
 
 
 _API_DECISIONS: dict[str, tuple[str, str | None]] = {
-    "same_facility_hifld": ("same_facility", "hifld"),
-    "same_facility_osm": ("same_facility", "osm"),
+    "same_facility_hifld": ("same_facility_hifld", "hifld"),
+    "same_facility_osm": ("same_facility_osm", "osm"),
     "different_facility": ("different_facility", None),
 }
 

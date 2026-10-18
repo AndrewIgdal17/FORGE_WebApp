@@ -209,7 +209,8 @@ export function StatsPanel({ stats, loading, error }: StatsPanelProps): ReactEle
           </span>
         </p>
         <p className="mt-1 text-sm text-black/70 tabular-nums">
-          Same Facility: {formatCount(counts?.same_facility ?? 0)} | Different Facilities:{' '}
+          Same (HIFLD): {formatCount(counts?.same_facility_hifld ?? 0)} | Same (OSM):{' '}
+          {formatCount(counts?.same_facility_osm ?? 0)} | Different:{' '}
           {formatCount(counts?.different_facility ?? 0)}
         </p>
       </div>

@@ -278,7 +278,7 @@ export type PhaseADecision =
   | 'same_facility_osm'
   | 'different_facility';
 
-export type PhaseAStoredDecision = 'same_facility' | 'different_facility';
+export type PhaseAStoredDecision = 'same_facility_hifld' | 'same_facility_osm' | 'different_facility';
 
 export interface AuditModelOutput {
   prediction: string;

@@ -36,12 +36,13 @@ from app.audit_models import CANONICAL_LABELS
 
 
 def test_phase_a_labels_are_canonical():
-    assert "same_facility" in CANONICAL_LABELS
+    assert "same_facility_hifld" in CANONICAL_LABELS
+    assert "same_facility_osm" in CANONICAL_LABELS
     assert "different_facility" in CANONICAL_LABELS
 
 
 def test_decisions_tuple():
-    assert _DECISIONS == ("same_facility", "different_facility")
+    assert _DECISIONS == ("same_facility_hifld", "same_facility_osm", "different_facility")
 
 
 # ---------------------------------------------------------------------------
@@ -234,13 +235,13 @@ def test_decide_request_rejects_invalid_decision():
 
 def test_map_api_decision_hifld_keeps_name():
     stored, preference = _map_api_decision("same_facility_hifld")
-    assert stored == "same_facility"
+    assert stored == "same_facility_hifld"
     assert preference == "hifld"
 
 
 def test_map_api_decision_osm_prefers_osm_name():
     stored, preference = _map_api_decision("same_facility_osm")
-    assert stored == "same_facility"
+    assert stored == "same_facility_osm"
     assert preference == "osm"
 
 
