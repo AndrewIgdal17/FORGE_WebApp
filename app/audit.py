@@ -143,7 +143,7 @@ WITH tier23 AS (
       AND s.gid NOT IN (SELECT sub_gid FROM ref.phase_a_decisions)
 ),
 picked AS (
-    SELECT * FROM tier23 ORDER BY random() LIMIT 1
+    SELECT * FROM tier23 ORDER BY distance_m DESC LIMIT 1
 )
 SELECT * FROM picked
 """
