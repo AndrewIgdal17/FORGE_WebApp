@@ -11,6 +11,33 @@ const NAV_LINKS = [
 
 const ADMIN_EMAIL = 'andrewigdal17@gmail.com';
 
+function adminLinkClass(active: boolean): string {
+  return cn(
+    'border-b-2 border-transparent px-3 py-2 font-medium text-amber-600/70 no-underline transition-[color,border-color] duration-150 hover:text-amber-700',
+    active && 'border-amber-600 font-bold text-amber-700',
+  );
+}
+
+function AdminLink({
+  href,
+  label,
+  active,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+}): ReactElement {
+  return (
+    <Link
+      to={href}
+      aria-current={active ? 'page' : undefined}
+      className={adminLinkClass(active)}
+    >
+      {label}
+    </Link>
+  );
+}
+
 export function AppNav(): ReactElement {
   const { session, profile, signOut } = useAuth();
   const location = useLocation();
@@ -49,16 +76,10 @@ export function AppNav(): ReactElement {
           );
         })}
         {isAdmin ? (
-          <Link
-            to="/app/dev-map"
-            aria-current={location.pathname === '/app/dev-map' ? 'page' : undefined}
-            className={cn(
-              'border-b-2 border-transparent px-3 py-2 font-medium text-amber-600/70 no-underline transition-[color,border-color] duration-150 hover:text-amber-700',
-              location.pathname === '/app/dev-map' && 'border-amber-600 font-bold text-amber-700',
-            )}
-          >
-            Dev Map
-          </Link>
+          <>
+            <AdminLink href="/app/dev-map" label="Dev Map" active={location.pathname === '/app/dev-map'} />
+            <AdminLink href="/app/audit" label="Audit" active={location.pathname === '/app/audit'} />
+          </>
         ) : null}
       </div>
       <div className="ml-auto flex items-center gap-3">

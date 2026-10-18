@@ -1,4 +1,4 @@
-import type { MultiLineString } from 'geojson';
+import type { Geometry, MultiLineString } from 'geojson';
 
 import { supabase } from '@/lib/supabase';
 
@@ -270,5 +270,108 @@ export async function updateScenario(
 export async function deleteScenario(id: string): Promise<void> {
   await apiFetch<void>(`/api/scenarios/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+  });
+}
+
+export type AuditDecisionKind = 'accept' | 'keep' | 'skip';
+export type AuditEndpointId = 'a' | 'b';
+
+export interface AuditModelOutput {
+  prediction: string;
+  confidence: number;
+  proba: Record<string, number>;
+}
+
+export interface AuditPredictions {
+  ready: boolean;
+  models: {
+    logistic_regression: AuditModelOutput;
+    random_forest: AuditModelOutput;
+    xgboost: AuditModelOutput;
+    adaboost: AuditModelOutput;
+  };
+  ensemble: {
+    prediction: string;
+    agreement: string;
+  };
+}
+
+export interface AuditAccuracyPoint {
+  n: number;
+  lr: number;
+  rf: number;
+  xgb: number;
+  ada: number;
+  ensemble: number;
+}
+
+export interface AuditStats {
+  n_decisions: number;
+  decision_counts: Record<AuditDecisionKind, number>;
+  remaining: number;
+  ready: boolean;
+  accuracy: AuditAccuracyPoint | null;
+  accuracy_history: AuditAccuracyPoint[];
+  best_params: Record<string, Record<string, unknown>>;
+}
+
+export interface AuditMismatch {
+  done: false;
+  corridor_gid: number;
+  endpoint: AuditEndpointId;
+  volt_class: string | null;
+  voltage_kv: number | null;
+  source: string | null;
+  hifld_name: string | null;
+  sub_gid: number;
+  matched_name: string | null;
+  sub_voltage_kv: number | null;
+  sub_state: string | null;
+  hifld_type: string | null;
+  distance_m: number;
+  corridor_miles: number;
+  match_tier: number;
+  voltage_match: number;
+  state_match: boolean;
+  corridor_geojson: Geometry | null;
+  sub_geojson: Geometry | null;
+  endpoint_geojson: Geometry | null;
+  predictions: AuditPredictions | null;
+}
+
+export interface AuditQueueEmpty {
+  done: true;
+}
+
+export type AuditNextResponse = AuditMismatch | AuditQueueEmpty;
+
+export interface AuditDecideRequest {
+  corridor_gid: number;
+  endpoint: AuditEndpointId;
+  decision: AuditDecisionKind;
+}
+
+export interface AuditDecideResponse {
+  stats: AuditStats;
+  predictions: AuditPredictions | null;
+  next: AuditNextResponse;
+}
+
+export function isAuditMismatch(value: AuditNextResponse): value is AuditMismatch {
+  return value.done === false;
+}
+
+export async function getAuditNext(): Promise<AuditNextResponse> {
+  return apiFetch<AuditNextResponse>('/api/audit/next');
+}
+
+export async function getAuditStats(): Promise<AuditStats> {
+  return apiFetch<AuditStats>('/api/audit/stats');
+}
+
+export async function decideAudit(payload: AuditDecideRequest): Promise<AuditDecideResponse> {
+  return apiFetch<AuditDecideResponse>('/api/audit/decide', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }

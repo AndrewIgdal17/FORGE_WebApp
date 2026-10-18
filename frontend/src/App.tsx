@@ -10,6 +10,7 @@ import HomePage from '@/pages/home';
 import ScenariosManagerPage from '@/pages/scenarios-manager';
 import WorkspacePage from '@/pages/workspace';
 import DevMapPage from '@/pages/dev-map';
+import AuditPage from '@/pages/audit';
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
               <Route path="/app/scenarios-manager" element={<ScenariosManagerPage />} />
               <Route path="/app/workspace" element={<WorkspacePage />} />
               <Route path="/app/dev-map" element={<DevMapPage />} />
+              <Route path="/app/audit" element={<AuditPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </BrowserRouter>
