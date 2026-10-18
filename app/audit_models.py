@@ -1,9 +1,16 @@
 """Four-model ensemble for the substation-name audit.
 
 Trains logistic regression, random forest, XGBoost, and AdaBoost on the
-audit features in ``FEATURE_NAMES``. The ensemble is a majority vote. A tie
-goes to the tied label with the highest individual confidence. Predictions
-stay unavailable until 30 decisions have been trained.
+audit features in ``FEATURE_NAMES``. Two ensembles sit on those models. The
+majority vote breaks a tie toward the tied label with the highest individual
+confidence. The weighted vote scales each model's class probabilities by its
+cross-validated accuracy, then picks the class with the largest total. A model
+with no cross-validated accuracy weighs 0.5. Predictions stay unavailable
+until 30 decisions have been trained.
+
+Individual model scores in the accuracy history stay cross-validated. Both
+ensemble scores are accuracy on the training rows of the fitted models, so
+the two aggregations can be compared. Those ensemble numbers are optimistic.
 
 `train` publishes a new model bundle in one assignment. An in-flight `predict`
 keeps the previous bundle and does not observe a half-updated set of models.
@@ -20,7 +27,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from sklearn.base import clone
 from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
 from sklearn.exceptions import (
@@ -77,9 +83,15 @@ class _State:
 class _FittedModel:
     """Fitted estimator plus the label decoding `predict` needs."""
 
-    def __init__(self, estimator: Any, encoder: LabelEncoder | None = None) -> None:
+    def __init__(
+        self,
+        estimator: Any,
+        encoder: LabelEncoder | None = None,
+        cv_accuracy: float | None = None,
+    ) -> None:
         self.estimator = estimator
         self.encoder = encoder
+        self.cv_accuracy = cv_accuracy
 
     def predict_labels(self, rows: np.ndarray) -> np.ndarray:
         raw = self.estimator.predict(rows)
@@ -109,6 +121,17 @@ class _FittedModel:
         for name, prob in decoded.items():
             proba.setdefault(name, prob)
         return {"prediction": label, "confidence": confidence, "proba": proba}
+
+    def probability_matrix(self, rows: np.ndarray) -> np.ndarray:
+        """Class probabilities lined up with ``CANONICAL_LABELS``."""
+        probabilities = np.asarray(self.estimator.predict_proba(rows), dtype=np.float64)
+        matrix = np.zeros((probabilities.shape[0], len(CANONICAL_LABELS)), dtype=np.float64)
+        slots = {label: index for index, label in enumerate(CANONICAL_LABELS)}
+        for column, cls in enumerate(self.estimator.classes_):
+            slot = slots.get(self._label(cls))
+            if slot is not None:
+                matrix[:, slot] = probabilities[:, column]
+        return matrix
 
     def _label(self, value: object) -> str:
         if self.encoder is None:
@@ -331,10 +354,14 @@ def _finish(
     y: np.ndarray,
     encoder: LabelEncoder | None = None,
 ) -> tuple[_FittedModel, dict[str, Any], float]:
-    model = _FittedModel(estimator, encoder)
-    if accuracy is None or not np.isfinite(accuracy):
-        accuracy = float(accuracy_score(y, model.predict_labels(X)))
-    return model, _reported_params(name, estimator, searched), float(accuracy)
+    cv_accuracy = None
+    if accuracy is not None and np.isfinite(accuracy):
+        cv_accuracy = float(accuracy)
+    model = _FittedModel(estimator, encoder, cv_accuracy=cv_accuracy)
+    reported = cv_accuracy
+    if reported is None:
+        reported = float(accuracy_score(y, model.predict_labels(X)))
+    return model, _reported_params(name, estimator, searched), float(reported)
 
 
 def _train_logistic(
@@ -457,6 +484,46 @@ def _ensemble_decision(outputs: dict[str, dict[str, Any]]) -> dict[str, str]:
     return {"prediction": winner, "agreement": f"{counts[winner]}/{len(MODEL_ORDER)}"}
 
 
+_MISSING_CV_WEIGHT = 0.5
+
+
+def _vote_weight(model: _FittedModel) -> float:
+    """Cross-validated accuracy, or 0.5 when that score was never computed."""
+    accuracy = model.cv_accuracy
+    if accuracy is None or not np.isfinite(accuracy):
+        return _MISSING_CV_WEIGHT
+    return float(accuracy)
+
+
+def _weighted_vote(
+    models: dict[str, _FittedModel], rows: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Sum accuracy-weighted class probabilities and return the winning label.
+
+    The second array is that label's share of the row total, in ``[0, 1]``.
+    """
+    totals = np.zeros((len(rows), len(CANONICAL_LABELS)), dtype=np.float64)
+    for name in MODEL_ORDER:
+        totals += _vote_weight(models[name]) * models[name].probability_matrix(rows)
+    sums = totals.sum(axis=1)
+    normalized = np.zeros_like(totals)
+    positive = sums > 0
+    normalized[positive] = totals[positive] / sums[positive, None]
+    indices = normalized.argmax(axis=1)
+    labels = np.asarray([CANONICAL_LABELS[int(index)] for index in indices], dtype=object)
+    confidence = normalized[np.arange(len(rows)), indices]
+    return labels, confidence
+
+
+def _weighted_decision(models: dict[str, _FittedModel], row: np.ndarray) -> dict[str, str]:
+    """One weighted vote. ``agreement`` is the winning class's probability share."""
+    labels, confidence = _weighted_vote(models, row)
+    return {
+        "prediction": str(labels[0]),
+        "agreement": f"{float(confidence[0]) * 100:.1f}%",
+    }
+
+
 def _vote_many(
     predictions: dict[str, np.ndarray],
     confidences: dict[str, np.ndarray],
@@ -480,70 +547,6 @@ def _label_and_confidence(model: _FittedModel, rows: np.ndarray) -> tuple[np.nda
     return labels, model.confidences(rows, labels)
 
 
-def _ensemble_accuracy(
-    models: dict[str, _FittedModel],
-    X: np.ndarray,
-    y: np.ndarray,
-    cv: StratifiedKFold | None,
-    sample_weight: np.ndarray | None,
-    encoder: LabelEncoder | None,
-) -> float:
-    """Mean per-fold accuracy of the majority vote. In-sample when search was skipped."""
-    if cv is None or sample_weight is None or encoder is None:
-        return _insample_ensemble_accuracy(models, X, y)
-
-    fold_scores: list[float] = []
-    try:
-        for train_idx, test_idx in cv.split(X, y):
-            fold_models = _fit_fold(models, X, y, sample_weight, encoder, train_idx)
-            predictions: dict[str, np.ndarray] = {}
-            confidences: dict[str, np.ndarray] = {}
-            test_rows = X[test_idx]
-            for name in MODEL_ORDER:
-                predictions[name], confidences[name] = _label_and_confidence(
-                    fold_models[name], test_rows
-                )
-            voted = _vote_many(predictions, confidences)
-            fold_scores.append(float(accuracy_score(y[test_idx], voted)))
-    except ValueError as exc:
-        if not _is_search_failure(exc):
-            raise
-        return _insample_ensemble_accuracy(models, X, y)
-    if not fold_scores:
-        return _insample_ensemble_accuracy(models, X, y)
-    return float(np.mean(fold_scores))
-
-
-def _fit_fold(
-    models: dict[str, _FittedModel],
-    X: np.ndarray,
-    y: np.ndarray,
-    sample_weight: np.ndarray,
-    encoder: LabelEncoder,
-    train_idx: np.ndarray,
-) -> dict[str, _FittedModel]:
-    rows = X[train_idx]
-    labels = y[train_idx]
-    weights = sample_weight[train_idx]
-    fitted: dict[str, _FittedModel] = {}
-    for name in MODEL_ORDER:
-        estimator = clone(models[name].estimator)
-        if isinstance(estimator, DummyClassifier):
-            estimator.fit(rows, labels)
-            fitted[name] = _FittedModel(estimator)
-            continue
-        if name == "xgboost":
-            estimator.fit(rows, encoder.transform(labels), sample_weight=weights)
-            fitted[name] = _FittedModel(estimator, encoder)
-        elif name == "adaboost":
-            estimator.fit(rows, labels, sample_weight=weights)
-            fitted[name] = _FittedModel(estimator)
-        else:
-            estimator.fit(rows, labels)
-            fitted[name] = _FittedModel(estimator)
-    return fitted
-
-
 def _insample_ensemble_accuracy(
     models: dict[str, _FittedModel], X: np.ndarray, y: np.ndarray
 ) -> float:
@@ -555,6 +558,13 @@ def _insample_ensemble_accuracy(
     return float(accuracy_score(y, voted))
 
 
+def _insample_weighted_accuracy(
+    models: dict[str, _FittedModel], X: np.ndarray, y: np.ndarray
+) -> float:
+    labels, _confidence = _weighted_vote(models, X)
+    return float(accuracy_score(y, labels))
+
+
 def _history_point(n_rows: int, scores: dict[str, float]) -> dict[str, Any]:
     return {
         "n": int(n_rows),
@@ -563,6 +573,7 @@ def _history_point(n_rows: int, scores: dict[str, float]) -> dict[str, Any]:
         "xgb": float(scores["xgb"]),
         "ada": float(scores["ada"]),
         "ensemble": float(scores["ensemble"]),
+        "ensemble_weighted": float(scores["ensemble_weighted"]),
     }
 
 
@@ -624,10 +635,10 @@ def _train_bundle(
     models = {name: trained[name][0] for name in MODEL_ORDER}
     best_params = {name: trained[name][1] for name in MODEL_ORDER}
     scores = {_HISTORY_KEY[name]: trained[name][2] for name in MODEL_ORDER}
-    encoder = models["xgboost"].encoder
-    if encoder is None and len(counts) >= 2:
-        encoder = LabelEncoder().fit(y)
-    scores["ensemble"] = _ensemble_accuracy(models, X, y, cv, weights, encoder)
+    # Training-set accuracy for both votes. Individual scores above stay
+    # cross-validated. These two numbers are optimistic and comparable.
+    scores["ensemble"] = _insample_ensemble_accuracy(models, X, y)
+    scores["ensemble_weighted"] = _insample_weighted_accuracy(models, X, y)
     return models, best_params, scores
 
 
@@ -638,7 +649,7 @@ def _weights_or_ones(weights: np.ndarray | None, n_rows: int) -> np.ndarray:
 
 
 class AuditEnsemble:
-    """In-memory majority-vote ensemble over the four audit classifiers."""
+    """In-memory majority and accuracy-weighted ensembles over four classifiers."""
 
     MIN_DECISIONS = 30
 
@@ -673,8 +684,8 @@ class AuditEnsemble:
         """Predict one feature vector.
 
         Returns `None` until 30 decisions have been trained. Otherwise returns
-        each model's label, confidence, and class probabilities, plus the
-        ensemble label and agreement fraction.
+        each model's label, confidence, and class probabilities, the majority
+        vote, and the accuracy-weighted vote.
         """
         with self._lock:
             state = self._state
@@ -688,6 +699,7 @@ class AuditEnsemble:
         return {
             "models": models,
             "ensemble": _ensemble_decision(models),
+            "ensemble_weighted": _weighted_decision(state.models, row),
             "ready": True,
         }
 

@@ -11,13 +11,28 @@ import {
 } from 'recharts';
 import type { AuditAccuracyPoint, AuditStats } from '@/lib/api';
 
-const SERIES = [
+interface AccuracySeries {
+  key: 'lr' | 'rf' | 'xgb' | 'ada' | 'ensemble' | 'ensemble_weighted';
+  label: string;
+  color: string;
+  width: number;
+  dash?: string;
+}
+
+const SERIES: readonly AccuracySeries[] = [
   { key: 'lr', label: 'LR', color: '#2563eb', width: 1.75 },
   { key: 'rf', label: 'RF', color: '#f97316', width: 1.75 },
   { key: 'xgb', label: 'XGBoost', color: '#059669', width: 1.75 },
   { key: 'ada', label: 'AdaBoost', color: '#a855f7', width: 1.75 },
-  { key: 'ensemble', label: 'Ensemble', color: '#0066cc', width: 2.5 },
-] as const;
+  { key: 'ensemble', label: 'Ensemble (majority)', color: '#0066cc', width: 2.5 },
+  {
+    key: 'ensemble_weighted',
+    label: 'Ensemble (weighted)',
+    color: '#be123c',
+    width: 2.5,
+    dash: '6 4',
+  },
+];
 
 interface ChartRow {
   n: number;
@@ -26,6 +41,7 @@ interface ChartRow {
   xgb: number;
   ada: number;
   ensemble: number;
+  ensemble_weighted: number;
 }
 
 export interface StatsPanelProps {
@@ -61,6 +77,7 @@ function chartRows(history: readonly AuditAccuracyPoint[]): ChartRow[] {
     xgb: accuracyPercent(point.xgb),
     ada: accuracyPercent(point.ada),
     ensemble: accuracyPercent(point.ensemble),
+    ensemble_weighted: accuracyPercent(point.ensemble_weighted),
   }));
 }
 
@@ -75,7 +92,7 @@ function AccuracyTable({ point }: { point: AuditAccuracyPoint }): ReactElement {
       </thead>
       <tbody>
         {SERIES.map((series) => {
-          const highlighted = series.key === 'ensemble';
+          const highlighted = series.key === 'ensemble' || series.key === 'ensemble_weighted';
           return (
             <tr
               key={series.key}
@@ -124,6 +141,7 @@ function ConvergenceChart({ rows }: { rows: ChartRow[] }): ReactElement {
               name={series.label}
               stroke={series.color}
               strokeWidth={series.width}
+              strokeDasharray={series.dash}
               dot={{ r: 2 }}
               isAnimationActive={false}
             />
@@ -152,6 +170,10 @@ export function StatsPanel({ stats, loading, error }: StatsPanelProps): ReactEle
         <div>
           <h2 className="mb-2 text-xs font-medium tracking-wide text-black/45 uppercase">Accuracy</h2>
           <AccuracyTable point={latest} />
+          <p className="mt-1 text-xs text-black/45">
+            Ensemble accuracies are measured on the training decisions. Model accuracies are
+            3-fold cross-validation.
+          </p>
         </div>
         {rows.length > 0 ? (
           <div>

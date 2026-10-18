@@ -135,10 +135,17 @@ function Predictions({
           );
         })}
         <tr className="border-t border-forge-primary/20 bg-forge-primary-light font-semibold text-forge-primary">
-          <td className="rounded-bl-md py-1.5 pl-1">Ensemble</td>
+          <td className="py-1.5 pl-1">Ensemble (majority)</td>
           <td className="py-1.5">{decisionLabel(predictions.ensemble.prediction)}</td>
-          <td className="rounded-br-md py-1.5 pr-1 text-right tabular-nums">
+          <td className="py-1.5 pr-1 text-right tabular-nums">
             {predictions.ensemble.agreement} agree
+          </td>
+        </tr>
+        <tr className="border-t border-forge-primary/20 bg-forge-primary-light font-semibold text-forge-primary">
+          <td className="rounded-bl-md py-1.5 pl-1">Ensemble (weighted)</td>
+          <td className="py-1.5">{decisionLabel(predictions.ensemble_weighted.prediction)}</td>
+          <td className="rounded-br-md py-1.5 pr-1 text-right tabular-nums">
+            {predictions.ensemble_weighted.agreement}
           </td>
         </tr>
       </tbody>

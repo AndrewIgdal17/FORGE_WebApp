@@ -294,6 +294,10 @@ export interface AuditPredictions {
     prediction: string;
     agreement: string;
   };
+  ensemble_weighted: {
+    prediction: string;
+    agreement: string;
+  };
 }
 
 export interface AuditAccuracyPoint {
@@ -303,6 +307,7 @@ export interface AuditAccuracyPoint {
   xgb: number;
   ada: number;
   ensemble: number;
+  ensemble_weighted: number;
 }
 
 export interface AuditStats {
