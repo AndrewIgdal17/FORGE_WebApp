@@ -1,19 +1,18 @@
-"""Admin-only substation-name audit API.
+"""Phase A substation-identity verification audit API.
 
-Four routes, all gated to one operator email:
+Three routes, all gated to one operator email:
 
-- ``GET /api/audit/next`` — one unreviewed mismatch, plus ensemble predictions
-- ``POST /api/audit/decide`` — store a decision and retrain
-- ``POST /api/audit/save-polygon`` — replace a substation point with a yard polygon
-- ``GET /api/audit/stats`` — decision counts and accuracy history
+- ``GET /api/audit/next`` — one random Tier 2/3 merged substation
+- ``POST /api/audit/decide`` — ``same_facility`` or ``different_facility``
+- ``GET /api/audit/stats`` — decision counts, remaining, accuracy history
 
-The ensemble lives on this module. The first request, and startup when the
-database pool is already open, retrain from ``ref.audit_decisions`` once that
-table has at least 30 rows. Writes use the API pool (``forge_api``), which
-has ``SELECT`` and ``INSERT`` on ``ref.audit_decisions``, ``INSERT`` on
-``ref.audit_polygon_log``, and ``UPDATE`` on ``ref.substations.geom``.
-A ``relabel`` decision also updates ``ref.substations.name`` and the
-corridor endpoint name (``sub_1`` or ``sub_2``).
+Tier 2/3: merged substations where the HIFLD point is NOT inside the
+matched OSM polygon.  Each row shows the operator an HIFLD point and an
+OSM polygon and asks: same physical facility or different?
+
+A ``different_facility`` decision un-merges: the merged row is deleted,
+separate ``hifld`` and ``osm`` rows are inserted, and corridors that
+referenced the deleted ``gid`` have their node pointers nullified.
 """
 
 from __future__ import annotations
@@ -21,7 +20,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import math
 from typing import Any, Literal
 
 import asyncpg
@@ -32,7 +30,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from . import db as db_module
-from .audit_features import compute_features, features_to_array
+from .audit_features import compute_phase_a_features, features_to_array
 from .audit_models import AuditEnsemble
 from .models import sanitize_for_json
 from .route import _nlcd_lock, _open_nlcd, _pixel_code
@@ -42,417 +40,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ADMIN_EMAIL = "andrewigdal17@gmail.com"
-_DECISIONS = ("accept", "keep", "relabel", "skip")
+_DECISIONS = ("same_facility", "different_facility")
 _bearer = HTTPBearer(auto_error=False)
 
 ensemble = AuditEnsemble()
 _lock = asyncio.Lock()
 _warmed = False
 
-# Census state FIPS (TIGER ``statefp``) to the postal code stored on
-# ``ref.substations.state``.
-_FIPS_TO_STATE = {
-    "01": "AL",
-    "02": "AK",
-    "04": "AZ",
-    "05": "AR",
-    "06": "CA",
-    "08": "CO",
-    "09": "CT",
-    "10": "DE",
-    "11": "DC",
-    "12": "FL",
-    "13": "GA",
-    "15": "HI",
-    "16": "ID",
-    "17": "IL",
-    "18": "IN",
-    "19": "IA",
-    "20": "KS",
-    "21": "KY",
-    "22": "LA",
-    "23": "ME",
-    "24": "MD",
-    "25": "MA",
-    "26": "MI",
-    "27": "MN",
-    "28": "MS",
-    "29": "MO",
-    "30": "MT",
-    "31": "NE",
-    "32": "NV",
-    "33": "NH",
-    "34": "NJ",
-    "35": "NM",
-    "36": "NY",
-    "37": "NC",
-    "38": "ND",
-    "39": "OH",
-    "40": "OK",
-    "41": "OR",
-    "42": "PA",
-    "44": "RI",
-    "45": "SC",
-    "46": "SD",
-    "47": "TN",
-    "48": "TX",
-    "49": "UT",
-    "50": "VT",
-    "51": "VA",
-    "53": "WA",
-    "54": "WV",
-    "55": "WI",
-    "56": "WY",
-    "60": "AS",
-    "66": "GU",
-    "69": "MP",
-    "72": "PR",
-    "78": "VI",
-}
+# ---------------------------------------------------------------------------
+# NLCD land-cover sampling
+# ---------------------------------------------------------------------------
 
-# One unreviewed endpoint per corridor. Endpoint A is served before B when
-# both ends are still mismatches. The substation join drops rows whose node
-# id does not resolve. GeoJSON is computed only for the picked row.
-_CANDIDATE_CTES = """
-candidates AS (
-    SELECT c.gid,
-           CASE WHEN c.sub_1_flag = 'mismatch' AND NOT EXISTS (
-               SELECT 1 FROM ref.audit_decisions d
-               WHERE d.corridor_gid = c.gid AND d.endpoint = 'a'
-           ) THEN 'a'
-           WHEN c.sub_2_flag = 'mismatch' AND NOT EXISTS (
-               SELECT 1 FROM ref.audit_decisions d
-               WHERE d.corridor_gid = c.gid AND d.endpoint = 'b'
-           ) THEN 'b'
-           END AS endpoint
-    FROM ref.corridors c
-    WHERE c.sub_1_flag = 'mismatch' OR c.sub_2_flag = 'mismatch'
-),
-eligible AS (
-    SELECT cand.gid, cand.endpoint
-    FROM candidates cand
-    JOIN ref.corridors c ON c.gid = cand.gid
-    JOIN ref.substations s
-      ON s.gid = CASE WHEN cand.endpoint = 'a' THEN c.node_a ELSE c.node_b END
-    WHERE cand.endpoint IS NOT NULL
-)
-"""
-
-_MISMATCH_SELECT = """
-SELECT c.gid,
-       p.endpoint,
-       c.volt_class,
-       c.voltage_kv,
-       c.source,
-       CASE WHEN p.endpoint = 'a' THEN c.sub_1 ELSE c.sub_2 END AS hifld_name,
-       s.gid AS sub_gid,
-       s.name AS matched_name,
-       s.voltage_kv AS sub_voltage_kv,
-       s.state AS sub_state,
-       s.hifld_type,
-       ST_AsGeoJSON(ST_Transform(c.geom, 4326)) AS corridor_geojson,
-       ST_AsGeoJSON(ST_Transform(s.geom, 4326)) AS sub_geojson,
-       ST_AsGeoJSON(ST_Transform(ep.geom, 4326)) AS endpoint_geojson,
-       ST_Distance(ep.geom, s.geom) AS distance_m,
-       ST_Length(c.geom) / 1609.344 AS corridor_miles,
-       CASE
-           WHEN ST_GeometryType(s.geom) LIKE '%Polygon%'
-            AND ST_Within(ep.geom, s.geom) THEN 1
-           ELSE 2
-       END AS match_tier,
-       (
-           SELECT ct.statefp
-           FROM ref.counties_tiger ct
-           WHERE ST_Intersects(ct.geom, ep.geom)
-           LIMIT 1
-       ) AS corridor_statefp,
-       ST_Area(s.geom) AS sub_area_sqm,
-       (
-           SELECT count(*)
-           FROM ref.corridors
-           WHERE node_a = s.gid OR node_b = s.gid
-       ) AS corridor_degree,
-       ST_X(ep.geom) AS endpoint_x,
-       ST_Y(ep.geom) AS endpoint_y
-FROM picked p
-JOIN ref.corridors c ON c.gid = p.gid
-JOIN ref.substations s
-  ON s.gid = CASE WHEN p.endpoint = 'a' THEN c.node_a ELSE c.node_b END
-JOIN LATERAL (
-    SELECT CASE WHEN p.endpoint = 'a'
-                THEN ST_StartPoint(ST_GeometryN(c.geom, 1))
-                ELSE ST_EndPoint(ST_GeometryN(c.geom, ST_NumGeometries(c.geom)))
-           END AS geom
-) ep ON true
-"""
-
-_NEXT_SQL = f"""
-WITH {_CANDIDATE_CTES},
-picked AS (
-    SELECT gid, endpoint
-    FROM eligible
-    ORDER BY random()
-    LIMIT 1
-)
-{_MISMATCH_SELECT}
-"""
-
-# Same mismatch row as ``_NEXT_SQL``, for one corridor endpoint still in the queue.
-_SPECIFIC_SQL = f"""
-WITH picked AS (
-    SELECT c.gid, $2::text AS endpoint
-    FROM ref.corridors c
-    WHERE c.gid = $1
-      AND (
-            ($2 = 'a' AND c.sub_1_flag = 'mismatch')
-         OR ($2 = 'b' AND c.sub_2_flag = 'mismatch')
-      )
-      AND NOT EXISTS (
-          SELECT 1 FROM ref.audit_decisions d
-          WHERE d.corridor_gid = c.gid AND d.endpoint = $2
-      )
-)
-{_MISMATCH_SELECT}
-"""
-
-# GeoJSON is EPSG:4326. ``ref.substations.geom`` is EPSG:5070.
-_SAVE_POLYGON_SQL = """
-WITH incoming AS (
-    SELECT ST_Transform(
-        ST_SetSRID(ST_GeomFromGeoJSON($1::text), 4326),
-        5070
-    ) AS geom
-),
-valid AS (
-    SELECT geom
-    FROM incoming
-    WHERE ST_IsValid(geom)
-      AND NOT ST_IsEmpty(geom)
-      AND ST_GeometryType(geom) = 'ST_Polygon'
-      AND ST_Area(geom) > 0
-)
-UPDATE ref.substations AS s
-SET geom = valid.geom
-FROM valid
-WHERE s.gid = $2
-RETURNING s.gid AS sub_gid,
-          ST_Area(s.geom) AS sub_area_sqm,
-          ST_AsGeoJSON(ST_Transform(s.geom, 4326)) AS sub_geojson
-"""
-
-_POLYGON_LOG_SQL = """
-INSERT INTO ref.audit_polygon_log (sub_gid)
-VALUES ($1)
-"""
-
-_SUBSTATION_EXISTS_SQL = "SELECT 1 FROM ref.substations WHERE gid = $1"
-
-_REMAINING_SQL = f"""
-WITH {_CANDIDATE_CTES}
-SELECT count(*)::int FROM eligible
-"""
-
-# Names come from the decision row. A later relabel rewrites the live
-# corridor and substation names, and those rewrites must not change the
-# pair the model was shown.
-_TRAINING_SQL = """
-SELECT d.decision,
-       d.hifld_name,
-       d.matched_name,
-       s.hifld_type,
-       c.voltage_kv,
-       s.voltage_kv AS sub_voltage_kv,
-       c.source,
-       s.state AS sub_state,
-       ST_Distance(ep.geom, s.geom) AS distance_m,
-       ST_Length(c.geom) / 1609.344 AS corridor_miles,
-       CASE
-           WHEN ST_GeometryType(s.geom) LIKE '%Polygon%'
-            AND ST_Within(ep.geom, s.geom) THEN 1
-           ELSE 2
-       END AS match_tier,
-       (
-           SELECT ct.statefp
-           FROM ref.counties_tiger ct
-           WHERE ST_Intersects(ct.geom, ep.geom)
-           LIMIT 1
-       ) AS corridor_statefp,
-       ST_Area(s.geom) AS sub_area_sqm,
-       (
-           SELECT count(*)
-           FROM ref.corridors
-           WHERE node_a = s.gid OR node_b = s.gid
-       ) AS corridor_degree,
-       ST_X(ep.geom) AS endpoint_x,
-       ST_Y(ep.geom) AS endpoint_y
-FROM ref.audit_decisions d
-JOIN ref.corridors c ON c.gid = d.corridor_gid
-JOIN ref.substations s
-  ON s.gid = CASE WHEN d.endpoint = 'a' THEN c.node_a ELSE c.node_b END
-JOIN LATERAL (
-    SELECT CASE WHEN d.endpoint = 'a'
-                THEN ST_StartPoint(ST_GeometryN(c.geom, 1))
-                ELSE ST_EndPoint(ST_GeometryN(c.geom, ST_NumGeometries(c.geom)))
-           END AS geom
-) ep ON true
-ORDER BY d.id
-"""
-
-_LOOKUP_SQL = """
-SELECT CASE WHEN $2 = 'a' THEN c.sub_1 ELSE c.sub_2 END AS hifld_name,
-       s.name AS matched_name,
-       s.gid AS matched_sub_gid
-FROM ref.corridors c
-JOIN ref.substations s
-  ON s.gid = CASE WHEN $2 = 'a' THEN c.node_a ELSE c.node_b END
-WHERE c.gid = $1
-"""
-
-_INSERT_SQL = """
-INSERT INTO ref.audit_decisions
-    (corridor_gid, endpoint, hifld_name, matched_name, matched_sub_gid,
-     decision, custom_name)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-"""
-
-_RELABEL_SUBSTATION_SQL = """
-UPDATE ref.substations
-SET name = $1
-WHERE gid = $2
-"""
-
-_RELABEL_CORRIDOR_SQL = """
-UPDATE ref.corridors
-SET sub_1 = CASE WHEN $2 = 'a' THEN $1 ELSE sub_1 END,
-    sub_2 = CASE WHEN $2 = 'b' THEN $1 ELSE sub_2 END
-WHERE gid = $3
-"""
-
-_MAX_CUSTOM_NAME = 200
-
-_COUNT_SQL = "SELECT count(*)::int FROM ref.audit_decisions"
-
-_COUNT_BY_DECISION_SQL = """
-SELECT decision, count(*)::int AS n
-FROM ref.audit_decisions
-GROUP BY decision
-"""
-
-
-class DecideRequest(BaseModel):
-    corridor_gid: int
-    endpoint: Literal["a", "b"]
-    decision: Literal["accept", "keep", "skip", "relabel"]
-    custom_name: str | None = None
-
-
-def custom_name_for_decision(decision: str, custom_name: str | None) -> str | None:
-    """Name stored for ``relabel``. Every other decision stores NULL.
-
-    Surrounding whitespace is removed. The typed characters in between stay.
-    """
-    text = "" if custom_name is None else custom_name.strip()
-    if decision != "relabel":
-        return None
-    if not text:
-        raise ValueError("Type a real name before relabeling.")
-    if len(text) > _MAX_CUSTOM_NAME:
-        raise ValueError("That name is too long.")
-    return text
-
-
-class SavePolygonRequest(BaseModel):
-    sub_gid: int
-    polygon: dict[str, Any]
-
-
-_MAX_POLYGON_POSITIONS = 5000
-
-
-def _closed_ring(ring: Any) -> list[list[float]]:
-    """One closed GeoJSON ring of ``[longitude, latitude]`` positions."""
-    if not isinstance(ring, list) or len(ring) < 4:
-        raise ValueError("Each polygon ring needs at least four positions.")
-    positions: list[list[float]] = []
-    for raw in ring:
-        if not isinstance(raw, (list, tuple)) or len(raw) < 2:
-            raise ValueError("Each position needs a longitude and latitude.")
-        try:
-            lon = float(raw[0])
-            lat = float(raw[1])
-        except (TypeError, ValueError) as exc:
-            raise ValueError("Polygon coordinates must be numbers.") from exc
-        if not math.isfinite(lon) or not math.isfinite(lat):
-            raise ValueError("Polygon coordinates must be finite.")
-        if lon < -180 or lon > 180 or lat < -90 or lat > 90:
-            raise ValueError("Polygon coordinates must be longitude and latitude.")
-        positions.append([lon, lat])
-    if positions[0] != positions[-1]:
-        raise ValueError("Each polygon ring must be closed.")
-    return positions
-
-
-def polygon_geojson(value: Any) -> dict[str, Any]:
-    """Return a normalized EPSG:4326 Polygon, or raise ``ValueError``."""
-    if not isinstance(value, dict):
-        raise TypeError("Polygon must be a GeoJSON object.")
-    if value.get("type") != "Polygon":
-        raise ValueError("Geometry must be a GeoJSON Polygon.")
-    coordinates = value.get("coordinates")
-    if not isinstance(coordinates, list) or not coordinates:
-        raise ValueError("Polygon has no rings.")
-    rings: list[list[list[float]]] = []
-    total = 0
-    for ring in coordinates:
-        closed = _closed_ring(ring)
-        total += len(closed)
-        if total > _MAX_POLYGON_POSITIONS:
-            raise ValueError("Polygon has too many vertices.")
-        rings.append(closed)
-    return {"type": "Polygon", "coordinates": rings}
-
-
-def _voltage_tier(kv: float) -> str:
-    if kv >= 345:
-        return "ehv"
-    if kv >= 100:
-        return "hv"
-    return "sub"
-
-
-def _voltage_match(corridor_kv: Any, sub_kv: Any) -> float:
-    """1 when the kV values match, 0.5 on the same enrich tier, else 0."""
-    if corridor_kv is None or sub_kv is None:
-        return 0.0
-    try:
-        corridor = float(corridor_kv)
-        sub = float(sub_kv)
-    except (TypeError, ValueError):
-        return 0.0
-    if corridor == sub:
-        return 1.0
-    if _voltage_tier(corridor) == _voltage_tier(sub):
-        return 0.5
-    return 0.0
-
-
-def _state_match(statefp: Any, sub_state: Any) -> bool:
-    """True when the endpoint's county state is the substation's state."""
-    if statefp is None or sub_state is None:
-        return False
-    code = _FIPS_TO_STATE.get(str(statefp).zfill(2))
-    if code is None:
-        return False
-    return code == str(sub_state).strip().upper()
-
-
-# Set after the NLCD COG is missing or rasterio is not installed, so later
-# decisions do not reopen a file that is not there.
 _nlcd_unavailable = False
 
 
 def _nlcd_classes(points: list[tuple[Any, Any]]) -> list[float]:
-    """NLCD class codes at EPSG:5070 coordinates. Missing samples are 0."""
+    """NLCD class codes at EPSG:5070 coordinates.  Missing samples are 0."""
     global _nlcd_unavailable
     classes = [0.0] * len(points)
     if _nlcd_unavailable or not points:
@@ -494,23 +97,196 @@ def _nlcd_classes(points: list[tuple[Any, Any]]) -> list[float]:
     return classes
 
 
-def _features_from_row(row: Any, nlcd_class: float) -> dict[str, float]:
-    voltage = row["voltage_kv"]
-    return compute_features(
-        hifld_name=row["hifld_name"],
-        matched_name=row["matched_name"],
-        distance_m=float(row["distance_m"] or 0.0),
-        match_tier=int(row["match_tier"]),
-        voltage_match=_voltage_match(voltage, row["sub_voltage_kv"]),
-        corridor_miles=float(row["corridor_miles"] or 0.0),
-        corridor_voltage_kv=None if voltage is None else float(voltage),
-        hifld_type=row["hifld_type"],
-        corridor_source=row["source"] or "",
-        state_match=_state_match(row["corridor_statefp"], row["sub_state"]),
-        sub_area_sqm=row["sub_area_sqm"],
-        corridor_degree=row["corridor_degree"],
-        nlcd_class=nlcd_class,
-    )
+# ---------------------------------------------------------------------------
+# SQL — queue (Tier 2/3 merged substations)
+# ---------------------------------------------------------------------------
+
+_NEXT_SQL = """
+WITH tier23 AS (
+    SELECT s.gid, s.name AS osm_name, s.hifld_id, s.osm_id,
+           s.hifld_type, s.osm_type,
+           s.voltage_kv AS osm_voltage_kv,
+           h.name AS hifld_name,
+           h.voltage_kv AS hifld_voltage_kv,
+           s.state, s.county, s.operator,
+           h.state AS hifld_state,
+           ST_Distance(h.geom, ST_Centroid(s.geom)) AS distance_m,
+           ST_Distance(h.geom, ST_Boundary(s.geom)) AS boundary_distance_m,
+           ST_Area(s.geom) AS osm_area_sqm,
+           4 * pi() * ST_Area(s.geom)
+               / NULLIF(power(ST_Perimeter(s.geom), 2), 0) AS compactness,
+           degrees(ST_Azimuth(
+               ST_PointN(ST_ExteriorRing(ST_OrientedEnvelope(s.geom)), 1),
+               ST_PointN(ST_ExteriorRing(ST_OrientedEnvelope(s.geom)), 2)
+           )) AS orientation_deg,
+           (SELECT count(*) FROM ref.corridors c
+            WHERE c.node_a = s.gid OR c.node_b = s.gid) AS corridor_degree,
+           (SELECT count(*) FROM ref.substations_hifld h2
+            WHERE h2.hifld_id != s.hifld_id
+              AND ST_DWithin(h2.geom, s.geom, 500)) AS nearby_hifld,
+           (SELECT count(*) FROM ref.substations s2
+            WHERE s2.gid != s.gid
+              AND s2.source IN ('osm', 'merged')
+              AND ST_GeometryType(s2.geom) != 'ST_Point'
+              AND ST_DWithin(s2.geom, h.geom, 500)) AS nearby_osm,
+           ST_AsGeoJSON(ST_Transform(h.geom, 4326)) AS hifld_geojson,
+           ST_AsGeoJSON(ST_Transform(s.geom, 4326)) AS osm_geojson,
+           ST_X(h.geom) AS hifld_x, ST_Y(h.geom) AS hifld_y,
+           ST_X(ST_Centroid(s.geom)) AS osm_cx,
+           ST_Y(ST_Centroid(s.geom)) AS osm_cy
+    FROM ref.substations s
+    JOIN ref.substations_hifld h ON h.hifld_id = s.hifld_id
+    WHERE s.source = 'merged'
+      AND ST_GeometryType(s.geom) != 'ST_Point'
+      AND NOT ST_Within(h.geom, s.geom)
+      AND s.gid NOT IN (SELECT sub_gid FROM ref.phase_a_decisions)
+),
+picked AS (
+    SELECT * FROM tier23 ORDER BY random() LIMIT 1
+)
+SELECT * FROM picked
+"""
+
+# ---------------------------------------------------------------------------
+# SQL — remaining count
+# ---------------------------------------------------------------------------
+
+_REMAINING_SQL = """
+SELECT count(*)::int
+FROM ref.substations s
+JOIN ref.substations_hifld h ON h.hifld_id = s.hifld_id
+WHERE s.source = 'merged'
+  AND ST_GeometryType(s.geom) != 'ST_Point'
+  AND NOT ST_Within(h.geom, s.geom)
+  AND s.gid NOT IN (SELECT sub_gid FROM ref.phase_a_decisions)
+"""
+
+# ---------------------------------------------------------------------------
+# SQL — decisions
+# ---------------------------------------------------------------------------
+
+_INSERT_DECISION_SQL = """
+INSERT INTO ref.phase_a_decisions (sub_gid, decision)
+VALUES ($1, $2)
+"""
+
+_SUBSTATION_EXISTS_SQL = "SELECT 1 FROM ref.substations WHERE gid = $1"
+
+# ---------------------------------------------------------------------------
+# SQL — un-merge (different_facility)
+# ---------------------------------------------------------------------------
+
+_INSERT_HIFLD_ROW_SQL = """
+INSERT INTO ref.substations
+    (name, hifld_type, osm_type, voltage_kv, operator,
+     state, county, status, source, osm_id, hifld_id, geom)
+SELECT h.name, h.hifld_type, NULL, h.voltage_kv, NULL,
+       h.state, h.county, h.status, 'hifld', NULL, h.hifld_id, h.geom
+FROM ref.substations_hifld h
+JOIN ref.substations s ON s.hifld_id = h.hifld_id
+WHERE s.gid = $1
+"""
+
+_INSERT_OSM_ROW_SQL = """
+INSERT INTO ref.substations
+    (name, hifld_type, osm_type, voltage_kv, operator,
+     state, county, status, source, osm_id, hifld_id, geom)
+SELECT s.name, NULL, s.osm_type, s.voltage_kv, s.operator,
+       NULL, NULL, 'IN SERVICE', 'osm', s.osm_id, NULL, s.geom
+FROM ref.substations s
+WHERE s.gid = $1 AND s.source = 'merged'
+"""
+
+_NULLIFY_NODE_A_SQL = "UPDATE ref.corridors SET node_a = NULL WHERE node_a = $1"
+_NULLIFY_NODE_B_SQL = "UPDATE ref.corridors SET node_b = NULL WHERE node_b = $1"
+_DELETE_MERGED_SQL = "DELETE FROM ref.substations WHERE gid = $1"
+
+# ---------------------------------------------------------------------------
+# SQL — training
+# ---------------------------------------------------------------------------
+
+_COUNT_SQL = "SELECT count(*)::int FROM ref.phase_a_decisions"
+
+_COUNT_BY_DECISION_SQL = """
+SELECT decision, count(*)::int AS n
+FROM ref.phase_a_decisions
+GROUP BY decision
+"""
+
+_TRAINING_SQL = """
+SELECT d.decision,
+       h.name AS hifld_name,
+       s.name AS osm_name,
+       s.hifld_type, s.osm_type,
+       h.voltage_kv AS hifld_voltage_kv,
+       s.voltage_kv AS osm_voltage_kv,
+       s.state,
+       h.state AS hifld_state,
+       ST_Distance(h.geom, ST_Centroid(s.geom)) AS distance_m,
+       ST_Within(h.geom, s.geom) AS hifld_inside,
+       ST_Distance(h.geom, ST_Boundary(s.geom)) AS boundary_distance_m,
+       ST_Area(s.geom) AS osm_area_sqm,
+       4 * pi() * ST_Area(s.geom)
+           / NULLIF(power(ST_Perimeter(s.geom), 2), 0) AS compactness,
+       degrees(ST_Azimuth(
+           ST_PointN(ST_ExteriorRing(ST_OrientedEnvelope(s.geom)), 1),
+           ST_PointN(ST_ExteriorRing(ST_OrientedEnvelope(s.geom)), 2)
+       )) AS orientation_deg,
+       (SELECT count(*) FROM ref.corridors c
+        WHERE c.node_a = s.gid OR c.node_b = s.gid) AS corridor_degree,
+       (SELECT count(*) FROM ref.substations_hifld h2
+        WHERE h2.hifld_id != s.hifld_id
+          AND ST_DWithin(h2.geom, s.geom, 500)) AS nearby_hifld,
+       (SELECT count(*) FROM ref.substations s2
+        WHERE s2.gid != s.gid
+          AND s2.source IN ('osm', 'merged')
+          AND ST_GeometryType(s2.geom) != 'ST_Point'
+          AND ST_DWithin(s2.geom, h.geom, 500)) AS nearby_osm,
+       ST_X(h.geom) AS hifld_x,
+       ST_Y(h.geom) AS hifld_y,
+       ST_X(ST_Centroid(s.geom)) AS osm_cx,
+       ST_Y(ST_Centroid(s.geom)) AS osm_cy
+FROM ref.phase_a_decisions d
+JOIN ref.substations s ON s.gid = d.sub_gid
+JOIN ref.substations_hifld h ON h.hifld_id = s.hifld_id
+ORDER BY d.id
+"""
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _voltage_tier(kv: float) -> str:
+    if kv >= 345:
+        return "ehv"
+    if kv >= 100:
+        return "hv"
+    return "sub"
+
+
+def _voltage_match(hifld_kv: Any, osm_kv: Any) -> float:
+    """1 when kV values match, 0.5 on the same tier, else 0."""
+    if hifld_kv is None or osm_kv is None:
+        return 0.0
+    try:
+        h = float(hifld_kv)
+        o = float(osm_kv)
+    except (TypeError, ValueError):
+        return 0.0
+    if h == o:
+        return 1.0
+    if _voltage_tier(h) == _voltage_tier(o):
+        return 0.5
+    return 0.0
+
+
+def _state_match(hifld_state: Any, osm_state: Any) -> bool:
+    """True when the HIFLD and merged substation share the same state code."""
+    if hifld_state is None or osm_state is None:
+        return False
+    return str(hifld_state).strip().upper() == str(osm_state).strip().upper()
 
 
 def _geojson(value: Any) -> Any:
@@ -527,38 +303,80 @@ def _optional_number(value: Any) -> float | None:
     return float(value)
 
 
-def _mismatch_payload(row: Any, nlcd_class: float) -> dict[str, Any]:
-    features = _features_from_row(row, nlcd_class)
-    voltage = row["voltage_kv"]
+def _features_from_row(
+    row: Any, nlcd_hifld: float, nlcd_osm: float,
+) -> dict[str, float]:
+    """Build the 28-feature dict from a queue or training row."""
+    return compute_phase_a_features(
+        distance_m=float(row["distance_m"] or 0),
+        hifld_inside=bool(row.get("hifld_inside", False)),
+        osm_area_sqm=float(row["osm_area_sqm"] or 0),
+        boundary_distance_m=float(row["boundary_distance_m"] or 0),
+        hifld_name=row["hifld_name"],
+        osm_name=row["osm_name"],
+        voltage_match=_voltage_match(
+            row["hifld_voltage_kv"], row["osm_voltage_kv"],
+        ),
+        hifld_voltage_kv=row.get("hifld_voltage_kv"),
+        osm_voltage_kv=row.get("osm_voltage_kv"),
+        hifld_type=row["hifld_type"],
+        osm_type=row["osm_type"],
+        nearby_hifld=int(row["nearby_hifld"] or 0),
+        nearby_osm=int(row["nearby_osm"] or 0),
+        corridor_degree=int(row["corridor_degree"] or 0),
+        state_match=_state_match(row.get("hifld_state"), row.get("state")),
+        compactness=float(row["compactness"] or 0),
+        orientation_deg=float(row["orientation_deg"] or 0),
+        nlcd_at_hifld=nlcd_hifld,
+        nlcd_at_osm=nlcd_osm,
+    )
+
+
+def _substation_payload(
+    row: Any, nlcd_hifld: float, nlcd_osm: float,
+) -> dict[str, Any]:
+    """Build the JSON response for one queued substation."""
+    features = _features_from_row(row, nlcd_hifld, nlcd_osm)
     return {
         "done": False,
-        "corridor_gid": int(row["gid"]),
-        "endpoint": row["endpoint"],
-        "volt_class": row["volt_class"],
-        "voltage_kv": None if voltage is None else int(voltage),
-        "source": row["source"],
+        "sub_gid": int(row["gid"]),
+        "hifld_id": row["hifld_id"],
+        "osm_id": row["osm_id"],
         "hifld_name": row["hifld_name"],
-        "sub_gid": int(row["sub_gid"]),
-        "matched_name": row["matched_name"],
-        "sub_voltage_kv": _optional_number(row["sub_voltage_kv"]),
-        "sub_state": row["sub_state"],
+        "osm_name": row["osm_name"],
+        "hifld_voltage_kv": _optional_number(row["hifld_voltage_kv"]),
+        "osm_voltage_kv": _optional_number(row["osm_voltage_kv"]),
         "hifld_type": row["hifld_type"],
-        "distance_m": float(row["distance_m"] or 0.0),
-        "corridor_miles": float(row["corridor_miles"] or 0.0),
-        "match_tier": int(row["match_tier"]),
-        "sub_area_sqm": float(row["sub_area_sqm"] or 0.0),
+        "osm_type": row["osm_type"],
+        "distance_m": float(row["distance_m"] or 0),
+        "boundary_distance_m": float(row["boundary_distance_m"] or 0),
+        "osm_area_sqm": float(row["osm_area_sqm"] or 0),
+        "compactness": float(row["compactness"] or 0),
+        "orientation_deg": float(row["orientation_deg"] or 0),
+        "corridor_degree": int(row["corridor_degree"] or 0),
+        "nearby_hifld": int(row["nearby_hifld"] or 0),
+        "nearby_osm": int(row["nearby_osm"] or 0),
+        "state": row["state"],
+        "county": row["county"],
         "voltage_match": features["voltage_match"],
         "state_match": bool(features["state_match"]),
-        "corridor_geojson": _geojson(row["corridor_geojson"]),
-        "sub_geojson": _geojson(row["sub_geojson"]),
-        "endpoint_geojson": _geojson(row["endpoint_geojson"]),
+        "hifld_geojson": _geojson(row["hifld_geojson"]),
+        "osm_geojson": _geojson(row["osm_geojson"]),
         "predictions": ensemble.predict(features_to_array(features)),
     }
 
 
+# ---------------------------------------------------------------------------
+# Auth / admin gate
+# ---------------------------------------------------------------------------
+
+
 async def _email_from_token(user: dict) -> str:
     """Operator email from the JWT, then ``auth.users`` if the claim is absent."""
-    for claim in (user.get("email"), (user.get("user_metadata") or {}).get("email")):
+    for claim in (
+        user.get("email"),
+        (user.get("user_metadata") or {}).get("email"),
+    ):
         if isinstance(claim, str) and claim.strip():
             return claim.strip().lower()
 
@@ -596,6 +414,11 @@ async def require_admin(
     return user
 
 
+class DecideRequest(BaseModel):
+    sub_gid: int
+    decision: Literal["same_facility", "different_facility"]
+
+
 def _pool() -> asyncpg.Pool:
     try:
         return db_module.get_db_pool()
@@ -610,6 +433,11 @@ def _json(body: dict[str, Any]) -> JSONResponse:
     return JSONResponse(sanitize_for_json(body))
 
 
+# ---------------------------------------------------------------------------
+# Core logic
+# ---------------------------------------------------------------------------
+
+
 async def _retrain(conn: asyncpg.Connection) -> None:
     """Fit the ensemble on every stored decision that still joins."""
     total = int(await conn.fetchval(_COUNT_SQL))
@@ -617,19 +445,25 @@ async def _retrain(conn: asyncpg.Connection) -> None:
     skipped = total - len(rows)
     if skipped:
         logger.warning(
-            "Audit retrain skipped %s decisions with no corridor/substation join",
+            "Phase A retrain skipped %d decisions "
+            "(un-merged rows no longer joinable)",
             skipped,
         )
     if not rows:
         return
-    classes = await asyncio.to_thread(
-        _nlcd_classes,
-        [(row["endpoint_x"], row["endpoint_y"]) for row in rows],
-    )
+    nlcd_points: list[tuple[Any, Any]] = []
+    for row in rows:
+        nlcd_points.append((row["hifld_x"], row["hifld_y"]))
+        nlcd_points.append((row["osm_cx"], row["osm_cy"]))
+    nlcd_codes = await asyncio.to_thread(_nlcd_classes, nlcd_points)
     matrix = np.vstack(
         [
-            features_to_array(_features_from_row(row, classes[index]))
-            for index, row in enumerate(rows)
+            features_to_array(
+                _features_from_row(
+                    row, nlcd_codes[i * 2], nlcd_codes[i * 2 + 1],
+                )
+            )
+            for i, row in enumerate(rows)
         ]
     )
     labels = np.array([row["decision"] for row in rows])
@@ -655,102 +489,16 @@ async def _stats(conn: asyncpg.Connection) -> dict[str, Any]:
     }
 
 
-async def _next_row(
-    conn: asyncpg.Connection,
-    *,
-    corridor_gid: int | None = None,
-    endpoint: str | None = None,
-) -> dict[str, Any] | None:
-    """One mismatch.
-
-    With no target, return a random queued row, or ``{"done": True}`` when the
-    queue is empty. With a target, return that row, or ``None`` when it is not
-    still an unreviewed mismatch.
-    """
-    if corridor_gid is None:
-        row = await conn.fetchrow(_NEXT_SQL)
-        if row is None:
-            return {"done": True}
-    else:
-        row = await conn.fetchrow(_SPECIFIC_SQL, corridor_gid, endpoint)
-        if row is None:
-            return None
-    classes = await asyncio.to_thread(
-        _nlcd_classes, [(row["endpoint_x"], row["endpoint_y"])]
+async def _next_row(conn: asyncpg.Connection) -> dict[str, Any]:
+    """One random Tier 2/3 substation, or ``{"done": True}``."""
+    row = await conn.fetchrow(_NEXT_SQL)
+    if row is None:
+        return {"done": True}
+    nlcd_codes = await asyncio.to_thread(
+        _nlcd_classes,
+        [(row["hifld_x"], row["hifld_y"]), (row["osm_cx"], row["osm_cy"])],
     )
-    return _mismatch_payload(row, classes[0])
-
-
-def _unprocessable(detail: str) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        detail=detail,
-    )
-
-
-def _refresh_target(
-    corridor_gid: int | None,
-    endpoint: str | None,
-) -> tuple[int, str] | None:
-    """Validate the optional ``GET /api/audit/next`` refresh query."""
-    if corridor_gid is None and endpoint is None:
-        return None
-    if corridor_gid is None or endpoint is None:
-        raise _unprocessable("corridor_gid and endpoint must be provided together.")
-    if corridor_gid <= 0:
-        raise _unprocessable("corridor_gid must be positive.")
-    return corridor_gid, endpoint
-
-
-async def _apply_relabel(
-    conn: asyncpg.Connection,
-    custom_name: str,
-    matched_sub_gid: int,
-    corridor_gid: int,
-    endpoint: str,
-) -> None:
-    """Write the typed name onto the substation and this corridor endpoint."""
-    sub_status = await conn.execute(
-        _RELABEL_SUBSTATION_SQL, custom_name, matched_sub_gid
-    )
-    if sub_status != "UPDATE 1":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Substation not found.",
-        )
-    corridor_status = await conn.execute(
-        _RELABEL_CORRIDOR_SQL, custom_name, endpoint, corridor_gid
-    )
-    if corridor_status != "UPDATE 1":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Corridor endpoint not found.",
-        )
-
-
-async def _save_polygon(
-    conn: asyncpg.Connection,
-    sub_gid: int,
-    polygon: dict[str, Any],
-) -> dict[str, Any]:
-    """Replace one substation geometry and log the edit. Rolls back together."""
-    geojson = json.dumps(polygon)
-    async with conn.transaction():
-        exists = await conn.fetchval(_SUBSTATION_EXISTS_SQL, sub_gid)
-        if exists is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Substation not found.",
-            )
-        row = await conn.fetchrow(_SAVE_POLYGON_SQL, geojson, sub_gid)
-        if row is None:
-            raise _unprocessable("Polygon is not a valid footprint.")
-        await conn.execute(_POLYGON_LOG_SQL, sub_gid)
-    return {
-        "sub_gid": int(row["sub_gid"]),
-        "sub_area_sqm": float(row["sub_area_sqm"] or 0.0),
-        "sub_geojson": _geojson(row["sub_geojson"]),
-    }
+    return _substation_payload(row, nlcd_codes[0], nlcd_codes[1])
 
 
 async def warm_ensemble() -> None:
@@ -764,7 +512,9 @@ async def warm_ensemble() -> None:
         try:
             pool = db_module.get_db_pool()
         except RuntimeError:
-            logger.info("Audit ensemble warm skipped: database pool is not initialized")
+            logger.info(
+                "Audit ensemble warm skipped: database pool is not initialized",
+            )
             return
         try:
             async with pool.acquire() as conn:
@@ -783,36 +533,23 @@ def _remember_user(request: Request, user: dict) -> None:
         request.state.user_id = user_id
 
 
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
+
 @router.get("/api/audit/next")
 async def audit_next(
     request: Request,
-    corridor_gid: int | None = None,
-    endpoint: Literal["a", "b"] | None = None,
     user: dict = Depends(require_admin),
 ) -> JSONResponse:
-    """Return one unreviewed mismatch, or ``{"done": true}``.
-
-    Without query parameters, the row is random. With ``corridor_gid`` and
-    ``endpoint``, the row is that mismatch so a saved polygon can refresh
-    area, match tier, and predictions.
-    """
+    """Return one unreviewed Tier 2/3 substation, or ``{"done": true}``."""
     _remember_user(request, user)
-    target = _refresh_target(corridor_gid, endpoint)
     await warm_ensemble()
     pool = _pool()
     try:
         async with _lock, pool.acquire() as conn:
-            if target is None:
-                body = await _next_row(conn)
-            else:
-                body = await _next_row(
-                    conn, corridor_gid=target[0], endpoint=target[1]
-                )
-            if body is None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Mismatch not found.",
-                )
+            body = await _next_row(conn)
     except HTTPException:
         raise
     except asyncpg.PostgresError:
@@ -830,58 +567,70 @@ async def audit_decide(
     payload: DecideRequest,
     user: dict = Depends(require_admin),
 ) -> JSONResponse:
-    """Store one decision, retrain, and return stats plus the next mismatch.
+    """Store one decision, optionally un-merge, retrain, return stats + next.
 
-    ``relabel`` also writes ``custom_name`` onto the matched substation and
-    this corridor endpoint before the ensemble refits.
+    ``different_facility`` triggers an un-merge: separate ``hifld`` and
+    ``osm`` rows replace the merged row, and corridors that referenced the
+    deleted ``gid`` have their node pointers nullified.
     """
     global _warmed
     _remember_user(request, user)
-    try:
-        custom_name = custom_name_for_decision(payload.decision, payload.custom_name)
-    except ValueError as exc:
-        raise _unprocessable(str(exc)) from exc
+
+    if payload.sub_gid <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="sub_gid must be positive.",
+        )
+
     pool = _pool()
     try:
         async with _lock, pool.acquire() as conn:
-            linked = await conn.fetchrow(
-                _LOOKUP_SQL, payload.corridor_gid, payload.endpoint
+            exists = await conn.fetchval(
+                _SUBSTATION_EXISTS_SQL, payload.sub_gid,
             )
-            if linked is None:
+            if exists is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Corridor endpoint not found.",
+                    detail="Substation not found.",
                 )
+
             async with conn.transaction():
                 try:
                     await conn.execute(
-                        _INSERT_SQL,
-                        payload.corridor_gid,
-                        payload.endpoint,
-                        linked["hifld_name"],
-                        linked["matched_name"],
-                        linked["matched_sub_gid"],
+                        _INSERT_DECISION_SQL,
+                        payload.sub_gid,
                         payload.decision,
-                        custom_name,
                     )
                 except asyncpg.UniqueViolationError as exc:
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
-                        detail="This corridor endpoint is already decided.",
+                        detail="This substation is already decided.",
                     ) from exc
-                if custom_name is not None:
-                    await _apply_relabel(
-                        conn,
-                        custom_name,
-                        int(linked["matched_sub_gid"]),
-                        payload.corridor_gid,
-                        payload.endpoint,
+
+                if payload.decision == "different_facility":
+                    await conn.execute(
+                        _INSERT_HIFLD_ROW_SQL, payload.sub_gid,
                     )
+                    await conn.execute(
+                        _INSERT_OSM_ROW_SQL, payload.sub_gid,
+                    )
+                    await conn.execute(
+                        _NULLIFY_NODE_A_SQL, payload.sub_gid,
+                    )
+                    await conn.execute(
+                        _NULLIFY_NODE_B_SQL, payload.sub_gid,
+                    )
+                    await conn.execute(
+                        _DELETE_MERGED_SQL, payload.sub_gid,
+                    )
+
             try:
                 await _retrain(conn)
             except Exception:
                 _warmed = False
-                logger.exception("Audit retrain failed after saving a decision")
+                logger.exception(
+                    "Phase A retrain failed after saving a decision",
+                )
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Decision saved, but retraining the ensemble failed.",
@@ -900,36 +649,6 @@ async def audit_decide(
 
     predictions = None if nxt.get("done") else nxt.get("predictions")
     return _json({"stats": stats, "predictions": predictions, "next": nxt})
-
-
-@router.post("/api/audit/save-polygon")
-async def audit_save_polygon(
-    request: Request,
-    payload: SavePolygonRequest,
-    user: dict = Depends(require_admin),
-) -> JSONResponse:
-    """Store a yard polygon on ``ref.substations`` and log the edit."""
-    _remember_user(request, user)
-    if payload.sub_gid <= 0:
-        raise _unprocessable("sub_gid must be positive.")
-    try:
-        polygon = polygon_geojson(payload.polygon)
-    except (TypeError, ValueError) as exc:
-        raise _unprocessable(str(exc)) from exc
-
-    pool = _pool()
-    try:
-        async with _lock, pool.acquire() as conn:
-            body = await _save_polygon(conn, payload.sub_gid, polygon)
-    except HTTPException:
-        raise
-    except asyncpg.PostgresError:
-        logger.exception("POST /api/audit/save-polygon failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not save the polygon.",
-        ) from None
-    return _json(body)
 
 
 @router.get("/api/audit/stats")
