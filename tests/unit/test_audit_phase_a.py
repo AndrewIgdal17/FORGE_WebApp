@@ -21,7 +21,9 @@ from app.audit import (
     _NULLIFY_NODE_B_SQL,
     _REMAINING_SQL,
     _TRAINING_SQL,
+    _UPDATE_OSM_NAME_SQL,
     DecideRequest,
+    _map_api_decision,
     _state_match,
     _substation_payload,
     _voltage_match,
@@ -89,7 +91,16 @@ def test_insert_decision_sql():
     assert "hifld_id" in _INSERT_DECISION_SQL
     assert "osm_id" in _INSERT_DECISION_SQL
     assert "decision" in _INSERT_DECISION_SQL
+    assert "name_preference" in _INSERT_DECISION_SQL
     assert "FROM ref.substations" in _INSERT_DECISION_SQL
+
+
+def test_osm_name_update_sql():
+    assert "UPDATE ref.substations" in _UPDATE_OSM_NAME_SQL
+    assert "SET name = osm_original_name" in _UPDATE_OSM_NAME_SQL
+    assert "gid = $1" in _UPDATE_OSM_NAME_SQL
+    assert "osm_original_name IS NOT NULL" in _UPDATE_OSM_NAME_SQL
+    assert "trim(osm_original_name) != ''" in _UPDATE_OSM_NAME_SQL
 
 
 def test_unmerge_inserts_hifld_point_row():
@@ -199,20 +210,44 @@ def test_state_match_none():
 
 
 def test_decide_request_accepts_valid():
-    req = DecideRequest(sub_gid=42, decision="same_facility")
+    req = DecideRequest(sub_gid=42, decision="same_facility_hifld")
     assert req.sub_gid == 42
-    assert req.decision == "same_facility"
+    assert req.decision == "same_facility_hifld"
 
-    req2 = DecideRequest(sub_gid=99, decision="different_facility")
-    assert req2.decision == "different_facility"
+    req2 = DecideRequest(sub_gid=99, decision="same_facility_osm")
+    assert req2.decision == "same_facility_osm"
+
+    req3 = DecideRequest(sub_gid=7, decision="different_facility")
+    assert req3.decision == "different_facility"
 
 
 def test_decide_request_rejects_invalid_decision():
+    with pytest.raises(ValidationError):
+        DecideRequest(sub_gid=42, decision="same_facility")
+
     with pytest.raises(ValidationError):
         DecideRequest(sub_gid=42, decision="accept")
 
     with pytest.raises(ValidationError):
         DecideRequest(sub_gid=42, decision="relabel")
+
+
+def test_map_api_decision_hifld_keeps_name():
+    stored, preference = _map_api_decision("same_facility_hifld")
+    assert stored == "same_facility"
+    assert preference == "hifld"
+
+
+def test_map_api_decision_osm_prefers_osm_name():
+    stored, preference = _map_api_decision("same_facility_osm")
+    assert stored == "same_facility"
+    assert preference == "osm"
+
+
+def test_map_api_decision_different_has_no_preference():
+    stored, preference = _map_api_decision("different_facility")
+    assert stored == "different_facility"
+    assert preference is None
 
 
 # ---------------------------------------------------------------------------

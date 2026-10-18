@@ -3,7 +3,8 @@
 Three routes, all gated to one operator email:
 
 - ``GET /api/audit/next`` — one random Tier 2/3 merged substation
-- ``POST /api/audit/decide`` — ``same_facility`` or ``different_facility``
+- ``POST /api/audit/decide`` — ``same_facility_hifld``,
+  ``same_facility_osm``, or ``different_facility``
 - ``GET /api/audit/stats`` — decision counts, remaining, accuracy history
 
 Tier 2/3: merged substations where the HIFLD point is NOT inside the
@@ -166,10 +167,19 @@ WHERE s.source = 'merged'
 # ---------------------------------------------------------------------------
 
 _INSERT_DECISION_SQL = """
-INSERT INTO ref.phase_a_decisions (sub_gid, hifld_id, osm_id, decision)
-SELECT s.gid, s.hifld_id, s.osm_id, $2
+INSERT INTO ref.phase_a_decisions
+    (sub_gid, hifld_id, osm_id, decision, name_preference)
+SELECT s.gid, s.hifld_id, s.osm_id, $2, $3
 FROM ref.substations s
 WHERE s.gid = $1
+"""
+
+_UPDATE_OSM_NAME_SQL = """
+UPDATE ref.substations
+SET name = osm_original_name
+WHERE gid = $1
+  AND osm_original_name IS NOT NULL
+  AND trim(osm_original_name) != ''
 """
 
 _SUBSTATION_EXISTS_SQL = "SELECT 1 FROM ref.substations WHERE gid = $1"
@@ -419,9 +429,25 @@ async def require_admin(
     return user
 
 
+_API_DECISIONS: dict[str, tuple[str, str | None]] = {
+    "same_facility_hifld": ("same_facility", "hifld"),
+    "same_facility_osm": ("same_facility", "osm"),
+    "different_facility": ("different_facility", None),
+}
+
+
 class DecideRequest(BaseModel):
     sub_gid: int
-    decision: Literal["same_facility", "different_facility"]
+    decision: Literal[
+        "same_facility_hifld",
+        "same_facility_osm",
+        "different_facility",
+    ]
+
+
+def _map_api_decision(decision: str) -> tuple[str, str | None]:
+    """Map an API decision to the stored label and name preference."""
+    return _API_DECISIONS[decision]
 
 
 def _pool() -> asyncpg.Pool:
@@ -572,11 +598,13 @@ async def audit_decide(
     payload: DecideRequest,
     user: dict = Depends(require_admin),
 ) -> JSONResponse:
-    """Store one decision, optionally un-merge, retrain, return stats + next.
+    """Store one decision, optionally rename or un-merge, retrain, return next.
 
-    ``different_facility`` triggers an un-merge: separate ``hifld`` and
-    ``osm`` rows replace the merged row, and corridors that referenced the
-    deleted ``gid`` have their node pointers nullified.
+    Both same-facility buttons store ``same_facility``. ``same_facility_osm``
+    also copies ``osm_original_name`` onto ``ref.substations.name``.
+    ``different_facility`` un-merges: separate ``hifld`` and ``osm`` rows
+    replace the merged row, and corridors that referenced the deleted
+    ``gid`` have their node pointers nullified.
     """
     global _warmed
     _remember_user(request, user)
@@ -586,6 +614,8 @@ async def audit_decide(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="sub_gid must be positive.",
         )
+
+    stored_decision, name_preference = _map_api_decision(payload.decision)
 
     pool = _pool()
     try:
@@ -604,7 +634,8 @@ async def audit_decide(
                     await conn.execute(
                         _INSERT_DECISION_SQL,
                         payload.sub_gid,
-                        payload.decision,
+                        stored_decision,
+                        name_preference,
                     )
                 except asyncpg.UniqueViolationError as exc:
                     raise HTTPException(
@@ -612,7 +643,11 @@ async def audit_decide(
                         detail="This substation is already decided.",
                     ) from exc
 
-                if payload.decision == "different_facility":
+                if payload.decision == "same_facility_osm":
+                    await conn.execute(
+                        _UPDATE_OSM_NAME_SQL, payload.sub_gid,
+                    )
+                elif stored_decision == "different_facility":
                     await conn.execute(
                         _INSERT_HIFLD_ROW_SQL, payload.sub_gid,
                     )

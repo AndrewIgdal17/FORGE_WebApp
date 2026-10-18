@@ -1,3 +1,5 @@
+import type { Geometry } from 'geojson';
+import { ExternalLink } from 'lucide-react';
 import type { ReactElement } from 'react';
 import type { AuditPredictions, PhaseADecision, PhaseAMismatch } from '@/lib/api';
 
@@ -26,6 +28,14 @@ export interface DecisionPanelProps {
 function displayName(value: string | null | undefined): string {
   const text = value?.trim();
   return text ? text : '—';
+}
+
+export function googleMapsHref(geometry: Geometry | null | undefined): string | null {
+  if (geometry == null || geometry.type !== 'Point') return null;
+  const [lng, lat] = geometry.coordinates;
+  if (typeof lng !== 'number' || typeof lat !== 'number') return null;
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+  return `https://www.google.com/maps/@${lat},${lng},17z`;
 }
 
 function formatMeters(value: number): string {
@@ -133,6 +143,7 @@ export function DecisionPanel({
   error,
   onDecide,
 }: DecisionPanelProps): ReactElement {
+  const mapsHref = mismatch ? googleMapsHref(mismatch.hifld_geojson) : null;
   return (
     <section className="flex h-full flex-col bg-white">
       <header className="border-b border-black/[0.08] px-4 py-3">
@@ -168,6 +179,17 @@ export function DecisionPanel({
               </p>
               <p className="text-lg leading-snug font-semibold">{displayName(mismatch.merged_name)}</p>
             </div>
+            {mapsHref ? (
+              <a
+                href={mapsHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-medium text-forge-primary hover:underline"
+              >
+                <ExternalLink className="size-3.5" aria-hidden="true" />
+                View on Google Maps
+              </a>
+            ) : null}
             <dl className="flex flex-col gap-1.5 border-t border-black/[0.08] pt-3">
               <Field label="Distance" value={formatMeters(mismatch.distance_m)} />
               <Field label="Boundary Distance" value={formatMeters(mismatch.boundary_distance_m)} />
@@ -198,7 +220,7 @@ export function DecisionPanel({
         ) : null}
       </div>
       {mismatch ? (
-        <footer className="flex flex-col gap-2 border-t border-black/[0.08] p-4">
+        <footer className="flex flex-col gap-2 border-t border-black/[0.08] p-4" aria-busy={deciding}>
           {error ? (
             <p className="text-sm text-forge-danger" role="alert">
               {error}
@@ -206,18 +228,25 @@ export function DecisionPanel({
           ) : null}
           <button
             type="button"
-            className={`${ACTION_BUTTON} bg-emerald-600 hover:bg-emerald-700`}
-            disabled={deciding}
+            className={`${ACTION_BUTTON} bg-green-600 hover:bg-green-700`}
             onClick={() => {
-              onDecide('same_facility');
+              onDecide('same_facility_hifld');
             }}
           >
-            Same Facility
+            Same Facility (HIFLD Name)
+          </button>
+          <button
+            type="button"
+            className={`${ACTION_BUTTON} bg-emerald-600 hover:bg-emerald-700`}
+            onClick={() => {
+              onDecide('same_facility_osm');
+            }}
+          >
+            Same Facility (OSM Name)
           </button>
           <button
             type="button"
             className={`${ACTION_BUTTON} bg-red-600 hover:bg-red-700`}
-            disabled={deciding}
             onClick={() => {
               onDecide('different_facility');
             }}

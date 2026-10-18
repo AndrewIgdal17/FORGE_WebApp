@@ -273,7 +273,12 @@ export async function deleteScenario(id: string): Promise<void> {
   });
 }
 
-export type PhaseADecision = 'same_facility' | 'different_facility';
+export type PhaseADecision =
+  | 'same_facility_hifld'
+  | 'same_facility_osm'
+  | 'different_facility';
+
+export type PhaseAStoredDecision = 'same_facility' | 'different_facility';
 
 export interface AuditModelOutput {
   prediction: string;
@@ -311,7 +316,7 @@ export interface AuditAccuracyPoint {
 
 export interface AuditStats {
   n_decisions: number;
-  decision_counts: Record<PhaseADecision, number>;
+  decision_counts: Record<PhaseAStoredDecision, number>;
   remaining: number;
   ready: boolean;
   accuracy: AuditAccuracyPoint | null;
