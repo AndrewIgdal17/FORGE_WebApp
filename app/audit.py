@@ -103,7 +103,7 @@ def _nlcd_classes(points: list[tuple[Any, Any]]) -> list[float]:
 
 _NEXT_SQL = """
 WITH tier23 AS (
-    SELECT s.gid, s.name AS osm_name, s.hifld_id, s.osm_id,
+    SELECT s.gid, s.name AS osm_name, s.osm_original_name, s.hifld_id, s.osm_id,
            s.hifld_type, s.osm_type,
            s.voltage_kv AS osm_voltage_kv,
            h.name AS hifld_name,
@@ -180,7 +180,8 @@ _INSERT_HIFLD_ROW_SQL = """
 INSERT INTO ref.substations
     (name, hifld_type, osm_type, voltage_kv, operator,
      state, county, status, source, osm_id, hifld_id, geom)
-SELECT h.name, h.type, NULL, h.max_volt, NULL,
+SELECT h.name, h.type, NULL,
+       CASE WHEN h.max_volt > 0 THEN h.max_volt ELSE NULL END, NULL,
        h.state, h.county, h.status, 'hifld', NULL, h.hifld_id, h.geom
 FROM ref.substations_hifld h
 JOIN ref.substations s ON s.hifld_id = h.hifld_id
@@ -217,6 +218,7 @@ _TRAINING_SQL = """
 SELECT d.decision,
        h.name AS hifld_name,
        s.name AS osm_name,
+       s.osm_original_name,
        s.hifld_type, s.osm_type,
        h.max_volt AS hifld_voltage_kv,
        s.voltage_kv AS osm_voltage_kv,
@@ -343,7 +345,8 @@ def _substation_payload(
         "hifld_id": row["hifld_id"],
         "osm_id": row["osm_id"],
         "hifld_name": row["hifld_name"],
-        "osm_name": row["osm_name"],
+        "osm_original_name": row["osm_original_name"],
+        "merged_name": row["osm_name"],
         "hifld_voltage_kv": _optional_number(row["hifld_voltage_kv"]),
         "osm_voltage_kv": _optional_number(row["osm_voltage_kv"]),
         "hifld_type": row["hifld_type"],

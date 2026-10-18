@@ -38,6 +38,11 @@ function formatKv(value: number | null): string {
   return `${text} kV`;
 }
 
+function formatHifldKv(value: number | null): string {
+  if (value == null || !Number.isFinite(value) || value <= 0) return 'Unknown';
+  return formatKv(value);
+}
+
 function formatArea(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return '0 m²';
   if (value < 10) return `${value.toFixed(1)} m²`;
@@ -152,17 +157,23 @@ export function DecisionPanel({
               <p className="text-lg leading-snug font-semibold">{displayName(mismatch.hifld_name)}</p>
             </div>
             <div>
-              <p className="text-xs font-medium tracking-wide text-black/45 uppercase">
-                OSM Name
+              <p className="text-xs font-medium tracking-wide text-black/45 uppercase">OSM Name</p>
+              <p className="text-lg leading-snug font-semibold">
+                {displayName(mismatch.osm_original_name)}
               </p>
-              <p className="text-lg leading-snug font-semibold">{displayName(mismatch.osm_name)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium tracking-wide text-black/45 uppercase">
+                Merged Name
+              </p>
+              <p className="text-lg leading-snug font-semibold">{displayName(mismatch.merged_name)}</p>
             </div>
             <dl className="flex flex-col gap-1.5 border-t border-black/[0.08] pt-3">
               <Field label="Distance" value={formatMeters(mismatch.distance_m)} />
               <Field label="Boundary Distance" value={formatMeters(mismatch.boundary_distance_m)} />
               <Field
                 label="Voltage (HIFLD / OSM)"
-                value={`${formatKv(mismatch.hifld_voltage_kv)} / ${formatKv(mismatch.osm_voltage_kv)}`}
+                value={`${formatHifldKv(mismatch.hifld_voltage_kv)} / ${formatKv(mismatch.osm_voltage_kv)}`}
               />
               <Field label="OSM Area" value={formatArea(mismatch.osm_area_sqm)} />
               <Field label="HIFLD Type" value={displayName(mismatch.hifld_type)} />

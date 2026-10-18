@@ -325,7 +325,8 @@ export interface PhaseAMismatch {
   hifld_id: number;
   osm_id: number;
   hifld_name: string;
-  osm_name: string | null;
+  osm_original_name: string | null;
+  merged_name: string | null;
   hifld_voltage_kv: number | null;
   osm_voltage_kv: number | null;
   hifld_type: string | null;

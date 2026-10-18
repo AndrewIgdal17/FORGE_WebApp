@@ -53,6 +53,7 @@ def test_next_sql_selects_tier23_merged():
     assert "ST_GeometryType(s.geom) != 'ST_Point'" in _NEXT_SQL
     assert "ref.phase_a_decisions" in _NEXT_SQL
     assert "ORDER BY random()" in _NEXT_SQL
+    assert "s.osm_original_name" in _NEXT_SQL
 
 
 def test_next_sql_computes_spatial_features():
@@ -93,6 +94,8 @@ def test_unmerge_inserts_hifld_point_row():
     assert "ref.substations_hifld" in _INSERT_HIFLD_ROW_SQL
     assert "h.hifld_id" in _INSERT_HIFLD_ROW_SQL
     assert "h.geom" in _INSERT_HIFLD_ROW_SQL
+    assert "CASE WHEN h.max_volt > 0 THEN h.max_volt ELSE NULL END" in _INSERT_HIFLD_ROW_SQL
+    assert "h.max_volt," not in _INSERT_HIFLD_ROW_SQL
 
 
 def test_unmerge_inserts_osm_polygon_row():
@@ -125,6 +128,7 @@ def test_training_sql_joins_decisions():
     assert "ref.substations_hifld h ON h.hifld_id = s.hifld_id" in _TRAINING_SQL
     assert "d.decision" in _TRAINING_SQL
     assert "ORDER BY d.id" in _TRAINING_SQL
+    assert "s.osm_original_name" in _TRAINING_SQL
 
 
 def test_training_sql_recomputes_features():
@@ -220,6 +224,7 @@ def _mock_row() -> dict:
         "osm_id": "O456",
         "hifld_name": "ALPHA SUB",
         "osm_name": "Alpha Substation",
+        "osm_original_name": "Alpha",
         "hifld_voltage_kv": 345,
         "osm_voltage_kv": 345,
         "hifld_type": "SUBSTATION",
@@ -253,7 +258,9 @@ def test_substation_payload_fields():
     assert payload["hifld_id"] == "H123"
     assert payload["osm_id"] == "O456"
     assert payload["hifld_name"] == "ALPHA SUB"
-    assert payload["osm_name"] == "Alpha Substation"
+    assert payload["osm_original_name"] == "Alpha"
+    assert payload["merged_name"] == "Alpha Substation"
+    assert "osm_name" not in payload
     assert payload["distance_m"] == 42.0
     assert payload["boundary_distance_m"] == 10.0
     assert payload["osm_area_sqm"] == 8000.0
