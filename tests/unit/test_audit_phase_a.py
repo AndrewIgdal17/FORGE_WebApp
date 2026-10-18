@@ -13,6 +13,7 @@ from app.audit import (
     _COUNT_SQL,
     _DECISIONS,
     _DELETE_MERGED_SQL,
+    _FETCH_NAME_PARTS_SQL,
     _INSERT_DECISION_SQL,
     _INSERT_HIFLD_ROW_SQL,
     _INSERT_OSM_ROW_SQL,
@@ -21,8 +22,10 @@ from app.audit import (
     _NULLIFY_NODE_B_SQL,
     _REMAINING_SQL,
     _TRAINING_SQL,
+    _UPDATE_NAME_SQL,
     _UPDATE_OSM_NAME_SQL,
     DecideRequest,
+    _joined_substation_name,
     _map_api_decision,
     _state_match,
     _substation_payload,
@@ -38,11 +41,19 @@ from app.audit_models import CANONICAL_LABELS
 def test_phase_a_labels_are_canonical():
     assert "same_facility_hifld" in CANONICAL_LABELS
     assert "same_facility_osm" in CANONICAL_LABELS
+    assert "same_facility_hifld_osm" in CANONICAL_LABELS
+    assert "same_facility_osm_hifld" in CANONICAL_LABELS
     assert "different_facility" in CANONICAL_LABELS
 
 
 def test_decisions_tuple():
-    assert _DECISIONS == ("same_facility_hifld", "same_facility_osm", "different_facility")
+    assert _DECISIONS == (
+        "same_facility_hifld",
+        "same_facility_osm",
+        "same_facility_hifld_osm",
+        "same_facility_osm_hifld",
+        "different_facility",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +66,7 @@ def test_next_sql_selects_tier23_merged():
     assert "NOT ST_Within(h.geom, s.geom)" in _NEXT_SQL
     assert "ST_GeometryType(s.geom) != 'ST_Point'" in _NEXT_SQL
     assert "ref.phase_a_decisions" in _NEXT_SQL
-    assert "ORDER BY random()" in _NEXT_SQL
+    assert "ORDER BY distance_m DESC" in _NEXT_SQL
     assert "s.osm_original_name" in _NEXT_SQL
 
 
@@ -102,6 +113,19 @@ def test_osm_name_update_sql():
     assert "gid = $1" in _UPDATE_OSM_NAME_SQL
     assert "osm_original_name IS NOT NULL" in _UPDATE_OSM_NAME_SQL
     assert "trim(osm_original_name) != ''" in _UPDATE_OSM_NAME_SQL
+
+
+def test_fetch_name_parts_sql():
+    assert "h.name AS hifld_name" in _FETCH_NAME_PARTS_SQL
+    assert "s.osm_original_name" in _FETCH_NAME_PARTS_SQL
+    assert "ref.substations_hifld" in _FETCH_NAME_PARTS_SQL
+    assert "s.gid = $1" in _FETCH_NAME_PARTS_SQL
+
+
+def test_update_name_sql():
+    assert "UPDATE ref.substations" in _UPDATE_NAME_SQL
+    assert "SET name = $2" in _UPDATE_NAME_SQL
+    assert "gid = $1" in _UPDATE_NAME_SQL
 
 
 def test_unmerge_inserts_hifld_point_row():
@@ -221,6 +245,12 @@ def test_decide_request_accepts_valid():
     req3 = DecideRequest(sub_gid=7, decision="different_facility")
     assert req3.decision == "different_facility"
 
+    req4 = DecideRequest(sub_gid=3, decision="same_facility_hifld_osm")
+    assert req4.decision == "same_facility_hifld_osm"
+
+    req5 = DecideRequest(sub_gid=4, decision="same_facility_osm_hifld")
+    assert req5.decision == "same_facility_osm_hifld"
+
 
 def test_decide_request_rejects_invalid_decision():
     with pytest.raises(ValidationError):
@@ -249,6 +279,35 @@ def test_map_api_decision_different_has_no_preference():
     stored, preference = _map_api_decision("different_facility")
     assert stored == "different_facility"
     assert preference is None
+
+
+def test_map_api_decision_hifld_osm_concatenates():
+    stored, preference = _map_api_decision("same_facility_hifld_osm")
+    assert stored == "same_facility_hifld_osm"
+    assert preference == "hifld_osm"
+
+
+def test_map_api_decision_osm_hifld_concatenates():
+    stored, preference = _map_api_decision("same_facility_osm_hifld")
+    assert stored == "same_facility_osm_hifld"
+    assert preference == "osm_hifld"
+
+
+def test_joined_substation_name_orders():
+    assert (
+        _joined_substation_name("NORTH CITY", "Station E", hifld_first=True)
+        == "NORTH CITY Station E"
+    )
+    assert (
+        _joined_substation_name("NORTH CITY", "Station E", hifld_first=False)
+        == "Station E NORTH CITY"
+    )
+
+
+def test_joined_substation_name_blank_is_none():
+    assert _joined_substation_name("NORTH CITY", None, hifld_first=True) is None
+    assert _joined_substation_name(None, "Station E", hifld_first=False) is None
+    assert _joined_substation_name("  ", "Station E", hifld_first=True) is None
 
 
 # ---------------------------------------------------------------------------

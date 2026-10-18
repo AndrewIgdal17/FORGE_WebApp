@@ -61,6 +61,10 @@ function formatArea(value: number): string {
 
 function decisionLabel(value: string): string {
   if (value === 'same_facility') return 'Same Facility';
+  if (value === 'same_facility_hifld') return 'Same (HIFLD)';
+  if (value === 'same_facility_osm') return 'Same (OSM)';
+  if (value === 'same_facility_hifld_osm') return 'Same (H+O)';
+  if (value === 'same_facility_osm_hifld') return 'Same (O+H)';
   if (value === 'different_facility') return 'Different Facilities';
   return value;
 }
@@ -243,6 +247,24 @@ export function DecisionPanel({
             }}
           >
             Same Facility (OSM Name)
+          </button>
+          <button
+            type="button"
+            className={`${ACTION_BUTTON} bg-teal-600 hover:bg-teal-700`}
+            onClick={() => {
+              onDecide('same_facility_hifld_osm');
+            }}
+          >
+            Same Facility (HIFLD + OSM)
+          </button>
+          <button
+            type="button"
+            className={`${ACTION_BUTTON} bg-teal-600 hover:bg-teal-700`}
+            onClick={() => {
+              onDecide('same_facility_osm_hifld');
+            }}
+          >
+            Same Facility (OSM + HIFLD)
           </button>
           <button
             type="button"

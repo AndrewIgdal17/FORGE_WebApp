@@ -4,7 +4,8 @@ Three routes, all gated to one operator email:
 
 - ``GET /api/audit/next`` — one random Tier 2/3 merged substation
 - ``POST /api/audit/decide`` — ``same_facility_hifld``,
-  ``same_facility_osm``, or ``different_facility``
+  ``same_facility_osm``, ``same_facility_hifld_osm``,
+  ``same_facility_osm_hifld``, or ``different_facility``
 - ``GET /api/audit/stats`` — decision counts, remaining, accuracy history
 
 Tier 2/3: merged substations where the HIFLD point is NOT inside the
@@ -41,7 +42,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ADMIN_EMAIL = "andrewigdal17@gmail.com"
-_DECISIONS = ("same_facility_hifld", "same_facility_osm", "different_facility")
+_DECISIONS = (
+    "same_facility_hifld",
+    "same_facility_osm",
+    "same_facility_hifld_osm",
+    "same_facility_osm_hifld",
+    "different_facility",
+)
 _bearer = HTTPBearer(auto_error=False)
 
 ensemble = AuditEnsemble()
@@ -182,6 +189,19 @@ WHERE gid = $1
   AND trim(osm_original_name) != ''
 """
 
+_FETCH_NAME_PARTS_SQL = """
+SELECT h.name AS hifld_name, s.osm_original_name
+FROM ref.substations s
+JOIN ref.substations_hifld h ON h.hifld_id = s.hifld_id
+WHERE s.gid = $1
+"""
+
+_UPDATE_NAME_SQL = """
+UPDATE ref.substations
+SET name = $2
+WHERE gid = $1
+"""
+
 _SUBSTATION_EXISTS_SQL = "SELECT 1 FROM ref.substations WHERE gid = $1"
 
 # ---------------------------------------------------------------------------
@@ -317,6 +337,17 @@ def _optional_number(value: Any) -> float | None:
     return float(value)
 
 
+def _joined_substation_name(
+    hifld_name: Any, osm_name: Any, *, hifld_first: bool,
+) -> str | None:
+    """Space-join HIFLD and OSM names. None when either side is blank."""
+    hifld = str(hifld_name).strip() if hifld_name is not None else ""
+    osm = str(osm_name).strip() if osm_name is not None else ""
+    if not hifld or not osm:
+        return None
+    return f"{hifld} {osm}" if hifld_first else f"{osm} {hifld}"
+
+
 def _features_from_row(
     row: Any, nlcd_hifld: float, nlcd_osm: float,
 ) -> dict[str, float]:
@@ -432,6 +463,8 @@ async def require_admin(
 _API_DECISIONS: dict[str, tuple[str, str | None]] = {
     "same_facility_hifld": ("same_facility_hifld", "hifld"),
     "same_facility_osm": ("same_facility_osm", "osm"),
+    "same_facility_hifld_osm": ("same_facility_hifld_osm", "hifld_osm"),
+    "same_facility_osm_hifld": ("same_facility_osm_hifld", "osm_hifld"),
     "different_facility": ("different_facility", None),
 }
 
@@ -441,6 +474,8 @@ class DecideRequest(BaseModel):
     decision: Literal[
         "same_facility_hifld",
         "same_facility_osm",
+        "same_facility_hifld_osm",
+        "same_facility_osm_hifld",
         "different_facility",
     ]
 
@@ -600,11 +635,12 @@ async def audit_decide(
 ) -> JSONResponse:
     """Store one decision, optionally rename or un-merge, retrain, return next.
 
-    Both same-facility buttons store ``same_facility``. ``same_facility_osm``
-    also copies ``osm_original_name`` onto ``ref.substations.name``.
-    ``different_facility`` un-merges: separate ``hifld`` and ``osm`` rows
-    replace the merged row, and corridors that referenced the deleted
-    ``gid`` have their node pointers nullified.
+    Same-facility buttons store their API value. ``same_facility_osm``
+    copies ``osm_original_name`` onto ``ref.substations.name``.
+    Concatenated-name buttons join HIFLD and OSM names in the chosen
+    order. ``different_facility`` un-merges: separate ``hifld`` and
+    ``osm`` rows replace the merged row, and corridors that referenced
+    the deleted ``gid`` have their node pointers nullified.
     """
     global _warmed
     _remember_user(request, user)
@@ -647,6 +683,25 @@ async def audit_decide(
                     await conn.execute(
                         _UPDATE_OSM_NAME_SQL, payload.sub_gid,
                     )
+                elif payload.decision in (
+                    "same_facility_hifld_osm",
+                    "same_facility_osm_hifld",
+                ):
+                    names = await conn.fetchrow(
+                        _FETCH_NAME_PARTS_SQL, payload.sub_gid,
+                    )
+                    if names is not None:
+                        merged = _joined_substation_name(
+                            names["hifld_name"],
+                            names["osm_original_name"],
+                            hifld_first=(
+                                payload.decision == "same_facility_hifld_osm"
+                            ),
+                        )
+                        if merged is not None:
+                            await conn.execute(
+                                _UPDATE_NAME_SQL, payload.sub_gid, merged,
+                            )
                 elif stored_decision == "different_facility":
                     await conn.execute(
                         _INSERT_HIFLD_ROW_SQL, payload.sub_gid,

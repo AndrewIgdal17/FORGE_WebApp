@@ -53,7 +53,7 @@ MODEL_ORDER = (
     "xgboost",
     "adaboost",
 )
-CANONICAL_LABELS = ("accept", "keep", "relabel", "skip", "same_facility_hifld", "same_facility_osm", "different_facility")
+CANONICAL_LABELS = ("accept", "keep", "relabel", "skip", "same_facility_hifld", "same_facility_osm", "same_facility_hifld_osm", "same_facility_osm_hifld", "different_facility")
 _HISTORY_KEY = {
     "logistic_regression": "lr",
     "random_forest": "rf",
