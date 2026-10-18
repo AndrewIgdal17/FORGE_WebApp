@@ -86,7 +86,10 @@ def test_remaining_sql_matches_queue_filter():
 def test_insert_decision_sql():
     assert "ref.phase_a_decisions" in _INSERT_DECISION_SQL
     assert "sub_gid" in _INSERT_DECISION_SQL
+    assert "hifld_id" in _INSERT_DECISION_SQL
+    assert "osm_id" in _INSERT_DECISION_SQL
     assert "decision" in _INSERT_DECISION_SQL
+    assert "FROM ref.substations" in _INSERT_DECISION_SQL
 
 
 def test_unmerge_inserts_hifld_point_row():

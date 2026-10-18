@@ -166,8 +166,10 @@ WHERE s.source = 'merged'
 # ---------------------------------------------------------------------------
 
 _INSERT_DECISION_SQL = """
-INSERT INTO ref.phase_a_decisions (sub_gid, decision)
-VALUES ($1, $2)
+INSERT INTO ref.phase_a_decisions (sub_gid, hifld_id, osm_id, decision)
+SELECT s.gid, s.hifld_id, s.osm_id, $2
+FROM ref.substations s
+WHERE s.gid = $1
 """
 
 _SUBSTATION_EXISTS_SQL = "SELECT 1 FROM ref.substations WHERE gid = $1"
