@@ -17,7 +17,7 @@ function stopMapPointer(event: SyntheticEvent): void {
 
 export function SatelliteToggle({ map }: SatelliteToggleProps): ReactElement {
   const [trackedMap, setTrackedMap] = useState(map);
-  const [enabled, setEnabled] = useState(false);
+  const [enabled, setEnabled] = useState(true);
   const [styleEpoch, setStyleEpoch] = useState(0);
 
   if (trackedMap !== map) {

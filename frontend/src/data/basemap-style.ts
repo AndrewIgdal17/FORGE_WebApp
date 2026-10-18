@@ -53,13 +53,13 @@ export function forgeBasemapStyle(): StyleSpecification {
       {
         id: 'background',
         type: 'background',
+        layout: { visibility: 'none' },
         paint: { 'background-color': '#f8fafc' },
       },
       {
         id: SATELLITE_LAYER_ID,
         type: 'raster',
         source: 'satellite',
-        layout: { visibility: 'none' },
         paint: {},
       },
       {
@@ -67,6 +67,7 @@ export function forgeBasemapStyle(): StyleSpecification {
         type: 'fill',
         source: 'basemap',
         'source-layer': 'earth',
+        layout: { visibility: 'none' },
         paint: { 'fill-color': '#f1f5f9' },
       },
       {
@@ -82,6 +83,7 @@ export function forgeBasemapStyle(): StyleSpecification {
         type: 'fill',
         source: 'basemap',
         'source-layer': 'landuse',
+        layout: { visibility: 'none' },
         paint: { 'fill-color': '#f1f5f9', 'fill-opacity': 0.5 },
       },
       {
@@ -143,7 +145,7 @@ export function forgeBasemapStyle(): StyleSpecification {
           'text-size': 12,
           'text-font': ['Noto Sans Regular'],
         },
-        paint: { ...PLACE_LABEL_MAP_PAINT },
+        paint: { ...PLACE_LABEL_SATELLITE_PAINT },
         minzoom: 6,
       },
     ],
