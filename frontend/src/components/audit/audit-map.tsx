@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import type { FeatureCollection, Geometry } from 'geojson';
 import { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
 import bbox from '@turf/bbox';
+import { SatelliteToggle } from '@/components/map/SatelliteToggle';
 import { forgeBasemapStyle } from '@/data/basemap-style';
 
 const US_CENTER: [number, number] = [-81.3412, 35.7332];
@@ -190,6 +191,7 @@ export function AuditMap({ corridor, endpoint, substation }: AuditMapProps): Rea
   const fittedKey = useRef<string | null>(null);
   const geometriesRef = useRef<AuditGeometries>({ corridor, endpoint, substation });
   const [ready, setReady] = useState(false);
+  const [map, setMap] = useState<MapLibreMap | null>(null);
 
   useEffect(() => {
     geometriesRef.current = { corridor, endpoint, substation };
@@ -207,6 +209,7 @@ export function AuditMap({ corridor, endpoint, substation }: AuditMapProps): Rea
       zoom: US_ZOOM,
     });
     mapRef.current = map;
+    setMap(map);
 
     const onStyleLoad = (): void => {
       if (cancelled) return;
@@ -233,6 +236,7 @@ export function AuditMap({ corridor, endpoint, substation }: AuditMapProps): Rea
       map.remove();
       mapRef.current = null;
       fittedKey.current = null;
+      setMap(null);
       setReady(false);
     };
   }, []);
@@ -244,5 +248,10 @@ export function AuditMap({ corridor, endpoint, substation }: AuditMapProps): Rea
     fitAudit(map, corridor, substation, fittedKey);
   }, [corridor, endpoint, substation, ready]);
 
-  return <div ref={containerRef} className="absolute inset-0 h-full w-full" />;
+  return (
+    <>
+      <div ref={containerRef} className="absolute inset-0 h-full w-full" />
+      <SatelliteToggle map={map} />
+    </>
+  );
 }

@@ -2,6 +2,28 @@ import type { StyleSpecification } from 'maplibre-gl';
 
 const TILES_URL = 'https://tiles.forge-calc.com';
 
+export const SATELLITE_LAYER_ID = 'satellite';
+
+/** Light fills hidden while satellite imagery is showing. `water` stays hidden in both modes. */
+export const LIGHT_BASEMAP_LAYER_IDS = ['background', 'earth', 'landuse'] as const;
+
+export const PLACE_LABEL_LAYER_ID = 'places-label';
+
+export const PLACE_LABEL_MAP_PAINT = {
+  'text-color': '#64748b',
+  'text-halo-color': '#f8fafc',
+  'text-halo-width': 1,
+} as const;
+
+export const PLACE_LABEL_SATELLITE_PAINT = {
+  'text-color': '#f8fafc',
+  'text-halo-color': '#000000',
+  'text-halo-width': 2,
+} as const;
+
+const SATELLITE_TILES =
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+
 export function forgeBasemapStyle(): StyleSpecification {
   return {
     version: 8,
@@ -19,12 +41,26 @@ export function forgeBasemapStyle(): StyleSpecification {
         type: 'vector',
         url: `${TILES_URL}/ref.states`,
       },
+      satellite: {
+        type: 'raster',
+        tiles: [SATELLITE_TILES],
+        tileSize: 256,
+        attribution: 'Esri, Maxar, Earthstar Geographics',
+        maxzoom: 19,
+      },
     },
     layers: [
       {
         id: 'background',
         type: 'background',
         paint: { 'background-color': '#f8fafc' },
+      },
+      {
+        id: SATELLITE_LAYER_ID,
+        type: 'raster',
+        source: 'satellite',
+        layout: { visibility: 'none' },
+        paint: {},
       },
       {
         id: 'earth',
@@ -98,7 +134,7 @@ export function forgeBasemapStyle(): StyleSpecification {
         },
       },
       {
-        id: 'places-label',
+        id: PLACE_LABEL_LAYER_ID,
         type: 'symbol',
         source: 'basemap',
         'source-layer': 'places',
@@ -107,11 +143,7 @@ export function forgeBasemapStyle(): StyleSpecification {
           'text-size': 12,
           'text-font': ['Noto Sans Regular'],
         },
-        paint: {
-          'text-color': '#64748b',
-          'text-halo-color': '#f8fafc',
-          'text-halo-width': 1,
-        },
+        paint: { ...PLACE_LABEL_MAP_PAINT },
         minzoom: 6,
       },
     ],

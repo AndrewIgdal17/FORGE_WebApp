@@ -8,6 +8,7 @@ import { MapLegend } from '@/components/map/MapLegend';
 import { MapTooltip } from '@/components/map/MapTooltip';
 import { ResetButton } from '@/components/map/ResetButton';
 import { RouteMap } from '@/components/map/RouteMap';
+import { SatelliteToggle } from '@/components/map/SatelliteToggle';
 import { RouteStats } from '@/components/map/RouteStats';
 import { useRouteAnalyze } from '@/hooks/use-route-analyze';
 import { useRouteDraw } from '@/hooks/use-route-draw';
@@ -141,6 +142,7 @@ export function MapPanel({
       <MapLegend />
       <ResetButton visible={statsRoute !== null} onReset={handleReset} />
       <DrawingToolbar mode={mode} onMode={setMode} onUndo={undo} onRedo={redo} />
+      <SatelliteToggle map={map} />
     </div>
   );
 }
