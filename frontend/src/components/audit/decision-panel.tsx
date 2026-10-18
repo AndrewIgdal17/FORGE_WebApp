@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import type { AuditDecisionKind, AuditMismatch, AuditPredictions } from '@/lib/api';
 
@@ -22,6 +23,9 @@ const SAVE_BUTTON =
 const QUIET_BUTTON =
   'h-8 w-full cursor-pointer rounded-md text-sm font-medium text-black/60 transition-colors hover:text-black/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forge-primary disabled:cursor-not-allowed disabled:opacity-50';
 
+const NAME_INPUT =
+  'h-10 w-full rounded-md border border-black/15 bg-white px-3 text-sm text-black/85 outline-none placeholder:text-black/35 focus-visible:border-violet-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 disabled:cursor-not-allowed disabled:opacity-50';
+
 export interface DecisionPanelProps {
   mismatch: AuditMismatch | null;
   done: boolean;
@@ -32,7 +36,7 @@ export interface DecisionPanelProps {
   savingPolygon: boolean;
   reviewed: number;
   error: string | null;
-  onDecide: (decision: AuditDecisionKind) => void;
+  onDecide: (decision: AuditDecisionKind, customName?: string) => void;
   onStartDraw: () => void;
   onSavePolygon: () => void;
   onCancelDraw: () => void;
@@ -75,6 +79,7 @@ function formatArea(value: number): string {
 function decisionLabel(value: string): string {
   if (value === 'accept') return 'Accept';
   if (value === 'keep') return 'Keep';
+  if (value === 'relabel') return 'Relabel';
   if (value === 'skip') return 'Skip';
   return value;
 }
@@ -156,7 +161,25 @@ export function DecisionPanel({
   onSavePolygon,
   onCancelDraw,
 }: DecisionPanelProps): ReactElement {
+  const [customName, setCustomName] = useState('');
+  const mismatchId = mismatch ? `${mismatch.corridor_gid}:${mismatch.endpoint}` : '';
+  const typedName = customName.trim();
   const decisionsLocked = deciding || drawing || savingPolygon;
+
+  useEffect(() => {
+    setCustomName('');
+  }, [mismatchId]);
+
+  function choose(decision: AuditDecisionKind): void {
+    const name = customName.trim();
+    setCustomName('');
+    if (decision === 'relabel') {
+      onDecide('relabel', name);
+      return;
+    }
+    onDecide(decision);
+  }
+
   return (
     <section className="flex h-full flex-col bg-white">
       <header className="border-b border-black/[0.08] px-4 py-3">
@@ -257,12 +280,37 @@ export function DecisionPanel({
               Draw Polygon
             </button>
           )}
+          <input
+            type="text"
+            value={customName}
+            placeholder="Type real name (optional)"
+            aria-label="Real substation name"
+            autoComplete="off"
+            disabled={decisionsLocked}
+            maxLength={200}
+            onChange={(event) => {
+              setCustomName(event.target.value);
+            }}
+            className={NAME_INPUT}
+          />
+          {typedName ? (
+            <button
+              type="button"
+              className={`${ACTION_BUTTON} bg-violet-600 hover:bg-violet-700`}
+              disabled={decisionsLocked}
+              onClick={() => {
+                choose('relabel');
+              }}
+            >
+              Relabel
+            </button>
+          ) : null}
           <button
             type="button"
             className={`${ACTION_BUTTON} bg-emerald-600 hover:bg-emerald-700`}
             disabled={decisionsLocked}
             onClick={() => {
-              onDecide('accept');
+              choose('accept');
             }}
           >
             Accept
@@ -272,7 +320,7 @@ export function DecisionPanel({
             className={`${ACTION_BUTTON} bg-forge-primary hover:bg-forge-primary-hover`}
             disabled={decisionsLocked}
             onClick={() => {
-              onDecide('keep');
+              choose('keep');
             }}
           >
             Keep HIFLD
@@ -282,7 +330,7 @@ export function DecisionPanel({
             className={`${ACTION_BUTTON} bg-neutral-500 hover:bg-neutral-600`}
             disabled={decisionsLocked}
             onClick={() => {
-              onDecide('skip');
+              choose('skip');
             }}
           >
             Skip

@@ -187,8 +187,8 @@ export function StatsPanel({ stats, loading, error }: StatsPanelProps): ReactEle
           </span>
         </p>
         <p className="mt-1 text-sm text-black/70 tabular-nums">
-          Accept: {formatCount(counts?.accept ?? 0)} | Keep: {formatCount(counts?.keep ?? 0)} | Skip:{' '}
-          {formatCount(counts?.skip ?? 0)}
+          Accept: {formatCount(counts?.accept ?? 0)} | Keep: {formatCount(counts?.keep ?? 0)} |
+          Relabel: {formatCount(counts?.relabel ?? 0)} | Skip: {formatCount(counts?.skip ?? 0)}
         </p>
       </div>
       {accuracyBody}

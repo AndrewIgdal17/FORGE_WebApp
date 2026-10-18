@@ -99,7 +99,7 @@ function AuditContent(): ReactElement {
 
   const done = queue?.done === true;
 
-  async function handleDecide(decision: AuditDecisionKind): Promise<void> {
+  async function handleDecide(decision: AuditDecisionKind, customName?: string): Promise<void> {
     if (!mismatch || deciding || drawing || savingPolygon) return;
     setDeciding(true);
     setError(null);
@@ -108,6 +108,7 @@ function AuditContent(): ReactElement {
         corridor_gid: mismatch.corridor_gid,
         endpoint: mismatch.endpoint,
         decision,
+        ...(decision === 'relabel' ? { custom_name: customName ?? '' } : {}),
       });
       setStats(response.stats);
       setStatsError(null);
@@ -201,8 +202,8 @@ function AuditContent(): ReactElement {
             drawing={drawing}
             draftReady={draftPolygon !== null}
             savingPolygon={savingPolygon}
-            onDecide={(decision) => {
-              void handleDecide(decision);
+            onDecide={(decision, customName) => {
+              void handleDecide(decision, customName);
             }}
             onStartDraw={handleStartDraw}
             onSavePolygon={() => {

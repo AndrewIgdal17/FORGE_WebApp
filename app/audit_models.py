@@ -47,7 +47,7 @@ MODEL_ORDER = (
     "xgboost",
     "adaboost",
 )
-CANONICAL_LABELS = ("accept", "keep", "skip")
+CANONICAL_LABELS = ("accept", "keep", "relabel", "skip")
 _HISTORY_KEY = {
     "logistic_regression": "lr",
     "random_forest": "rf",
@@ -650,8 +650,8 @@ class AuditEnsemble:
         """Train all 4 models.
 
         `X` has one column per name in ``FEATURE_NAMES`` and `y` is
-        `accept` / `keep` / `skip`. Appends one accuracy-history point when
-        `n` is at least 30.
+        `accept` / `keep` / `relabel` / `skip`. Appends one accuracy-history
+        point when `n` is at least 30.
         """
         features, labels = _validate_training(X, y)
         with _quiet():

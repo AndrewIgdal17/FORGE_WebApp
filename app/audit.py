@@ -12,6 +12,8 @@ database pool is already open, retrain from ``ref.audit_decisions`` once that
 table has at least 30 rows. Writes use the API pool (``forge_api``), which
 has ``SELECT`` and ``INSERT`` on ``ref.audit_decisions``, ``INSERT`` on
 ``ref.audit_polygon_log``, and ``UPDATE`` on ``ref.substations.geom``.
+A ``relabel`` decision also updates ``ref.substations.name`` and the
+corridor endpoint name (``sub_1`` or ``sub_2``).
 """
 
 from __future__ import annotations
@@ -40,7 +42,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ADMIN_EMAIL = "andrewigdal17@gmail.com"
-_DECISIONS = ("accept", "keep", "skip")
+_DECISIONS = ("accept", "keep", "relabel", "skip")
 _bearer = HTTPBearer(auto_error=False)
 
 ensemble = AuditEnsemble()
@@ -250,10 +252,13 @@ WITH {_CANDIDATE_CTES}
 SELECT count(*)::int FROM eligible
 """
 
+# Names come from the decision row. A later relabel rewrites the live
+# corridor and substation names, and those rewrites must not change the
+# pair the model was shown.
 _TRAINING_SQL = """
 SELECT d.decision,
-       CASE WHEN d.endpoint = 'a' THEN c.sub_1 ELSE c.sub_2 END AS hifld_name,
-       s.name AS matched_name,
+       d.hifld_name,
+       d.matched_name,
        s.hifld_type,
        c.voltage_kv,
        s.voltage_kv AS sub_voltage_kv,
@@ -305,9 +310,25 @@ WHERE c.gid = $1
 
 _INSERT_SQL = """
 INSERT INTO ref.audit_decisions
-    (corridor_gid, endpoint, hifld_name, matched_name, matched_sub_gid, decision)
-VALUES ($1, $2, $3, $4, $5, $6)
+    (corridor_gid, endpoint, hifld_name, matched_name, matched_sub_gid,
+     decision, custom_name)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 """
+
+_RELABEL_SUBSTATION_SQL = """
+UPDATE ref.substations
+SET name = $1
+WHERE gid = $2
+"""
+
+_RELABEL_CORRIDOR_SQL = """
+UPDATE ref.corridors
+SET sub_1 = CASE WHEN $2 = 'a' THEN $1 ELSE sub_1 END,
+    sub_2 = CASE WHEN $2 = 'b' THEN $1 ELSE sub_2 END
+WHERE gid = $3
+"""
+
+_MAX_CUSTOM_NAME = 200
 
 _COUNT_SQL = "SELECT count(*)::int FROM ref.audit_decisions"
 
@@ -321,7 +342,23 @@ GROUP BY decision
 class DecideRequest(BaseModel):
     corridor_gid: int
     endpoint: Literal["a", "b"]
-    decision: Literal["accept", "keep", "skip"]
+    decision: Literal["accept", "keep", "skip", "relabel"]
+    custom_name: str | None = None
+
+
+def custom_name_for_decision(decision: str, custom_name: str | None) -> str | None:
+    """Name stored for ``relabel``. Every other decision stores NULL.
+
+    Surrounding whitespace is removed. The typed characters in between stay.
+    """
+    text = "" if custom_name is None else custom_name.strip()
+    if decision != "relabel":
+        return None
+    if not text:
+        raise ValueError("Type a real name before relabeling.")
+    if len(text) > _MAX_CUSTOM_NAME:
+        raise ValueError("That name is too long.")
+    return text
 
 
 class SavePolygonRequest(BaseModel):
@@ -665,6 +702,32 @@ def _refresh_target(
     return corridor_gid, endpoint
 
 
+async def _apply_relabel(
+    conn: asyncpg.Connection,
+    custom_name: str,
+    matched_sub_gid: int,
+    corridor_gid: int,
+    endpoint: str,
+) -> None:
+    """Write the typed name onto the substation and this corridor endpoint."""
+    sub_status = await conn.execute(
+        _RELABEL_SUBSTATION_SQL, custom_name, matched_sub_gid
+    )
+    if sub_status != "UPDATE 1":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Substation not found.",
+        )
+    corridor_status = await conn.execute(
+        _RELABEL_CORRIDOR_SQL, custom_name, endpoint, corridor_gid
+    )
+    if corridor_status != "UPDATE 1":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Corridor endpoint not found.",
+        )
+
+
 async def _save_polygon(
     conn: asyncpg.Connection,
     sub_gid: int,
@@ -767,9 +830,17 @@ async def audit_decide(
     payload: DecideRequest,
     user: dict = Depends(require_admin),
 ) -> JSONResponse:
-    """Store one decision, retrain, and return stats plus the next mismatch."""
+    """Store one decision, retrain, and return stats plus the next mismatch.
+
+    ``relabel`` also writes ``custom_name`` onto the matched substation and
+    this corridor endpoint before the ensemble refits.
+    """
     global _warmed
     _remember_user(request, user)
+    try:
+        custom_name = custom_name_for_decision(payload.decision, payload.custom_name)
+    except ValueError as exc:
+        raise _unprocessable(str(exc)) from exc
     pool = _pool()
     try:
         async with _lock, pool.acquire() as conn:
@@ -781,21 +852,31 @@ async def audit_decide(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Corridor endpoint not found.",
                 )
-            try:
-                await conn.execute(
-                    _INSERT_SQL,
-                    payload.corridor_gid,
-                    payload.endpoint,
-                    linked["hifld_name"],
-                    linked["matched_name"],
-                    linked["matched_sub_gid"],
-                    payload.decision,
-                )
-            except asyncpg.UniqueViolationError as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="This corridor endpoint is already decided.",
-                ) from exc
+            async with conn.transaction():
+                try:
+                    await conn.execute(
+                        _INSERT_SQL,
+                        payload.corridor_gid,
+                        payload.endpoint,
+                        linked["hifld_name"],
+                        linked["matched_name"],
+                        linked["matched_sub_gid"],
+                        payload.decision,
+                        custom_name,
+                    )
+                except asyncpg.UniqueViolationError as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="This corridor endpoint is already decided.",
+                    ) from exc
+                if custom_name is not None:
+                    await _apply_relabel(
+                        conn,
+                        custom_name,
+                        int(linked["matched_sub_gid"]),
+                        payload.corridor_gid,
+                        payload.endpoint,
+                    )
             try:
                 await _retrain(conn)
             except Exception:

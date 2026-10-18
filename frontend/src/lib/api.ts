@@ -273,7 +273,7 @@ export async function deleteScenario(id: string): Promise<void> {
   });
 }
 
-export type AuditDecisionKind = 'accept' | 'keep' | 'skip';
+export type AuditDecisionKind = 'accept' | 'keep' | 'skip' | 'relabel';
 export type AuditEndpointId = 'a' | 'b';
 
 export interface AuditModelOutput {
@@ -350,6 +350,7 @@ export interface AuditDecideRequest {
   corridor_gid: number;
   endpoint: AuditEndpointId;
   decision: AuditDecisionKind;
+  custom_name?: string;
 }
 
 export interface AuditDecideResponse {
