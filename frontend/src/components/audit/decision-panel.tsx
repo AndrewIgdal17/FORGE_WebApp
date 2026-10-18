@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
-import type { AuditDecisionKind, AuditMismatch, AuditPredictions } from '@/lib/api';
+import type { AuditPredictions, PhaseADecision, PhaseAMismatch } from '@/lib/api';
 
 const MIN_DECISIONS = 30;
 
@@ -14,35 +13,17 @@ const MODEL_ROWS = [
 const ACTION_BUTTON =
   'h-10 w-full cursor-pointer rounded-md text-sm font-semibold text-white transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forge-primary disabled:cursor-not-allowed disabled:opacity-50';
 
-const OUTLINE_BUTTON =
-  'h-8 w-full cursor-pointer rounded-md border border-forge-primary/40 bg-white text-sm font-medium text-forge-primary transition-colors hover:bg-forge-primary-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forge-primary disabled:cursor-not-allowed disabled:opacity-50';
-
-const SAVE_BUTTON =
-  'h-8 w-full cursor-pointer rounded-md bg-forge-primary text-sm font-medium text-white transition-colors hover:bg-forge-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forge-primary disabled:cursor-not-allowed disabled:opacity-50';
-
-const QUIET_BUTTON =
-  'h-8 w-full cursor-pointer rounded-md text-sm font-medium text-black/60 transition-colors hover:text-black/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forge-primary disabled:cursor-not-allowed disabled:opacity-50';
-
-const NAME_INPUT =
-  'h-10 w-full rounded-md border border-black/15 bg-white px-3 text-sm text-black/85 outline-none placeholder:text-black/35 focus-visible:border-violet-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 disabled:cursor-not-allowed disabled:opacity-50';
-
 export interface DecisionPanelProps {
-  mismatch: AuditMismatch | null;
+  mismatch: PhaseAMismatch | null;
   done: boolean;
   loading: boolean;
   deciding: boolean;
-  drawing: boolean;
-  draftReady: boolean;
-  savingPolygon: boolean;
   reviewed: number;
   error: string | null;
-  onDecide: (decision: AuditDecisionKind, customName?: string) => void;
-  onStartDraw: () => void;
-  onSavePolygon: () => void;
-  onCancelDraw: () => void;
+  onDecide: (decision: PhaseADecision) => void;
 }
 
-function displayName(value: string | null): string {
+function displayName(value: string | null | undefined): string {
   const text = value?.trim();
   return text ? text : '—';
 }
@@ -51,23 +32,10 @@ function formatMeters(value: number): string {
   return `${Math.round(value).toLocaleString('en-US')} m`;
 }
 
-function formatMiles(value: number): string {
-  return `${value.toLocaleString('en-US', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  })} miles`;
-}
-
 function formatKv(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return '—';
   const text = Number.isInteger(value) ? String(value) : value.toFixed(1);
   return `${text} kV`;
-}
-
-function formatTier(tier: number): string {
-  if (tier === 1) return '1 (inside)';
-  if (tier === 2) return '2 (proximity)';
-  return String(tier);
 }
 
 function formatArea(value: number): string {
@@ -77,10 +45,8 @@ function formatArea(value: number): string {
 }
 
 function decisionLabel(value: string): string {
-  if (value === 'accept') return 'Accept';
-  if (value === 'keep') return 'Keep';
-  if (value === 'relabel') return 'Relabel';
-  if (value === 'skip') return 'Skip';
+  if (value === 'same_facility') return 'Same Facility';
+  if (value === 'different_facility') return 'Different Facilities';
   return value;
 }
 
@@ -158,39 +124,14 @@ export function DecisionPanel({
   done,
   loading,
   deciding,
-  drawing,
-  draftReady,
-  savingPolygon,
   reviewed,
   error,
   onDecide,
-  onStartDraw,
-  onSavePolygon,
-  onCancelDraw,
 }: DecisionPanelProps): ReactElement {
-  const [customName, setCustomName] = useState('');
-  const mismatchId = mismatch ? `${mismatch.corridor_gid}:${mismatch.endpoint}` : '';
-  const typedName = customName.trim();
-  const decisionsLocked = deciding || drawing || savingPolygon;
-
-  useEffect(() => {
-    setCustomName('');
-  }, [mismatchId]);
-
-  function choose(decision: AuditDecisionKind): void {
-    const name = customName.trim();
-    setCustomName('');
-    if (decision === 'relabel') {
-      onDecide('relabel', name);
-      return;
-    }
-    onDecide(decision);
-  }
-
   return (
     <section className="flex h-full flex-col bg-white">
       <header className="border-b border-black/[0.08] px-4 py-3">
-        <h1 className="text-base font-bold text-forge-primary">Name Audit</h1>
+        <h1 className="text-base font-bold text-forge-primary">Substation Identity</h1>
       </header>
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {loading && !mismatch ? (
@@ -212,33 +153,22 @@ export function DecisionPanel({
             </div>
             <div>
               <p className="text-xs font-medium tracking-wide text-black/45 uppercase">
-                Matched Substation
+                OSM Name
               </p>
-              <p className="text-lg leading-snug font-semibold">{displayName(mismatch.matched_name)}</p>
+              <p className="text-lg leading-snug font-semibold">{displayName(mismatch.osm_name)}</p>
             </div>
             <dl className="flex flex-col gap-1.5 border-t border-black/[0.08] pt-3">
               <Field label="Distance" value={formatMeters(mismatch.distance_m)} />
+              <Field label="Boundary Distance" value={formatMeters(mismatch.boundary_distance_m)} />
               <Field
-                label="Voltage"
-                value={`${formatKv(mismatch.voltage_kv)} / ${formatKv(mismatch.sub_voltage_kv)}`}
+                label="Voltage (HIFLD / OSM)"
+                value={`${formatKv(mismatch.hifld_voltage_kv)} / ${formatKv(mismatch.osm_voltage_kv)}`}
               />
-              <Field label="Match Tier" value={formatTier(mismatch.match_tier)} />
-              <Field label="Substation Area" value={formatArea(mismatch.sub_area_sqm)} />
-              <Field label="Corridor Length" value={formatMiles(mismatch.corridor_miles)} />
-              <Field label="Corridor Source" value={displayName(mismatch.source)} />
-              <Field label="Endpoint" value={mismatch.endpoint.toUpperCase()} />
-              {mismatch.endpoint_geojson && 'coordinates' in mismatch.endpoint_geojson ? (
-                <div className="mt-2">
-                  <a
-                    href={`https://www.google.com/maps/@${(mismatch.endpoint_geojson as { coordinates: number[] }).coordinates[1]},${(mismatch.endpoint_geojson as { coordinates: number[] }).coordinates[0]},18z`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs font-medium text-forge-primary hover:underline"
-                  >
-                    Open in Google Maps ↗
-                  </a>
-                </div>
-              ) : null}
+              <Field label="OSM Area" value={formatArea(mismatch.osm_area_sqm)} />
+              <Field label="HIFLD Type" value={displayName(mismatch.hifld_type)} />
+              <Field label="OSM Type" value={displayName(mismatch.osm_type)} />
+              <Field label="Corridor Degree" value={String(mismatch.corridor_degree)} />
+              <Field label="State Match" value={mismatch.state_match ? 'Yes' : 'No'} />
             </dl>
             <div className="border-t border-black/[0.08] pt-3">
               <h2 className="mb-2 text-xs font-medium tracking-wide text-black/45 uppercase">
@@ -263,96 +193,25 @@ export function DecisionPanel({
               {error}
             </p>
           ) : null}
-          {drawing ? (
-            <div className="flex flex-col gap-2">
-              <p className="text-xs leading-snug text-black/55">
-                {draftReady
-                  ? 'Polygon ready. Save it to replace the marker, or cancel to discard it.'
-                  : 'Trace the yard on the satellite image. Click the first corner again to close the polygon.'}
-              </p>
-              {draftReady ? (
-                <button
-                  type="button"
-                  className={SAVE_BUTTON}
-                  disabled={savingPolygon}
-                  onClick={onSavePolygon}
-                >
-                  {savingPolygon ? 'Saving…' : 'Save Polygon'}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className={QUIET_BUTTON}
-                disabled={savingPolygon}
-                onClick={onCancelDraw}
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className={OUTLINE_BUTTON}
-              disabled={deciding || savingPolygon}
-              onClick={onStartDraw}
-            >
-              Draw Polygon
-            </button>
-          )}
-          <input
-            type="text"
-            value={customName}
-            placeholder="Type real name (optional)"
-            aria-label="Real substation name"
-            autoComplete="off"
-            disabled={decisionsLocked}
-            maxLength={200}
-            onChange={(event) => {
-              setCustomName(event.target.value);
-            }}
-            className={NAME_INPUT}
-          />
-          {typedName ? (
-            <button
-              type="button"
-              className={`${ACTION_BUTTON} bg-violet-600 hover:bg-violet-700`}
-              disabled={decisionsLocked}
-              onClick={() => {
-                choose('relabel');
-              }}
-            >
-              Relabel
-            </button>
-          ) : null}
           <button
             type="button"
             className={`${ACTION_BUTTON} bg-emerald-600 hover:bg-emerald-700`}
-            disabled={decisionsLocked}
+            disabled={deciding}
             onClick={() => {
-              choose('accept');
+              onDecide('same_facility');
             }}
           >
-            Accept
+            Same Facility
           </button>
           <button
             type="button"
-            className={`${ACTION_BUTTON} bg-forge-primary hover:bg-forge-primary-hover`}
-            disabled={decisionsLocked}
+            className={`${ACTION_BUTTON} bg-red-600 hover:bg-red-700`}
+            disabled={deciding}
             onClick={() => {
-              choose('keep');
+              onDecide('different_facility');
             }}
           >
-            Keep HIFLD
-          </button>
-          <button
-            type="button"
-            className={`${ACTION_BUTTON} bg-neutral-500 hover:bg-neutral-600`}
-            disabled={decisionsLocked}
-            onClick={() => {
-              choose('skip');
-            }}
-          >
-            Skip
+            Different Facilities
           </button>
         </footer>
       ) : null}

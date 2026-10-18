@@ -1,4 +1,4 @@
-import type { Geometry, MultiLineString, Polygon } from 'geojson';
+import type { Geometry, MultiLineString } from 'geojson';
 
 import { supabase } from '@/lib/supabase';
 
@@ -273,8 +273,7 @@ export async function deleteScenario(id: string): Promise<void> {
   });
 }
 
-export type AuditDecisionKind = 'accept' | 'keep' | 'skip' | 'relabel';
-export type AuditEndpointId = 'a' | 'b';
+export type PhaseADecision = 'same_facility' | 'different_facility';
 
 export interface AuditModelOutput {
   prediction: string;
@@ -312,7 +311,7 @@ export interface AuditAccuracyPoint {
 
 export interface AuditStats {
   n_decisions: number;
-  decision_counts: Record<AuditDecisionKind, number>;
+  decision_counts: Record<PhaseADecision, number>;
   remaining: number;
   ready: boolean;
   accuracy: AuditAccuracyPoint | null;
@@ -320,28 +319,31 @@ export interface AuditStats {
   best_params: Record<string, Record<string, unknown>>;
 }
 
-export interface AuditMismatch {
+export interface PhaseAMismatch {
   done: false;
-  corridor_gid: number;
-  endpoint: AuditEndpointId;
-  volt_class: string | null;
-  voltage_kv: number | null;
-  source: string | null;
-  hifld_name: string | null;
   sub_gid: number;
-  matched_name: string | null;
-  sub_voltage_kv: number | null;
-  sub_state: string | null;
+  hifld_id: number;
+  osm_id: number;
+  hifld_name: string;
+  osm_name: string | null;
+  hifld_voltage_kv: number | null;
+  osm_voltage_kv: number | null;
   hifld_type: string | null;
+  osm_type: string | null;
   distance_m: number;
-  corridor_miles: number;
-  match_tier: number;
-  sub_area_sqm: number;
+  boundary_distance_m: number;
+  osm_area_sqm: number;
+  compactness: number;
+  orientation_deg: number;
+  corridor_degree: number;
+  nearby_hifld: number;
+  nearby_osm: number;
+  state: string | null;
+  county: string | null;
   voltage_match: number;
   state_match: boolean;
-  corridor_geojson: Geometry | null;
-  sub_geojson: Geometry | null;
-  endpoint_geojson: Geometry | null;
+  hifld_geojson: Geometry;
+  osm_geojson: Geometry;
   predictions: AuditPredictions | null;
 }
 
@@ -349,13 +351,11 @@ export interface AuditQueueEmpty {
   done: true;
 }
 
-export type AuditNextResponse = AuditMismatch | AuditQueueEmpty;
+export type AuditNextResponse = PhaseAMismatch | AuditQueueEmpty;
 
 export interface AuditDecideRequest {
-  corridor_gid: number;
-  endpoint: AuditEndpointId;
-  decision: AuditDecisionKind;
-  custom_name?: string;
+  sub_gid: number;
+  decision: PhaseADecision;
 }
 
 export interface AuditDecideResponse {
@@ -364,42 +364,12 @@ export interface AuditDecideResponse {
   next: AuditNextResponse;
 }
 
-export function isAuditMismatch(value: AuditNextResponse): value is AuditMismatch {
+export function isAuditMismatch(value: AuditNextResponse): value is PhaseAMismatch {
   return value.done === false;
 }
 
-export interface AuditNextTarget {
-  corridorGid: number;
-  endpoint: AuditEndpointId;
-}
-
-export async function getAuditNext(target?: AuditNextTarget): Promise<AuditNextResponse> {
-  if (!target) return apiFetch<AuditNextResponse>('/api/audit/next');
-  const params = new URLSearchParams({
-    corridor_gid: String(target.corridorGid),
-    endpoint: target.endpoint,
-  });
-  return apiFetch<AuditNextResponse>(`/api/audit/next?${params.toString()}`);
-}
-
-export interface AuditSavePolygonRequest {
-  sub_gid: number;
-  polygon: Polygon;
-}
-
-export interface AuditSavePolygonResponse {
-  sub_gid: number;
-  sub_area_sqm: number;
-  sub_geojson: Polygon;
-}
-
-export async function saveAuditPolygon(
-  payload: AuditSavePolygonRequest,
-): Promise<AuditSavePolygonResponse> {
-  return apiFetch<AuditSavePolygonResponse>('/api/audit/save-polygon', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+export async function getAuditNext(): Promise<AuditNextResponse> {
+  return apiFetch<AuditNextResponse>('/api/audit/next');
 }
 
 export async function getAuditStats(): Promise<AuditStats> {

@@ -1,21 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import type { FeatureCollection, Geometry, Polygon } from 'geojson';
+import type { FeatureCollection, Geometry } from 'geojson';
 import { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
 import bbox from '@turf/bbox';
 import { SatelliteToggle } from '@/components/map/SatelliteToggle';
 import { forgeBasemapStyle } from '@/data/basemap-style';
-import { useAuditPolygonDraw } from '@/hooks/use-audit-polygon-draw';
 
 const US_CENTER: [number, number] = [-81.3412, 35.7332];
 const US_ZOOM = 5;
-const CORRIDOR_COLOR = '#f59e0b';
-const ENDPOINT_COLOR = '#dc2626';
+const HIFLD_COLOR = '#dc2626';
 const SUBSTATION_FILL = '#2563eb';
 const SUBSTATION_STROKE = '#1d4ed8';
 
-const CORRIDOR_SOURCE = 'audit-corridor';
-const ENDPOINT_SOURCE = 'audit-endpoint';
+const HIFLD_SOURCE = 'audit-hifld';
 const SUBSTATION_SOURCE = 'audit-substation';
 
 function emptyCollection(): FeatureCollection {
@@ -23,18 +20,14 @@ function emptyCollection(): FeatureCollection {
 }
 
 export interface AuditMapProps {
-  corridor: Geometry | null;
-  endpoint: Geometry | null;
-  substation: Geometry | null;
+  hifld: Geometry | null;
+  osm: Geometry | null;
   fitToken: string;
-  drawing: boolean;
-  onDraftPolygon: (polygon: Polygon | null) => void;
 }
 
 interface AuditGeometries {
-  corridor: Geometry | null;
-  endpoint: Geometry | null;
-  substation: Geometry | null;
+  hifld: Geometry | null;
+  osm: Geometry | null;
 }
 
 function featureCollection(geometry: Geometry | null): FeatureCollection {
@@ -52,22 +45,6 @@ function setGeoJson(map: MapLibreMap, sourceId: string, geometry: Geometry | nul
 }
 
 function addAuditLayers(map: MapLibreMap): void {
-  if (!map.getSource(CORRIDOR_SOURCE)) {
-    map.addSource(CORRIDOR_SOURCE, { type: 'geojson', data: emptyCollection() });
-  }
-  if (!map.getLayer('audit-corridor-line')) {
-    map.addLayer({
-      id: 'audit-corridor-line',
-      type: 'line',
-      source: CORRIDOR_SOURCE,
-      paint: {
-        'line-color': CORRIDOR_COLOR,
-        'line-width': 4,
-        'line-opacity': 0.95,
-      },
-    });
-  }
-
   if (!map.getSource(SUBSTATION_SOURCE)) {
     map.addSource(SUBSTATION_SOURCE, { type: 'geojson', data: emptyCollection() });
   }
@@ -93,32 +70,18 @@ function addAuditLayers(map: MapLibreMap): void {
       },
     });
   }
-  if (!map.getLayer('audit-substation-circle')) {
-    map.addLayer({
-      id: 'audit-substation-circle',
-      type: 'circle',
-      source: SUBSTATION_SOURCE,
-      filter: ['==', ['geometry-type'], 'Point'],
-      paint: {
-        'circle-radius': 8,
-        'circle-color': SUBSTATION_FILL,
-        'circle-stroke-color': SUBSTATION_STROKE,
-        'circle-stroke-width': 2,
-      },
-    });
-  }
 
-  if (!map.getSource(ENDPOINT_SOURCE)) {
-    map.addSource(ENDPOINT_SOURCE, { type: 'geojson', data: emptyCollection() });
+  if (!map.getSource(HIFLD_SOURCE)) {
+    map.addSource(HIFLD_SOURCE, { type: 'geojson', data: emptyCollection() });
   }
-  if (!map.getLayer('audit-endpoint-circle')) {
+  if (!map.getLayer('audit-hifld-circle')) {
     map.addLayer({
-      id: 'audit-endpoint-circle',
+      id: 'audit-hifld-circle',
       type: 'circle',
-      source: ENDPOINT_SOURCE,
+      source: HIFLD_SOURCE,
       paint: {
-        'circle-radius': 8,
-        'circle-color': ENDPOINT_COLOR,
+        'circle-radius': 6,
+        'circle-color': HIFLD_COLOR,
         'circle-stroke-color': '#ffffff',
         'circle-stroke-width': 2,
       },
@@ -127,27 +90,26 @@ function addAuditLayers(map: MapLibreMap): void {
 }
 
 function syncAuditData(map: MapLibreMap, geometries: AuditGeometries): void {
-  setGeoJson(map, CORRIDOR_SOURCE, geometries.corridor);
-  setGeoJson(map, ENDPOINT_SOURCE, geometries.endpoint);
-  setGeoJson(map, SUBSTATION_SOURCE, geometries.substation);
+  setGeoJson(map, HIFLD_SOURCE, geometries.hifld);
+  setGeoJson(map, SUBSTATION_SOURCE, geometries.osm);
 }
 
 function fitAudit(
   map: MapLibreMap,
-  corridor: Geometry | null,
-  substation: Geometry | null,
+  hifld: Geometry | null,
+  osm: Geometry | null,
   fittedKey: { current: string | null },
 ): void {
-  if (!corridor && !substation) {
+  if (!hifld && !osm) {
     fittedKey.current = null;
     return;
   }
   if (map.getCanvas().clientWidth === 0 || map.getCanvas().clientHeight === 0) return;
 
-  const key = JSON.stringify([corridor, substation]);
+  const key = JSON.stringify([hifld, osm]);
   if (fittedKey.current === key) return;
 
-  const features = [corridor, substation].flatMap((geometry) =>
+  const features = [hifld, osm].flatMap((geometry) =>
     geometry ? [{ type: 'Feature' as const, properties: {}, geometry }] : [],
   );
   if (features.length === 0) return;
@@ -189,29 +151,18 @@ function fitAudit(
   );
 }
 
-export function AuditMap({
-  corridor,
-  endpoint,
-  substation,
-  fitToken,
-  drawing,
-  onDraftPolygon,
-}: AuditMapProps): ReactElement {
+export function AuditMap({ hifld, osm, fitToken }: AuditMapProps): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const fittedKey = useRef<string | null>(null);
-  const drawZoomed = useRef(false);
-  const holdView = useRef(false);
   const fitTokenRef = useRef(fitToken);
-  const drawingRef = useRef(drawing);
-  const geometriesRef = useRef<AuditGeometries>({ corridor, endpoint, substation });
-  drawingRef.current = drawing;
+  const geometriesRef = useRef<AuditGeometries>({ hifld, osm });
   const [ready, setReady] = useState(false);
   const [map, setMap] = useState<MapLibreMap | null>(null);
 
   useEffect(() => {
-    geometriesRef.current = { corridor, endpoint, substation };
-  }, [corridor, endpoint, substation]);
+    geometriesRef.current = { hifld, osm };
+  }, [hifld, osm]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -231,7 +182,7 @@ export function AuditMap({
       if (cancelled) return;
       addAuditLayers(map);
       syncAuditData(map, geometriesRef.current);
-      fitAudit(map, geometriesRef.current.corridor, geometriesRef.current.substation, fittedKey);
+      fitAudit(map, geometriesRef.current.hifld, geometriesRef.current.osm, fittedKey);
       setReady(true);
       map.resize();
     };
@@ -241,8 +192,7 @@ export function AuditMap({
 
     const observer = new ResizeObserver(() => {
       map.resize();
-      if (drawingRef.current || holdView.current) return;
-      fitAudit(map, geometriesRef.current.corridor, geometriesRef.current.substation, fittedKey);
+      fitAudit(map, geometriesRef.current.hifld, geometriesRef.current.osm, fittedKey);
     });
     observer.observe(container);
 
@@ -258,41 +208,21 @@ export function AuditMap({
     };
   }, []);
 
-  const draftPolygon = useAuditPolygonDraw(ready ? map : null, drawing);
-
-  useEffect(() => {
-    onDraftPolygon(draftPolygon);
-  }, [draftPolygon, onDraftPolygon]);
-
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    syncAuditData(map, { corridor, endpoint, substation });
+    syncAuditData(map, { hifld, osm });
     if (fitTokenRef.current !== fitToken) {
-      holdView.current = false;
-      drawZoomed.current = false;
+      fittedKey.current = null;
       fitTokenRef.current = fitToken;
     }
-    if (drawing) {
-      if (!drawZoomed.current) {
-        const corridorKey = fittedKey.current;
-        fittedKey.current = null;
-        fitAudit(map, null, substation, fittedKey);
-        fittedKey.current = corridorKey;
-        drawZoomed.current = true;
-        holdView.current = true;
-      }
-      return;
-    }
-    drawZoomed.current = false;
-    if (holdView.current) return;
-    fitAudit(map, corridor, substation, fittedKey);
-  }, [corridor, endpoint, substation, fitToken, ready, drawing]);
+    fitAudit(map, hifld, osm, fittedKey);
+  }, [hifld, osm, fitToken, ready]);
 
   return (
     <>
       <div ref={containerRef} className="absolute inset-0 h-full w-full" />
-      <SatelliteToggle map={map} preferSatellite={drawing} />
+      <SatelliteToggle map={map} preferSatellite />
     </>
   );
 }
