@@ -107,7 +107,7 @@ WITH tier23 AS (
            s.hifld_type, s.osm_type,
            s.voltage_kv AS osm_voltage_kv,
            h.name AS hifld_name,
-           h.voltage_kv AS hifld_voltage_kv,
+           h.max_volt AS hifld_voltage_kv,
            s.state, s.county, s.operator,
            h.state AS hifld_state,
            ST_Distance(h.geom, ST_Centroid(s.geom)) AS distance_m,
@@ -180,7 +180,7 @@ _INSERT_HIFLD_ROW_SQL = """
 INSERT INTO ref.substations
     (name, hifld_type, osm_type, voltage_kv, operator,
      state, county, status, source, osm_id, hifld_id, geom)
-SELECT h.name, h.hifld_type, NULL, h.voltage_kv, NULL,
+SELECT h.name, h.type, NULL, h.max_volt, NULL,
        h.state, h.county, h.status, 'hifld', NULL, h.hifld_id, h.geom
 FROM ref.substations_hifld h
 JOIN ref.substations s ON s.hifld_id = h.hifld_id
@@ -218,7 +218,7 @@ SELECT d.decision,
        h.name AS hifld_name,
        s.name AS osm_name,
        s.hifld_type, s.osm_type,
-       h.voltage_kv AS hifld_voltage_kv,
+       h.max_volt AS hifld_voltage_kv,
        s.voltage_kv AS osm_voltage_kv,
        s.state,
        h.state AS hifld_state,
