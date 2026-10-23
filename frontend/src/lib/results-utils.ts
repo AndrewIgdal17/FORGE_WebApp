@@ -73,7 +73,7 @@ export function deriveTaxonomyResults(
   const costs = asRecord(results.costs);
   const benefits = asRecord(results.benefits);
   const cc = asRecord(benefits.congestion);
-  const rev = asRecord(benefits.revenue);
+  const capRec = asRecord(benefits.capital_recovery);
   const wf = asRecord(costs.wildfire);
   const out = asRecord(costs.outage);
   const em = asRecord(costs.emissions);
@@ -85,6 +85,7 @@ export function deriveTaxonomyResults(
   const om = asRecord(costs.oandm);
   const ins = asRecord(costs.insurance);
   const delay = asRecord(costs.delay);
+  const dispDelay = asRecord(costs.displacement_delay);
   const totalBuildNom = orZero(build.total_nominal);
 
   return [
@@ -191,6 +192,12 @@ export function deriveTaxonomyResults(
       detail: [],
     },
     {
+      taxonomy_id: 'emissions_displacement_delay',
+      value_pv: orZero(dispDelay.displacement_delay_cost_pv),
+      value_nominal: orZero(dispDelay.displacement_delay_cost_nominal),
+      detail: [],
+    },
+    {
       taxonomy_id: 'wildfire_eac',
       value_pv: orZero(wf.pv_cost),
       value_nominal: orZero(wf.nominal_total),
@@ -245,10 +252,17 @@ export function deriveTaxonomyResults(
       detail: [],
     },
     {
-      taxonomy_id: 'revenue',
-      value_pv: orZero(rev.revenue_pv),
-      value_nominal: orZero(rev.revenue_nominal),
-      value_annual: orNull(rev.annual_revenue),
+      taxonomy_id: 'capacity_value_benefit',
+      value_pv: orZero(cc.capacity_value_pv),
+      value_nominal: orZero(cc.capacity_value_nominal),
+      value_annual: orNull(cc.capacity_value_annual),
+      detail: [],
+    },
+    {
+      taxonomy_id: 'capital_recovery',
+      value_pv: orZero(capRec.capital_recovery_pv),
+      value_nominal: orZero(capRec.capital_recovery_real),
+      value_annual: orNull(capRec.annual_revenue),
       detail: [],
     },
     {

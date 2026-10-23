@@ -123,7 +123,7 @@ const RESULTS_EXPORT_FIELDS: Array<{ key: string; path: string }> = [
   { key: 'hard_costs_pv', path: 'bcr.hard_costs_pv' },
   { key: 'soft_costs_pv', path: 'bcr.soft_costs_pv' },
   { key: 'emissions_costs_pv', path: 'bcr.emissions_costs_pv' },
-  { key: 'revenue_pv', path: 'bcr.revenue_pv' },
+  { key: 'revenue_pv', path: 'bcr.capital_recovery_pv' },
   { key: 'bcr_societal', path: 'bcr.bcr_societal' },
   { key: 'bcr_utility', path: 'bcr.bcr_utility' },
   { key: 'bcr_ratepayer', path: 'bcr.bcr_ratepayer' },
