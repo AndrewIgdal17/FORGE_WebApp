@@ -246,7 +246,7 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
       {
         key: 'revenue_pv',
         label: 'Revenue',
-        path: 'bcr.revenue_pv',
+        path: 'bcr.capital_recovery_pv',
         format: 'currency',
       },
       {
@@ -395,6 +395,24 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         path: 'bcr.bcr_excluding_wildfire_risk_and_outage_risk',
         format: 'number3',
       },
+      {
+        key: 'bcr_excl_emissions',
+        label: 'BCR excl. Emissions Costs',
+        path: 'bcr.bcr_excluding_emissions',
+        format: 'number3',
+      },
+      {
+        key: 'bcr_excl_outage',
+        label: 'BCR excl. Outage',
+        path: 'bcr.bcr_excluding_outage_risk',
+        format: 'number3',
+      },
+      {
+        key: 'bcr_excl_all_emissions',
+        label: 'BCR excl. All Emissions',
+        path: 'bcr.bcr_excluding_avoided_emissions_and_emissions',
+        format: 'number3',
+      },
     ],
   },
 ];
@@ -404,9 +422,7 @@ export const COMPARISON_GROUP_SUPERGROUP: Record<string, ComparisonSupergroup> =
   {
     'Project Parameters': 'project',
     'BCR — Societal': 'bcr',
-    'BCR — System': 'bcr',
     'BCR — Firm': 'bcr',
-    'BCR — Capital Screening': 'bcr',
     'Costs (PV)': 'costs',
     'Cost Categories (PV)': 'costs',
     Benefits: 'benefits',
