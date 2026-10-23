@@ -678,6 +678,18 @@ export function ResultsOverview({
   const resultById = resolveResultById(results);
   const taxonomyItems = readTaxonomyItems(taxonomy);
   const sideMap = sideById(taxonomy);
+
+  function hasLineItems(side: LedgerSide, key: string): boolean {
+    return positiveItems(
+      itemsForCategory(taxonomyItems, sideMap, side, key),
+      resultById,
+      true,
+    ).length > 0;
+  }
+
+  const visibleCosts = costs.filter((row) => hasLineItems('cost', row.key));
+  const visibleBenefits = benefits.filter((row) => hasLineItems('benefit', row.key));
+
   const costTotal = readNumber(results, TOTAL_PATHS[perspective].costs) ?? sumValues(costs);
   const benefitTotal =
     readNumber(results, TOTAL_PATHS[perspective].benefits) ?? sumValues(benefits);
@@ -774,7 +786,7 @@ export function ResultsOverview({
 
       <CategoryAccordions
         title="Costs"
-        rows={costs}
+        rows={visibleCosts}
         side="cost"
         grandTotal={costTotal}
         taxonomyItems={taxonomyItems}
@@ -787,7 +799,7 @@ export function ResultsOverview({
       />
       <CategoryAccordions
         title="Benefits"
-        rows={benefits}
+        rows={visibleBenefits}
         side="benefit"
         grandTotal={benefitTotal}
         taxonomyItems={taxonomyItems}
