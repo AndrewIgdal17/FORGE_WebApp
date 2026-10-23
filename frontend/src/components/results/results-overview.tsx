@@ -72,11 +72,17 @@ export const PERSPECTIVE_CATEGORIES: Record<
   },
   utility: {
     costs: [
-      { key: 'revenue', label: 'Revenue Requirement', path: 'bcr.capital_recovery_pv' },
+      { key: 'capital_recovery', label: 'Capital Recovery', path: 'bcr.capital_recovery_pv' },
+      { key: 'oandm', label: 'O&M', path: 'bcr.oandm_pv' },
+      { key: 'insurance', label: 'Insurance', path: 'bcr.insurance_pv' },
+      { key: 'row_rent', label: 'ROW Rent', path: 'bcr.row_rent_pv' },
       { key: 'delay', label: 'Base Delay', path: 'bcr.delay_cost_pv' },
     ],
     benefits: [
-      { key: 'revenue', label: 'Allowed Revenue', path: 'bcr.capital_recovery_pv' },
+      { key: 'capital_recovery', label: 'Capital Recovery', path: 'bcr.capital_recovery_pv' },
+      { key: 'oandm', label: 'O&M', path: 'bcr.oandm_pv' },
+      { key: 'insurance', label: 'Insurance', path: 'bcr.insurance_pv' },
+      { key: 'row_rent', label: 'ROW Rent', path: 'bcr.row_rent_pv' },
     ],
   },
 };
@@ -506,18 +512,29 @@ function sideById(taxonomy: Record<string, unknown> | undefined): Map<string, st
 }
 
 /**
- * Perspective keys mostly match taxonomy categories. Three keys do not:
- * `avoided` is taxonomy category `avoided_emissions`, utility `revenue` is
- * the transfer item `capital_recovery`, and utility `delay` is `base_delay`.
+ * Keys in ITEM_ID_BY_KEY resolve to a single taxonomy item by id, skipping
+ * the side filter (required because capital_recovery is side "transfer" and
+ * ATRR items appear on both the cost and benefit sides of the utility
+ * perspective). All other keys match taxonomy category + side.
  */
+const ITEM_ID_BY_KEY: Record<string, string> = {
+  delay:            'base_delay',
+  capital_recovery: 'capital_recovery',
+  oandm:            'oandm',
+  insurance:        'insurance',
+  row_rent:         'row_rent',
+  conductor_loss:   'line_loss_conductor',
+  converter_loss:   'line_loss_converter',
+};
+
 function itemsForCategory(
   items: TaxonomyItemView[],
   sides: Map<string, string>,
   side: LedgerSide,
   key: string,
 ): TaxonomyItemView[] {
-  if (key === 'delay') return items.filter((item) => item.id === 'base_delay');
-  if (key === 'revenue') return items.filter((item) => item.id === 'capital_recovery');
+  const itemId = ITEM_ID_BY_KEY[key];
+  if (itemId) return items.filter((item) => item.id === itemId);
   const category = key === 'avoided' ? 'avoided_emissions' : key;
   return items
     .filter((item) => item.category === category && sides.get(item.id) === side)
