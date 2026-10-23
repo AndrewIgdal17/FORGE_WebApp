@@ -740,9 +740,11 @@ export function ResultsOverview({
                 {formatNetBenefit(displayNet)}
               </p>
             </div>
-            <p className="max-w-md flex-1 text-sm italic text-slate-600">
-              {exclusionNote ?? definition.definition}
-            </p>
+            {exclusionNote ? (
+              <p className="max-w-md flex-1 text-sm italic text-slate-600">
+                {exclusionNote}
+              </p>
+            ) : null}
           </div>
         </CardContent>
       </Card>

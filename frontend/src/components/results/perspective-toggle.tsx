@@ -18,13 +18,13 @@ export const PERSPECTIVE_DEFINITIONS: Record<PerspectiveKey, {
   },
   ratepayer: {
     label: 'Ratepayer',
-    definition: 'Rate impact on customers \u2014 remedial and enabling benefits over revenue requirement.',
+    definition: 'Costs and benefits that flow through to ratepayers. Excludes externalities and risk.',
     bcrPath: 'bcr.bcr_ratepayer',
     netBenefitPath: 'bcr.net_benefit_ratepayer_pv',
   },
   utility: {
     label: 'Utility',
-    definition: 'Does the utility earn a return after accounting for delay costs?',
+    definition: 'Revenue earned against capital deployed, net of delay costs.',
     bcrPath: 'bcr.bcr_utility',
     netBenefitPath: 'bcr.net_benefit_utility_pv',
   },
