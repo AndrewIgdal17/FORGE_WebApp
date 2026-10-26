@@ -157,6 +157,7 @@ export function MapPanel({
         route={statsRoute}
         isDrawing={isDrawing}
         result={analyzed}
+        endpoints={endpointSubstations}
         loading={loading && !isDrawing}
         error={error}
       />

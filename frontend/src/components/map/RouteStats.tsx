@@ -5,6 +5,7 @@ import length from '@turf/length';
 import { ChevronDown, ChevronUp, MapPin } from 'lucide-react';
 import { TERRAIN_IDS } from '@/components/sections/terrain-mix';
 import type { TerrainId } from '@/components/sections/terrain-mix';
+import type { EndpointSubstations, SubstationIdentity } from '@/hooks/use-route-draw';
 import type { AnalyzeResponse } from '@/lib/api';
 import { getValueAtPath } from '@/lib/path';
 import { useFormStore } from '@/stores/form-store';
@@ -31,6 +32,7 @@ export interface RouteStatsProps {
   route: MultiLineString | null;
   isDrawing: boolean;
   result: AnalyzeResponse | null;
+  endpoints: EndpointSubstations;
   loading: boolean;
   error: Error | null;
 }
@@ -58,6 +60,21 @@ function formatMiles(miles: number): string {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   })} mi`;
+}
+
+function endpointLine(
+  label: string,
+  subregion: string | null,
+  gea: string | null,
+  state: string | null,
+  hit: SubstationIdentity | null,
+): string {
+  const parts = [subregion, gea, state].filter((part): part is string => Boolean(part));
+  const region = parts.length > 0 ? parts.join(' / ') : '—';
+  const name = hit?.name && !/^UNKNOWN\d*$/i.test(hit.name) ? hit.name : null;
+  if (!name) return `${label}: ${region}`;
+  const volts = hit?.max_volt && hit.max_volt !== '-999999' ? ` (${hit.max_volt} kV)` : '';
+  return `${label}: ${name}${volts} — ${region}`;
 }
 
 function routeMiles(route: MultiLineString): number {
@@ -114,6 +131,7 @@ export function RouteStats({
   route,
   isDrawing,
   result,
+  endpoints,
   loading,
   error,
 }: RouteStatsProps): ReactElement {
@@ -178,6 +196,28 @@ export function RouteStats({
       {loading ? <p className="text-xs text-slate-500">Analyzing...</p> : null}
       {error && !isDrawing ? (
         <p className="mt-1 text-xs break-words text-red-600">{error.message}</p>
+      ) : null}
+      {result && !isDrawing ? (
+        <div className="mt-2 grid gap-1 text-xs text-slate-700">
+          <p>
+            {endpointLine(
+              'Sending',
+              result.sending_subregion,
+              result.sending_gea,
+              result.sending_state,
+              endpoints.sending,
+            )}
+          </p>
+          <p>
+            {endpointLine(
+              'Receiving',
+              result.receiving_subregion,
+              result.receiving_gea,
+              result.receiving_state,
+              endpoints.receiving,
+            )}
+          </p>
+        </div>
       ) : null}
       {showBreakdown && terrain ? (
         <div className={`mt-3 max-h-[min(60vh,28rem)] overflow-y-auto ${dimmed ? 'opacity-50' : ''}`}>
