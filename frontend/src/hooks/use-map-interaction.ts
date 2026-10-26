@@ -9,8 +9,13 @@ import type {
 import { MAP_OVERLAYS, PREVIEW_OVERLAYS, hitLayerId, baseLayerId } from '@/components/map/RouteMap';
 import { VOLTAGE_STYLES } from '@/data/color-maps';
 
-/** Line layers that use invisible hit-target layers for hover. */
-const HIT_TARGET_IDS = new Set(['ref.corridors', 'ref.highways_nhs', 'ref.rail_narn']);
+/** Layers that use an invisible hit-target sibling for hover. */
+const HIT_TARGET_IDS = new Set([
+  'ref.corridors',
+  'ref.highways_nhs',
+  'ref.rail_narn',
+  'ref.substations_display',
+]);
 
 /** The layer IDs we actually bind events on. Line layers use their -hit sibling. */
 const EVENT_LAYER_IDS: readonly string[] = [

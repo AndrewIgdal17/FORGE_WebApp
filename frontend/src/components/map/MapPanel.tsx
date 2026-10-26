@@ -11,9 +11,10 @@ import { RouteMap } from '@/components/map/RouteMap';
 import { SatelliteToggle } from '@/components/map/SatelliteToggle';
 import { RouteStats } from '@/components/map/RouteStats';
 import { useRouteAnalyze } from '@/hooks/use-route-analyze';
-import { useRouteDraw } from '@/hooks/use-route-draw';
+import { useRouteDraw, type EndpointSubstations } from '@/hooks/use-route-draw';
 import type { AnalyzeResponse } from '@/lib/api';
 import { useFormStore } from '@/stores/form-store';
+import { useMapStore } from '@/stores/map-store';
 
 export interface MapPanelProps {
   createMode?: boolean;
@@ -24,6 +25,7 @@ export interface MapPanelProps {
 function segmentsFor(
   route: MultiLineString,
   intersections: AnalyzeResponse['intersections'],
+  endpoints: EndpointSubstations,
 ): unknown[] {
   const coordinates = route.coordinates[0] ?? [];
   return [
@@ -31,6 +33,8 @@ function segmentsFor(
       id: 0,
       geometry: { type: 'LineString', coordinates },
       intersections,
+      sending_substation: endpoints.sending,
+      receiving_substation: endpoints.receiving,
     },
   ];
 }
@@ -49,13 +53,28 @@ export function MapPanel({
   const onRouteChangeRef = useRef(onRouteChange);
   onRouteChangeRef.current = onRouteChange;
 
-  const { mode, setMode, routeGeoJSON, undo, redo, reset, isDrawing } = useRouteDraw(map);
+  const { mode, setMode, routeGeoJSON, endpointSubstations, undo, redo, reset, isDrawing } =
+    useRouteDraw(map);
   const { analyze, loading, error } = useRouteAnalyze();
 
   useLayoutEffect(() => {
     if (!map) return;
     setMode(createMode ? 'linestring' : 'select');
   }, [map, createMode, setMode]);
+
+  useEffect(() => {
+    if (!createMode && mode !== 'linestring') return;
+    useMapStore.setState((state) => {
+      const layer = state.layers['ref.substations_display'];
+      if (!layer || layer.visible) return state;
+      return {
+        layers: {
+          ...state.layers,
+          'ref.substations_display': { ...layer, visible: true },
+        },
+      };
+    });
+  }, [createMode, mode]);
 
   useEffect(() => {
     const wasDrawing = wasDrawingRef.current;
@@ -88,13 +107,16 @@ export function MapPanel({
     void analyze(finishedRoute).then((response) => {
       if (cancelled || id !== requestId.current || !response) return;
       setAnalyzed(response);
-      onRouteChangeRef.current?.(finishedRoute, segmentsFor(finishedRoute, response.intersections));
+      onRouteChangeRef.current?.(
+        finishedRoute,
+        segmentsFor(finishedRoute, response.intersections, endpointSubstations),
+      );
       useFormStore.getState().applyChanges(response.changes);
     });
     return () => {
       cancelled = true;
     };
-  }, [analyze, finishedRoute]);
+  }, [analyze, finishedRoute, endpointSubstations]);
 
   const showExisting = !clearedExisting && existingRoute && !routeGeoJSON ? existingRoute : null;
   const statsRoute = routeGeoJSON ?? showExisting;

@@ -158,6 +158,7 @@ const HIT_TARGET_IDS = new Set<string>([
   'ref.corridors',
   'ref.highways_nhs',
   'ref.rail_narn',
+  'ref.substations_display',
 ]);
 
 const HIT_WIDTH_EXPRESSION = [
@@ -181,6 +182,31 @@ function addHitLayer(map: MapLibreMap, overlayId: string, visibility: 'visible' 
         'line-color': '#000',
         'line-opacity': 0,
         'line-width': HIT_WIDTH_EXPRESSION as unknown as number,
+      },
+    },
+    overlayId,
+  );
+}
+
+/** Wider invisible circle. The painted substation dots are only 2–5px. */
+function addCircleHitLayer(
+  map: MapLibreMap,
+  overlayId: string,
+  visibility: 'visible' | 'none',
+): void {
+  const id = hitLayerId(overlayId);
+  if (map.getLayer(id)) return;
+  map.addLayer(
+    {
+      id,
+      type: 'circle',
+      source: overlayId,
+      'source-layer': overlayId,
+      layout: { visibility },
+      paint: {
+        'circle-radius': 10,
+        'circle-color': '#000',
+        'circle-opacity': 0,
       },
     },
     overlayId,
@@ -294,6 +320,9 @@ function addOverlays(map: MapLibreMap): void {
           'circle-stroke-width': 1,
         },
       });
+      if (HIT_TARGET_IDS.has(overlay.id)) {
+        addCircleHitLayer(map, overlay.id, visibility);
+      }
     } else if (overlay.kind === 'fill') {
       map.addLayer({
         id: overlay.id,
