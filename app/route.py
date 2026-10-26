@@ -229,6 +229,28 @@ def state_abbreviation(statefp: str | None) -> str | None:
     return FIPS_TO_STATE.get(str(statefp).strip())
 
 
+def _text_cell(row: Any | None, column: str) -> str | None:
+    if row is None:
+        return None
+    value = row[column]
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def endpoint_context(row: Any | None) -> dict[str, str | None]:
+    """Region codes at each end. A polygon miss stays None."""
+    return {
+        "sending_subregion": _text_cell(row, "sending_subregion"),
+        "receiving_subregion": _text_cell(row, "receiving_subregion"),
+        "sending_gea": _text_cell(row, "sending_gea"),
+        "receiving_gea": _text_cell(row, "receiving_gea"),
+        "sending_state": state_abbreviation(_text_cell(row, "sending_statefp")),
+        "receiving_state": state_abbreviation(_text_cell(row, "receiving_statefp")),
+    }
+
+
 class RouteGeometry(BaseModel):
     type: str
     coordinates: list[list[list[float]]] = Field(min_length=1)
@@ -491,12 +513,13 @@ async def analyze_route(
         logger.exception("route analyze: database pool is not initialized")
         return _unavailable("Database is not available.")
 
+    endpoint_row = None
     try:
         async with pool.acquire() as conn:
             total_miles = await conn.fetchval(_TOTAL_MILES_SQL, geojson)
             zone_rows = await conn.fetch(_ZONE_MILES_SQL, geojson)
             point_rows = await conn.fetch(_SAMPLE_POINTS_SQL, geojson)
-            _endpoint_row = await conn.fetchrow(_ENDPOINT_SQL, geojson)
+            endpoint_row = await conn.fetchrow(_ENDPOINT_SQL, geojson)
     except asyncpg.PostgresError as exc:
         sqlstate = getattr(exc, "sqlstate", "") or ""
         message = str(exc).lower()
@@ -535,5 +558,6 @@ async def analyze_route(
         "total_miles": round(float(total_miles), 2),
         "intersections": intersections,
         "changes": changes_for(intersections),
+        **endpoint_context(endpoint_row),
     }
     return JSONResponse(sanitize_for_json(body))
