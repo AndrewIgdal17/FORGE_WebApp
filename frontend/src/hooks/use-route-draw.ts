@@ -8,7 +8,7 @@ import {
   TerraDrawSelectMode,
   TerraDrawSessionUndoRedo,
 } from 'terra-draw';
-import type { GeoJSONStoreFeatures, TerraDrawEventListeners } from 'terra-draw';
+import type { GeoJSONStoreFeatures, SnapToCustom, TerraDrawEventListeners } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 
 type FeatureId = string | number;
@@ -61,6 +61,28 @@ function gidProp(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
+}
+
+function substationSnapTarget(
+  map: MapLibreMap,
+  x: number,
+  y: number,
+): Position | undefined {
+  if (map.isStyleLoaded() !== true || !map.getLayer(SUBSTATION_HIT_LAYER)) return undefined;
+  const features = map.queryRenderedFeatures(
+    [
+      [x - HIT_PADDING_PX, y - HIT_PADDING_PX],
+      [x + HIT_PADDING_PX, y + HIT_PADDING_PX],
+    ],
+    { layers: [SUBSTATION_HIT_LAYER] },
+  );
+  for (const feature of features) {
+    if (feature.geometry.type !== 'Point') continue;
+    const [longitude, latitude] = feature.geometry.coordinates;
+    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) continue;
+    return [longitude, latitude];
+  }
+  return undefined;
 }
 
 function substationAt(map: MapLibreMap, position: Position): SubstationIdentity | null {
@@ -154,10 +176,14 @@ function readDrawing(draw: TerraDraw): boolean {
 }
 
 function createDraw(map: MapLibreMap): TerraDraw {
+  const toCustom: SnapToCustom = (event) =>
+    substationSnapTarget(map, event.containerX, event.containerY);
+
   return new TerraDraw({
     adapter: new TerraDrawMapLibreGLAdapter({ map }),
     modes: [
       new TerraDrawLineStringMode({
+        snapping: { toCustom },
         styles: {
           lineStringColor: ROUTE_BLUE,
           lineStringWidth: 3,
@@ -182,6 +208,7 @@ function createDraw(map: MapLibreMap): TerraDraw {
                 midpoints: false,
                 draggable: true,
                 deletable: false,
+                snappable: { toCustom },
               },
             },
           },
