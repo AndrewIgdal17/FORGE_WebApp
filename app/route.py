@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from . import db as db_module
 from .models import sanitize_for_json
+from .states import fips_to_abbrev
 
 logger = logging.getLogger(__name__)
 
@@ -161,73 +162,6 @@ SELECT
     WHERE ST_Covers(c.geom, recv_pt) LIMIT 1) AS receiving_statefp
 """
 
-# TIGER statefp → postal abbreviation. 50 states, DC, and inhabited territories.
-FIPS_TO_STATE = {
-    "01": "AL",
-    "02": "AK",
-    "04": "AZ",
-    "05": "AR",
-    "06": "CA",
-    "08": "CO",
-    "09": "CT",
-    "10": "DE",
-    "11": "DC",
-    "12": "FL",
-    "13": "GA",
-    "15": "HI",
-    "16": "ID",
-    "17": "IL",
-    "18": "IN",
-    "19": "IA",
-    "20": "KS",
-    "21": "KY",
-    "22": "LA",
-    "23": "ME",
-    "24": "MD",
-    "25": "MA",
-    "26": "MI",
-    "27": "MN",
-    "28": "MS",
-    "29": "MO",
-    "30": "MT",
-    "31": "NE",
-    "32": "NV",
-    "33": "NH",
-    "34": "NJ",
-    "35": "NM",
-    "36": "NY",
-    "37": "NC",
-    "38": "ND",
-    "39": "OH",
-    "40": "OK",
-    "41": "OR",
-    "42": "PA",
-    "44": "RI",
-    "45": "SC",
-    "46": "SD",
-    "47": "TN",
-    "48": "TX",
-    "49": "UT",
-    "50": "VT",
-    "51": "VA",
-    "53": "WA",
-    "54": "WV",
-    "55": "WI",
-    "56": "WY",
-    "60": "AS",
-    "66": "GU",
-    "69": "MP",
-    "72": "PR",
-    "78": "VI",
-}
-
-
-def state_abbreviation(statefp: str | None) -> str | None:
-    """Return the postal abbreviation for a TIGER state FIPS code."""
-    if statefp is None:
-        return None
-    return FIPS_TO_STATE.get(str(statefp).strip())
-
 
 def _text_cell(row: Any | None, column: str) -> str | None:
     if row is None:
@@ -246,8 +180,8 @@ def endpoint_context(row: Any | None) -> dict[str, str | None]:
         "receiving_subregion": _text_cell(row, "receiving_subregion"),
         "sending_gea": _text_cell(row, "sending_gea"),
         "receiving_gea": _text_cell(row, "receiving_gea"),
-        "sending_state": state_abbreviation(_text_cell(row, "sending_statefp")),
-        "receiving_state": state_abbreviation(_text_cell(row, "receiving_statefp")),
+        "sending_state": fips_to_abbrev(_text_cell(row, "sending_statefp")),
+        "receiving_state": fips_to_abbrev(_text_cell(row, "receiving_statefp")),
     }
 
 

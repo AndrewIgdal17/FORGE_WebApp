@@ -240,7 +240,7 @@ def _scrubbed_samples(points):
 
 
 def test_fips_to_state_covers_states_dc_and_territories():
-    from app.route import FIPS_TO_STATE, state_abbreviation
+    from app.states import FIPS_TO_STATE, fips_to_abbrev
 
     assert len(FIPS_TO_STATE) == 56
     assert FIPS_TO_STATE["48"] == "TX"
@@ -249,9 +249,9 @@ def test_fips_to_state_covers_states_dc_and_territories():
     assert FIPS_TO_STATE["41"] == "OR"
     assert FIPS_TO_STATE["11"] == "DC"
     assert FIPS_TO_STATE["72"] == "PR"
-    assert state_abbreviation("48") == "TX"
-    assert state_abbreviation(None) is None
-    assert state_abbreviation("99") is None
+    assert fips_to_abbrev("48") == "TX"
+    assert fips_to_abbrev(None) is None
+    assert fips_to_abbrev("99") is None
 
 
 def test_endpoint_context_maps_fips_and_passes_nulls_through():
