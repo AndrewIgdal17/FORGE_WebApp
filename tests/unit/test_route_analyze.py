@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import forge
 import pytest
 from fastapi.testclient import TestClient
@@ -199,3 +201,161 @@ def test_analyze_returns_503_when_rasterio_is_unavailable(monkeypatch):
     client = TestClient(app, raise_server_exceptions=False)
     response = client.post("/api/route/analyze", json=AUSTIN_DALLAS)
     assert response.status_code == 503
+
+
+PORTLAND_LOS_ANGELES = {
+    "route": {
+        "type": "MultiLineString",
+        "coordinates": [[[-122.67, 45.52], [-118.24, 34.05]]],
+    }
+}
+
+PACIFIC_OCEAN = {
+    "route": {
+        "type": "MultiLineString",
+        "coordinates": [[[-130.0, 35.0], [-125.0, 38.0]]],
+    }
+}
+
+ANCHORAGE_FAIRBANKS = {
+    "route": {
+        "type": "MultiLineString",
+        "coordinates": [[[-149.90, 61.22], [-147.72, 64.84]]],
+    }
+}
+
+ENDPOINT_KEYS = (
+    "sending_subregion",
+    "receiving_subregion",
+    "sending_gea",
+    "receiving_gea",
+    "sending_state",
+    "receiving_state",
+)
+
+
+def _scrubbed_samples(points):
+    """Stand in for NLCD so endpoint tests do not need the land-cover raster."""
+    return [("scrubbed_flat", spacing) for _x, _y, spacing in points]
+
+
+def test_fips_to_state_covers_states_dc_and_territories():
+    from app.route import FIPS_TO_STATE, state_abbreviation
+
+    assert len(FIPS_TO_STATE) == 56
+    assert FIPS_TO_STATE["48"] == "TX"
+    assert FIPS_TO_STATE["06"] == "CA"
+    assert FIPS_TO_STATE["02"] == "AK"
+    assert FIPS_TO_STATE["41"] == "OR"
+    assert FIPS_TO_STATE["11"] == "DC"
+    assert FIPS_TO_STATE["72"] == "PR"
+    assert state_abbreviation("48") == "TX"
+    assert state_abbreviation(None) is None
+    assert state_abbreviation("99") is None
+
+
+def test_endpoint_context_maps_fips_and_passes_nulls_through():
+    from app.route import endpoint_context
+
+    assert endpoint_context(
+        {
+            "sending_subregion": "ERCT",
+            "receiving_subregion": "CAMX",
+            "sending_gea": "ERCOT",
+            "receiving_gea": None,
+            "sending_statefp": "48",
+            "receiving_statefp": "02",
+        }
+    ) == {
+        "sending_subregion": "ERCT",
+        "receiving_subregion": "CAMX",
+        "sending_gea": "ERCOT",
+        "receiving_gea": None,
+        "sending_state": "TX",
+        "receiving_state": "AK",
+    }
+    assert endpoint_context(None) == {key: None for key in ENDPOINT_KEYS}
+
+
+def test_endpoint_sql_uses_covers_and_workbook_gea_names():
+    from app.route import _ENDPOINT_SQL
+
+    assert "ST_Covers" in _ENDPOINT_SQL
+    assert "ST_Contains" not in _ENDPOINT_SQL
+    assert "ref.gea_regions" in _ENDPOINT_SQL
+    assert "gea_name" in _ENDPOINT_SQL
+    assert "ref.subregions_egrid" in _ENDPOINT_SQL
+    assert "ref.counties_tiger" in _ENDPOINT_SQL
+
+
+@pytest.fixture
+def analyze_client(monkeypatch):
+    """POST /api/route/analyze against PostGIS. Skips without a test database."""
+    dsn = os.environ.get("FORGE_DATABASE_URL_TEST")
+    if not dsn:
+        pytest.skip("FORGE_DATABASE_URL_TEST is not set")
+    from app import main as main_module
+    from app import route as route_module
+    from app.main import app
+
+    monkeypatch.setattr(main_module, "_FORGE_DATABASE_URL", dsn)
+    monkeypatch.setattr(route_module, "sample_terrain", _scrubbed_samples)
+    with TestClient(app) as client:
+        yield client
+
+
+def _analyze(client: TestClient, payload: dict) -> dict:
+    response = client.post("/api/route/analyze", json=payload)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_endpoint_attribution_austin_dallas(analyze_client):
+    body = _analyze(analyze_client, AUSTIN_DALLAS)
+    assert body["sending_subregion"] == "ERCT"
+    assert body["receiving_subregion"] == "ERCT"
+    assert body["sending_gea"] == "ERCOT"
+    assert body["receiving_gea"] == "ERCOT"
+    assert body["sending_state"] == "TX"
+    assert body["receiving_state"] == "TX"
+
+
+def test_endpoint_attribution_cross_region(analyze_client):
+    body = _analyze(analyze_client, PORTLAND_LOS_ANGELES)
+    assert body["sending_subregion"] == "NWPP"
+    assert body["receiving_subregion"] == "CAMX"
+    assert body["sending_gea"] == "NorthernGrid West"
+    assert body["receiving_gea"] == "CAISO"
+    assert body["sending_state"] == "OR"
+    assert body["receiving_state"] == "CA"
+
+
+def test_endpoint_attribution_ocean(analyze_client):
+    body = _analyze(analyze_client, PACIFIC_OCEAN)
+    assert {key: body[key] for key in ENDPOINT_KEYS} == {key: None for key in ENDPOINT_KEYS}
+
+
+def test_endpoint_attribution_partial_null(analyze_client):
+    body = _analyze(analyze_client, ANCHORAGE_FAIRBANKS)
+    assert body["sending_subregion"] == "AKGD"
+    assert body["receiving_subregion"] == "AKGD"
+    assert body["sending_gea"] is None
+    assert body["receiving_gea"] is None
+    assert body["sending_state"] == "AK"
+    assert body["receiving_state"] == "AK"
+
+
+def test_endpoint_fields_present_on_normal_route(analyze_client):
+    body = _analyze(analyze_client, AUSTIN_DALLAS)
+    assert set(ENDPOINT_KEYS).issubset(body)
+    for key in ENDPOINT_KEYS:
+        assert body[key] is None or isinstance(body[key], str)
+
+
+def test_existing_analyze_unchanged(analyze_client):
+    body = _analyze(analyze_client, AUSTIN_DALLAS)
+    assert body["total_miles"] == 183.4
+    assert set(body["intersections"]) == {"terrain/nlcd", "row/blm"}
+    assert set(body["intersections"]["terrain/nlcd"]) == set(TERRAIN_KEYS)
+    assert isinstance(body["changes"], dict)
+    assert "sending_subregion" not in body["changes"]
