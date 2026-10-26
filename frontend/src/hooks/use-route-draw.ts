@@ -18,7 +18,7 @@ export type DrawMode = 'linestring' | 'select';
 export interface SubstationIdentity {
   gid: number;
   name: string | null;
-  max_volt: string | null;
+  voltage_kv: string | null;
 }
 
 export interface EndpointSubstations {
@@ -106,7 +106,7 @@ function substationAt(map: MapLibreMap, position: Position): SubstationIdentity 
   return {
     gid,
     name: textProp(properties.name),
-    max_volt: textProp(properties.max_volt),
+    voltage_kv: textProp(properties.voltage_kv),
   };
 }
 
@@ -169,6 +169,16 @@ function sameRoute(left: MultiLineString | null, right: MultiLineString | null):
   if (left === right) return true;
   if (!left || !right) return false;
   return JSON.stringify(left.coordinates) === JSON.stringify(right.coordinates);
+}
+
+function sameIdentity(left: SubstationIdentity | null, right: SubstationIdentity | null): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.gid === right.gid && left.name === right.name && left.voltage_kv === right.voltage_kv;
+}
+
+function sameEndpoints(left: EndpointSubstations, right: EndpointSubstations): boolean {
+  return sameIdentity(left.sending, right.sending) && sameIdentity(left.receiving, right.receiving);
 }
 
 function readDrawing(draw: TerraDraw): boolean {
@@ -283,6 +293,12 @@ export function useRouteDraw(map: MapLibreMap | null): RouteDraw {
       draw.selectFeature(id);
     };
 
+    const refreshEndpoints = (): void => {
+      const route = routeGeometry(draw);
+      const next = route ? substationsFor(map, route) : NO_SUBSTATIONS;
+      setEndpointSubstations((current) => (sameEndpoints(current, next) ? current : next));
+    };
+
     const onFinish: TerraDrawEventListeners['finish'] = (_id, context) => {
       queueMicrotask(() => {
         if (cancelled || !draw.enabled) return;
@@ -290,8 +306,7 @@ export function useRouteDraw(map: MapLibreMap | null): RouteDraw {
         if (context.action === 'draw' && context.mode === DRAW_MODE) {
           focusFinishedLine();
         }
-        const route = routeGeometry(draw);
-        setEndpointSubstations(route ? substationsFor(map, route) : NO_SUBSTATIONS);
+        refreshEndpoints();
         publish(draw);
       });
     };
@@ -299,6 +314,7 @@ export function useRouteDraw(map: MapLibreMap | null): RouteDraw {
     const onChange: TerraDrawEventListeners['change'] = (_ids, type) => {
       if (cancelled || adjusting || type === 'styling') return;
       if (draw.getMode() === EDIT_MODE) {
+        refreshEndpoints();
         publish(draw);
         return;
       }

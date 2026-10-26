@@ -55,6 +55,8 @@ export function MapPanel({
 
   const { mode, setMode, routeGeoJSON, endpointSubstations, undo, redo, reset, isDrawing } =
     useRouteDraw(map);
+  const endpointSubstationsRef = useRef(endpointSubstations);
+  endpointSubstationsRef.current = endpointSubstations;
   const { analyze, loading, error } = useRouteAnalyze();
 
   useLayoutEffect(() => {
@@ -99,24 +101,27 @@ export function MapPanel({
     if (wasDrawing) setFinishedRoute(routeGeoJSON);
   }, [isDrawing, routeGeoJSON]);
 
+  // Identity refreshes on vertex drag. This effect stays tied to the finished
+  // line so a drag does not re-analyze the pre-drag geometry.
   useEffect(() => {
     if (!finishedRoute) return;
     const id = requestId.current + 1;
     requestId.current = id;
+    const endpoints = endpointSubstationsRef.current;
     let cancelled = false;
     void analyze(finishedRoute).then((response) => {
       if (cancelled || id !== requestId.current || !response) return;
       setAnalyzed(response);
       onRouteChangeRef.current?.(
         finishedRoute,
-        segmentsFor(finishedRoute, response.intersections, endpointSubstations),
+        segmentsFor(finishedRoute, response.intersections, endpoints),
       );
       useFormStore.getState().applyChanges(response.changes);
     });
     return () => {
       cancelled = true;
     };
-  }, [analyze, finishedRoute, endpointSubstations]);
+  }, [analyze, finishedRoute]);
 
   const showExisting = !clearedExisting && existingRoute && !routeGeoJSON ? existingRoute : null;
   const statsRoute = routeGeoJSON ?? showExisting;

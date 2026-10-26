@@ -73,7 +73,7 @@ function endpointLine(
   const region = parts.length > 0 ? parts.join(' / ') : '—';
   const name = hit?.name && !/^UNKNOWN\d*$/i.test(hit.name) ? hit.name : null;
   if (!name) return `${label}: ${region}`;
-  const volts = hit?.max_volt && hit.max_volt !== '-999999' ? ` (${hit.max_volt} kV)` : '';
+  const volts = hit?.voltage_kv ? ` (${hit.voltage_kv} kV)` : '';
   return `${label}: ${name}${volts} — ${region}`;
 }
 
