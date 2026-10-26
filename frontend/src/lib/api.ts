@@ -105,6 +105,12 @@ export interface AnalyzeResponse {
   total_miles: number;
   intersections: Record<string, Record<string, unknown>>;
   changes: Record<string, unknown>;
+  sending_subregion: string | null;
+  receiving_subregion: string | null;
+  sending_gea: string | null;
+  receiving_gea: string | null;
+  sending_state: string | null;
+  receiving_state: string | null;
 }
 
 export interface ScenarioCreate {
