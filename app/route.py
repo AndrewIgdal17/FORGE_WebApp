@@ -134,6 +134,33 @@ CROSS JOIN LATERAL (
 ) sampled
 """
 
+# First vertex is the sending end. Last vertex is the receiving end.
+# ST_Covers counts a point on a polygon boundary as inside that polygon.
+_ENDPOINT_SQL = """
+WITH route AS (
+  SELECT ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326), 5070) AS geom
+),
+ends AS (
+  SELECT
+    ST_StartPoint(ST_GeometryN(geom, 1)) AS send_pt,
+    ST_EndPoint(ST_GeometryN(geom, ST_NumGeometries(geom))) AS recv_pt
+  FROM route
+)
+SELECT
+  (SELECT e.subregion FROM ref.subregions_egrid e, ends
+    WHERE ST_Covers(e.geom, send_pt) LIMIT 1) AS sending_subregion,
+  (SELECT e.subregion FROM ref.subregions_egrid e, ends
+    WHERE ST_Covers(e.geom, recv_pt) LIMIT 1) AS receiving_subregion,
+  (SELECT g.gea_name FROM ref.gea_regions g, ends
+    WHERE ST_Covers(g.geom, send_pt) LIMIT 1) AS sending_gea,
+  (SELECT g.gea_name FROM ref.gea_regions g, ends
+    WHERE ST_Covers(g.geom, recv_pt) LIMIT 1) AS receiving_gea,
+  (SELECT c.statefp FROM ref.counties_tiger c, ends
+    WHERE ST_Covers(c.geom, send_pt) LIMIT 1) AS sending_statefp,
+  (SELECT c.statefp FROM ref.counties_tiger c, ends
+    WHERE ST_Covers(c.geom, recv_pt) LIMIT 1) AS receiving_statefp
+"""
+
 
 class RouteGeometry(BaseModel):
     type: str
@@ -402,6 +429,7 @@ async def analyze_route(
             total_miles = await conn.fetchval(_TOTAL_MILES_SQL, geojson)
             zone_rows = await conn.fetch(_ZONE_MILES_SQL, geojson)
             point_rows = await conn.fetch(_SAMPLE_POINTS_SQL, geojson)
+            _endpoint_row = await conn.fetchrow(_ENDPOINT_SQL, geojson)
     except asyncpg.PostgresError as exc:
         sqlstate = getattr(exc, "sqlstate", "") or ""
         message = str(exc).lower()
