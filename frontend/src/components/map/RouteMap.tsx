@@ -202,6 +202,7 @@ function addCircleHitLayer(
       type: 'circle',
       source: overlayId,
       'source-layer': overlayId,
+      minzoom: 11,
       layout: { visibility },
       paint: {
         'circle-radius': 10,
@@ -311,9 +312,10 @@ function addOverlays(map: MapLibreMap): void {
         type: 'circle',
         source: overlay.id,
         'source-layer': overlay.id,
+        minzoom: 11,
         layout: { visibility },
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 2, 8, 3, 12, 5],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 2, 13, 4, 15, 6],
           'circle-color': overlay.color,
           'circle-opacity': state?.opacity ?? 0.8,
           'circle-stroke-color': '#ffffff',

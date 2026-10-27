@@ -43,7 +43,7 @@ const DRAW_MODE: DrawMode = 'linestring';
 const EDIT_MODE: DrawMode = 'select';
 const SUBSTATION_HIT_LAYER = 'ref.substations_display-hit';
 const HIT_PADDING_PX = 6;
-const SNAP_MIN_ZOOM = 8;
+const SNAP_MIN_ZOOM = 13.5;
 const NO_SUBSTATIONS: EndpointSubstations = { sending: null, receiving: null };
 
 function textProp(value: unknown): string | null {

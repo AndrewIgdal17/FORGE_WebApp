@@ -184,7 +184,7 @@ export function MapPanel({
       <SatelliteToggle map={map} />
       {zoom !== null ? (
         <div className="absolute bottom-4 left-4 z-10 rounded-md bg-black/70 px-2 py-1 font-mono text-xs text-white">
-          z{zoom.toFixed(1)} {zoom < 8 ? '· snap off' : '· snap on'}
+          z{zoom.toFixed(1)} {zoom < 11 ? '· subs off' : zoom < 13.5 ? '· subs on · snap off' : '· snap on'}
         </div>
       ) : null}
     </div>
