@@ -43,6 +43,7 @@ const DRAW_MODE: DrawMode = 'linestring';
 const EDIT_MODE: DrawMode = 'select';
 const SUBSTATION_HIT_LAYER = 'ref.substations_display-hit';
 const HIT_PADDING_PX = 6;
+const SNAP_MIN_ZOOM = 8;
 const NO_SUBSTATIONS: EndpointSubstations = { sending: null, receiving: null };
 
 function textProp(value: unknown): string | null {
@@ -68,6 +69,7 @@ function substationSnapTarget(
   x: number,
   y: number,
 ): Position | undefined {
+  if (map.getZoom() < SNAP_MIN_ZOOM) return undefined;
   if (map.isStyleLoaded() !== true || !map.getLayer(SUBSTATION_HIT_LAYER)) return undefined;
   const features = map.queryRenderedFeatures(
     [
