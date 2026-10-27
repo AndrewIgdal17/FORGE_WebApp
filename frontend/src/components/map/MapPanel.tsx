@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import type { MultiLineString } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
@@ -52,6 +52,17 @@ export function MapPanel({
   const requestId = useRef(0);
   const onRouteChangeRef = useRef(onRouteChange);
   onRouteChangeRef.current = onRouteChange;
+
+  const [zoom, setZoom] = useState<number | null>(null);
+  const onZoom = useCallback(() => {
+    if (map) setZoom(map.getZoom());
+  }, [map]);
+  useEffect(() => {
+    if (!map) return;
+    setZoom(map.getZoom());
+    map.on('zoom', onZoom);
+    return () => { map.off('zoom', onZoom); };
+  }, [map, onZoom]);
 
   const { mode, setMode, routeGeoJSON, endpointSubstations, undo, redo, reset, isDrawing } =
     useRouteDraw(map);
@@ -171,6 +182,11 @@ export function MapPanel({
       <ResetButton visible={statsRoute !== null} onReset={handleReset} />
       <DrawingToolbar mode={mode} onMode={setMode} onUndo={undo} onRedo={redo} />
       <SatelliteToggle map={map} />
+      {zoom !== null ? (
+        <div className="absolute bottom-4 left-4 z-10 rounded-md bg-black/70 px-2 py-1 font-mono text-xs text-white">
+          z{zoom.toFixed(1)} {zoom < 8 ? '· snap off' : '· snap on'}
+        </div>
+      ) : null}
     </div>
   );
 }
