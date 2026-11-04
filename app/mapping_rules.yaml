@@ -26,7 +26,7 @@ classification:
     95: slope
   wetland:
     stems: [PEM, PFO, PSS, E2EM, E2FO, E2SS]
-    mixed: exclude
+    mixed: every_part
 
 rules:
   # Terrain miles (8 categories, from NLCD + 3DEP slope crosswalk)

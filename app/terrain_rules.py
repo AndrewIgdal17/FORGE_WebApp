@@ -119,15 +119,25 @@ TERRAIN_CLASSES = (
 
 
 def retain_wetland(code: str, rule: WetlandRule) -> bool:
-    """True when the code begins with a configured stem and is not mixed."""
+    """True when every code segment begins with a configured wetland stem."""
     text = code.strip().upper()
     if not text:
         return False
+    stems_upper = tuple(stem.upper() for stem in rule.stems)
+
+    def segment_matches(segment: str) -> bool:
+        if not segment:
+            return False
+        return any(segment.startswith(stem) for stem in stems_upper)
+
     if "/" in text:
         if rule.mixed == "exclude":
             return False
-        raise ValueError(f"unsupported mixed-code rule: {rule.mixed}")
-    return any(text.startswith(stem.upper()) for stem in rule.stems)
+        if rule.mixed != "every_part":
+            raise ValueError(f"unsupported mixed-code rule: {rule.mixed}")
+        parts = [part.strip().upper() for part in text.split("/")]
+        return all(segment_matches(part) for part in parts)
+    return segment_matches(text)
 
 
 def equivalent_length_m(area_m2: float, row_width_ft: float) -> float:
