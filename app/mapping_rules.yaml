@@ -29,7 +29,7 @@ classification:
     mixed: exclude
 
 rules:
-  # Terrain miles (9 categories, from NLCD + 3DEP slope crosswalk)
+  # Terrain miles (8 categories, from NLCD + 3DEP slope crosswalk)
   - layer: "terrain/nlcd"
     key: "forested"
     forge_path: "02_project_physical_details.terrain.terrain_miles.forested"
@@ -68,11 +68,6 @@ rules:
   - layer: "terrain/nlcd"
     key: "rolling_hills"
     forge_path: "02_project_physical_details.terrain.terrain_miles.rolling_hills"
-    transform: "direct"
-
-  - layer: "terrain/nlcd"
-    key: "subsea"
-    forge_path: "02_project_physical_details.terrain.terrain_miles.subsea"
     transform: "direct"
 
   # ROW zone miles (15 zones, from county → BLM zone crosswalk)

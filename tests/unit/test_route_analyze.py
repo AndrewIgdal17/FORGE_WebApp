@@ -24,7 +24,6 @@ TERRAIN_KEYS = (
     "desert_barren",
     "mountain",
     "rolling_hills",
-    "subsea",
 )
 
 
@@ -41,7 +40,7 @@ def test_mapping_rules_cover_terrain_and_row_zones():
     from app.route import load_mapping_rules
 
     rules = load_mapping_rules()
-    assert len(rules) == 24
+    assert len(rules) == 23
     terrain = [rule for rule in rules if rule["layer"] == "terrain/nlcd"]
     zones = [rule for rule in rules if rule["layer"] == "row/blm"]
     assert [rule["key"] for rule in terrain] == list(TERRAIN_KEYS)
@@ -71,8 +70,13 @@ def test_terrain_miles_scale_sample_spacing_and_keep_empty_categories():
     assert miles["forested"] == pytest.approx(30 / 1609.344, abs=0.005)
     assert miles["mountain"] == 0
     assert miles["rolling_hills"] == 0
-    assert miles["subsea"] == 0
     assert set(miles) == set(TERRAIN_KEYS)
+
+
+def test_config_mapping_rules_file_is_gone():
+    from pathlib import Path
+
+    assert not Path("config/mapping-rules.yaml").exists()
 
 
 def test_zone_miles_keep_every_zone_so_a_redraw_can_zero_old_counties():

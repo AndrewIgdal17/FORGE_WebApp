@@ -24,7 +24,12 @@ from pydantic import BaseModel, Field, field_validator
 from . import db as db_module
 from .models import sanitize_for_json
 from .states import fips_to_abbrev
-from .terrain_rules import land_cover_class, load_classification, load_mapping_rules
+from .terrain_rules import (
+    TERRAIN_CLASSES,
+    land_cover_class,
+    load_classification,
+    load_mapping_rules,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,17 +49,7 @@ DEFAULT_NLCD_PATH = "/gis-data/nlcd/nlcd_2021_land_cover_cog.tif"
 DEFAULT_SLOPE_PATH = "/gis-data/slope/slope_conus_cog.tif"
 TERRAIN_LAYER = "terrain/nlcd"
 ROW_LAYER = "row/blm"
-TERRAIN_CATEGORIES = (
-    "forested",
-    "wetland",
-    "scrubbed_flat",
-    "urban",
-    "farmland",
-    "desert_barren",
-    "mountain",
-    "rolling_hills",
-    "subsea",
-)
+TERRAIN_CATEGORIES = TERRAIN_CLASSES
 
 _nlcd_dataset: Any = None
 _nlcd_lock = threading.Lock()
