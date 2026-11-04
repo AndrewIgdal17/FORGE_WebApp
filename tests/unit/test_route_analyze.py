@@ -212,6 +212,73 @@ def test_analyze_returns_503_when_rasterio_is_unavailable(monkeypatch):
     assert response.status_code == 503
 
 
+class _FakeNwiConn:
+    """Route enters Texas. Only Oklahoma is recorded as loaded."""
+
+    async def fetchval(self, query: str, *args: object) -> float:
+        return 12.0
+
+    async def fetchrow(self, query: str, *args: object) -> dict[str, None]:
+        return {
+            "sending_subregion": None,
+            "receiving_subregion": None,
+            "sending_gea": None,
+            "receiving_gea": None,
+            "sending_statefp": None,
+            "receiving_statefp": None,
+        }
+
+    async def fetch(self, query: str, *args: object) -> list[dict[str, str]]:
+        if "ref.nwi_provenance" in query and "ref.counties_tiger" not in query:
+            return [{"state": "OK"}]
+        if "statefp" in query and "ref.counties_tiger" in query:
+            return [{"statefp": "48"}]
+        return []
+
+
+class _FakeNwiAcquire:
+    async def __aenter__(self) -> _FakeNwiConn:
+        return _FakeNwiConn()
+
+    async def __aexit__(self, *exc: object) -> bool:
+        return False
+
+
+class _FakeNwiPool:
+    def acquire(self) -> _FakeNwiAcquire:
+        return _FakeNwiAcquire()
+
+
+def test_analyze_returns_503_when_route_enters_an_unloaded_lower_48_state(
+    monkeypatch,
+):
+    from app import route as route_module
+    from app.main import app
+
+    monkeypatch.setattr(route_module.db_module, "get_db_pool", lambda: _FakeNwiPool())
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.post("/api/route/analyze", json=AUSTIN_DALLAS)
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "National Wetlands Inventory is not loaded."
+    }
+
+
+def test_missing_nwi_state_requires_lower_48_and_dc_only():
+    from app.route import missing_required_nwi_state
+
+    assert missing_required_nwi_state(["48"], {"OK"}) is True
+    assert missing_required_nwi_state(["48"], {"TX"}) is False
+    assert missing_required_nwi_state(["02"], set()) is False
+    assert missing_required_nwi_state(["15"], set()) is False
+    assert missing_required_nwi_state(["72"], set()) is False
+    assert missing_required_nwi_state(["66"], set()) is False
+    assert missing_required_nwi_state(["11"], set()) is True
+    assert missing_required_nwi_state(["11"], {"DC"}) is False
+    assert missing_required_nwi_state(["02", "48"], {"AK"}) is True
+    assert missing_required_nwi_state([], set()) is False
+
+
 PORTLAND_LOS_ANGELES = {
     "route": {
         "type": "MultiLineString",

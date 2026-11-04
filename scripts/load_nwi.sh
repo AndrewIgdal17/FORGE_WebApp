@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Load state NWI file geodatabases into ref.nwi_wetlands.
 # Clip each file to that state's counties. Do not filter Cowardin codes here.
+# Write one ref.nwi_provenance row per state file this run actually loads.
 set -euo pipefail
 
 : "${NWI_RELEASE:?set NWI_RELEASE to the release printed in the download}"
@@ -70,6 +71,12 @@ JOIN (
   WHERE statefp = '${fips}'
 ) c ON ST_Intersects(s.geom, c.geom)
 WHERE NOT ST_IsEmpty(ST_Intersection(s.geom, c.geom));
+INSERT INTO ref.nwi_provenance (state, release_label, downloaded_on)
+VALUES ('${state}', '${NWI_RELEASE}', '${NWI_DOWNLOADED_ON}')
+ON CONFLICT (state) DO UPDATE
+SET release_label = EXCLUDED.release_label,
+    downloaded_on = EXCLUDED.downloaded_on,
+    loaded_at = now();
 DROP TABLE ref.nwi_staging;
 SQL
   rm -rf "$work"
@@ -78,12 +85,4 @@ done
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
 CREATE INDEX IF NOT EXISTS nwi_wetlands_geom_idx ON ref.nwi_wetlands USING GIST (geom);
 CREATE INDEX IF NOT EXISTS nwi_wetlands_attribute_idx ON ref.nwi_wetlands (attribute);
-INSERT INTO ref.nwi_provenance (id, source_dir, code_column, release_label, downloaded_on)
-VALUES (1, '${SRC}', 'ATTRIBUTE', '${NWI_RELEASE}', '${NWI_DOWNLOADED_ON}')
-ON CONFLICT (id) DO UPDATE
-SET source_dir = EXCLUDED.source_dir,
-    code_column = EXCLUDED.code_column,
-    release_label = EXCLUDED.release_label,
-    downloaded_on = EXCLUDED.downloaded_on,
-    loaded_at = now();
 SQL

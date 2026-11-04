@@ -7,10 +7,12 @@ CREATE TABLE IF NOT EXISTS ref.nwi_wetlands (
   geom geometry(MultiPolygon, 5070) NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS ref.nwi_provenance (
-  id integer PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-  source_dir text NOT NULL,
-  code_column text NOT NULL,
+-- One row per state the loader wrote. A single id = 1 row cannot say which
+-- state files were in the directory, so a later route through a missing state
+-- looks like zero wetland miles.
+DROP TABLE IF EXISTS ref.nwi_provenance;
+CREATE TABLE ref.nwi_provenance (
+  state char(2) PRIMARY KEY,
   release_label text NOT NULL,
   downloaded_on date NOT NULL,
   loaded_at timestamptz NOT NULL DEFAULT now()

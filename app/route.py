@@ -5,7 +5,9 @@ the line and the county intersections in EPSG:5070 (meters). NLCD land-cover
 samples classify terrain. Wetland length comes from the National Wetlands
 Inventory; NLCD class 90 is forested. 3DEP slope sampling classifies
 unresolved pixels as mountain (>8%), rolling hills (2–8%), or scrubbed
-flat (<2%).
+flat (<2%). A route that enters a lower-48 state or the District of Columbia
+with no inventory load is unavailable, the same as a missing inventory table.
+Alaska, Hawaii, and the territories are not that check.
 """
 
 from __future__ import annotations
@@ -151,6 +153,26 @@ SELECT
   (SELECT c.statefp FROM ref.counties_tiger c, ends
     WHERE ST_Covers(c.geom, recv_pt) LIMIT 1) AS receiving_statefp
 """
+
+# Counties the route crosses. statefp is the TIGER code, not the USPS abbreviation.
+_ROUTE_STATEFP_SQL = """
+WITH route AS (
+  SELECT ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326), 5070) AS geom
+)
+SELECT DISTINCT c.statefp AS statefp
+FROM route r
+JOIN ref.counties_tiger c ON ST_Intersects(r.geom, c.geom)
+"""
+
+_LOADED_NWI_STATES_SQL = """
+SELECT state FROM ref.nwi_provenance
+"""
+
+# Alaska, Hawaii, and the territories. DC (11) stays required: the loader's
+# file set is the states plus DC, and a missing DC file is the same silent zero.
+_NWI_STATEFP_NOT_REQUIRED = frozenset({"02", "15", "60", "66", "69", "72", "78"})
+
+_NWI_UNAVAILABLE = "National Wetlands Inventory is not loaded."
 
 
 def _text_cell(row: Any | None, column: str) -> str | None:
@@ -399,6 +421,46 @@ def _unavailable(message: str) -> JSONResponse:
     return JSONResponse(status_code=503, content={"detail": message})
 
 
+def _statefp_key(value: Any) -> str | None:
+    if value is None:
+        return None
+    code = str(value).strip()
+    if not code:
+        return None
+    if code.isdigit():
+        return code.zfill(2)
+    return code
+
+
+def missing_required_nwi_state(statefps: list[Any], loaded_states: set[str]) -> bool:
+    """True when the route enters a lower-48 state or DC with no load row.
+
+    Alaska (02), Hawaii (15), and the territories are not required. A route
+    that only touches those is not this check.
+    """
+    loaded = {str(code).strip().upper() for code in loaded_states}
+    for raw in statefps:
+        code = _statefp_key(raw)
+        if code is None or code in _NWI_STATEFP_NOT_REQUIRED:
+            continue
+        abbrev = fips_to_abbrev(code)
+        if abbrev is None:
+            continue
+        if abbrev not in loaded:
+            return True
+    return False
+
+
+async def _route_missing_nwi_state(conn: Any, geojson: str) -> bool:
+    state_rows = await conn.fetch(_ROUTE_STATEFP_SQL, geojson)
+    loaded_rows = await conn.fetch(_LOADED_NWI_STATES_SQL)
+    loaded = {str(row["state"]) for row in loaded_rows if row["state"] is not None}
+    return missing_required_nwi_state(
+        [row["statefp"] for row in state_rows],
+        loaded,
+    )
+
+
 @router.post("/api/route/analyze")
 async def analyze_route(
     request: Request,
@@ -430,11 +492,13 @@ async def analyze_route(
             point_rows = await conn.fetch(_SAMPLE_POINTS_SQL, geojson)
             endpoint_row = await conn.fetchrow(_ENDPOINT_SQL, geojson)
             try:
+                if await _route_missing_nwi_state(conn, geojson):
+                    return _unavailable(_NWI_UNAVAILABLE)
                 areas = await fetch_wetland_areas_m2(
                     conn, geojson, payload.row_width_ft
                 )
             except asyncpg.UndefinedTableError:
-                return _unavailable("National Wetlands Inventory is not loaded.")
+                return _unavailable(_NWI_UNAVAILABLE)
     except asyncpg.PostgresError as exc:
         sqlstate = getattr(exc, "sqlstate", "") or ""
         message = str(exc).lower()
