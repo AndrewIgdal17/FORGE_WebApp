@@ -15,3 +15,8 @@ def test_nwi_schema_records_provenance_and_clips_to_counties():
     assert "NWI_RELEASE" in script
     assert "NWI_DOWNLOADED_ON" in script
     assert "ATTRIBUTE" in script
+    assert "GEOMETRY_NAME=geom" in script
+    assert any(
+        "TRUNCATE" in line and "ref.nwi_wetlands" in line
+        for line in script.splitlines()
+    )

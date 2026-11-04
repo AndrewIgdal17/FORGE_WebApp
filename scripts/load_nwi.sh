@@ -16,9 +16,14 @@ if ! command -v ogr2ogr >/dev/null; then
   echo "ogr2ogr is not on PATH. On turgon, run this script inside ghcr.io/osgeo/gdal:ubuntu-full-latest with ${SRC} mounted and the Supabase network attached." >&2
   exit 1
 fi
+if ! command -v psql >/dev/null; then
+  echo "psql must be on PATH (the database container or a postgres client), separate from the GDAL image named for ogr2ogr." >&2
+  exit 1
+fi
 
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$(dirname "$0")/nwi_schema.sql"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS ref.nwi_staging"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE TABLE ref.nwi_wetlands"
 
 declare -A FIPS=(
   [AL]=01 [AK]=02 [AZ]=04 [AR]=05 [CA]=06 [CO]=08 [CT]=09 [DE]=10 [DC]=11
@@ -40,10 +45,20 @@ for zip in "$SRC"/*.zip; do
   unzip -q "$zip" -d "$work"
   gdb=$(find "$work" -name '*.gdb' -type d | head -n 1)
   [[ -n "$gdb" ]] || { echo "no file geodatabase in $base" >&2; exit 1; }
-  ogrinfo -so "$gdb" | grep -q 'ATTRIBUTE' || { echo "ATTRIBUTE field not found in $base" >&2; exit 1; }
-  layer=$(ogrinfo -so -q "$gdb" | head -n 1 | awk '{print $2}')
+  layer=""
+  while IFS= read -r line; do
+    candidate=$(printf '%s' "$line" | awk '{print $2}')
+    [[ -n "$candidate" ]] || continue
+    summary=$(ogrinfo -so "$gdb" "$candidate")
+    if grep -qE '(^|[[:space:]])ATTRIBUTE[[:space:]]*:' <<<"$summary"; then
+      layer=$candidate
+      break
+    fi
+  done < <(ogrinfo -so -q "$gdb")
+  [[ -n "$layer" ]] || { echo "ATTRIBUTE field not found in $base" >&2; exit 1; }
   ogr2ogr -f PostgreSQL "PG:$DATABASE_URL" "$gdb" "$layer" \
-    -t_srs EPSG:5070 -nlt MULTIPOLYGON -nln ref.nwi_staging -overwrite
+    -t_srs EPSG:5070 -nlt MULTIPOLYGON -nln ref.nwi_staging -overwrite \
+    -lco GEOMETRY_NAME=geom
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
 INSERT INTO ref.nwi_wetlands (state, attribute, geom)
 SELECT '${state}', s.attribute,
