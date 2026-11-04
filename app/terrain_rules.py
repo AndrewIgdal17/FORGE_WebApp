@@ -99,3 +99,81 @@ def land_cover_class(
     if mapped == "slope":
         return _from_slope(slope_pct, classification)
     return mapped
+
+
+METERS_PER_FOOT = 0.3048
+SQ_FT_PER_ACRE = 43560
+FT_PER_MILE = 5280
+METERS_PER_MILE = 1609.344
+
+TERRAIN_CLASSES = (
+    "forested",
+    "wetland",
+    "scrubbed_flat",
+    "urban",
+    "farmland",
+    "desert_barren",
+    "mountain",
+    "rolling_hills",
+)
+
+
+def retain_wetland(code: str, rule: WetlandRule) -> bool:
+    """True when the code begins with a configured stem and is not mixed."""
+    text = code.strip().upper()
+    if not text:
+        return False
+    if "/" in text:
+        if rule.mixed == "exclude":
+            return False
+        raise ValueError(f"unsupported mixed-code rule: {rule.mixed}")
+    return any(text.startswith(stem.upper()) for stem in rule.stems)
+
+
+def equivalent_length_m(area_m2: float, row_width_ft: float) -> float:
+    """Equation (II.4), in meters. Acres / (5280 * W_ft / 43560), times meters per mile."""
+    if row_width_ft <= 0:
+        raise ValueError("row_width_ft must be positive")
+    if area_m2 < 0:
+        raise ValueError("area_m2 must be non-negative")
+    acres = area_m2 / (METERS_PER_FOOT ** 2) / SQ_FT_PER_ACRE
+    miles = acres / (FT_PER_MILE * row_width_ft / SQ_FT_PER_ACRE)
+    return miles * METERS_PER_MILE
+
+
+@dataclass(frozen=True)
+class ClassifiedSample:
+    land_cover: str
+    length_m: float
+    nlcd_code: int | None
+    wetland_area_m2: float
+
+
+@dataclass(frozen=True)
+class TerrainResult:
+    miles: dict[str, float]
+    open_water_miles: float
+
+
+def apply_wetland_transfer(
+    samples: list[ClassifiedSample],
+    row_width_ft: float,
+) -> TerrainResult:
+    meters = {name: 0.0 for name in TERRAIN_CLASSES}
+    open_water_m = 0.0
+    for sample in samples:
+        if sample.length_m < 0 or sample.wetland_area_m2 < 0:
+            raise ValueError("sample length and wetland area must be non-negative")
+        source = sample.land_cover if sample.land_cover in meters else "scrubbed_flat"
+        moved = min(
+            sample.length_m,
+            equivalent_length_m(sample.wetland_area_m2, row_width_ft),
+        )
+        meters[source] += sample.length_m - moved
+        meters["wetland"] += moved
+        if sample.nlcd_code == 11:
+            open_water_m += sample.length_m
+    return TerrainResult(
+        miles={name: round(value / METERS_PER_MILE, 2) for name, value in meters.items()},
+        open_water_miles=round(open_water_m / METERS_PER_MILE, 2),
+    )
