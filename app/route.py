@@ -2,8 +2,10 @@
 
 The browser sends a GeoJSON MultiLineString in EPSG:4326. PostGIS measures
 the line and the county intersections in EPSG:5070 (meters). NLCD land-cover
-samples classify terrain. 3DEP slope sampling classifies unresolved pixels as
-mountain (>8%), rolling hills (2–8%), or scrubbed flat (<2%).
+samples classify terrain. Wetland length comes from the National Wetlands
+Inventory; NLCD class 90 is forested. 3DEP slope sampling classifies
+unresolved pixels as mountain (>8%), rolling hills (2–8%), or scrubbed
+flat (<2%).
 """
 
 from __future__ import annotations
@@ -22,10 +24,15 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator
 
 from . import db as db_module
+from .corridor import fetch_wetland_areas_m2
 from .models import sanitize_for_json
 from .states import fips_to_abbrev
 from .terrain_rules import (
     TERRAIN_CLASSES,
+    ClassifiedSample,
+    SampleHit,
+    TerrainResult,
+    apply_wetland_transfer,
     land_cover_class,
     load_classification,
     load_mapping_rules,
@@ -190,6 +197,7 @@ class RouteGeometry(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     route: RouteGeometry
+    row_width_ft: float = Field(gt=0)
 
 
 def miles_by_category(samples: list[tuple[str, float]]) -> dict[str, float]:
@@ -325,7 +333,7 @@ def _open_slope() -> Any | None:
     return dataset
 
 
-def sample_terrain(points: list[tuple[float, float, float]]) -> list[tuple[str, float]]:
+def sample_terrain(points: list[tuple[float, float, float]]) -> list[SampleHit]:
     """Classify NLCD + slope at EPSG:5070 sample points.
 
     ``points`` are (x, y, spacing_m). Slope overrides only ``scrubbed_flat``:
@@ -346,7 +354,7 @@ def sample_terrain(points: list[tuple[float, float, float]]) -> list[tuple[str, 
         )
 
     classification = load_classification()
-    classified: list[tuple[str, float]] = []
+    classified: list[SampleHit] = []
     for nlcd_sample, slope_sample, (_x, _y, spacing_m) in zip(
         nlcd_samples, slope_samples, points, strict=True
     ):
@@ -354,8 +362,22 @@ def sample_terrain(points: list[tuple[float, float, float]]) -> list[tuple[str, 
         slope_pct = _slope_value(slope_sample) if slope_sample is not None else None
         category = land_cover_class(code, slope_pct, classification)
 
-        classified.append((category, float(spacing_m)))
+        classified.append(SampleHit(category, float(spacing_m), code))
     return classified
+
+
+def terrain_from_hits(
+    hits: list[SampleHit],
+    areas_m2: list[float],
+    row_width_ft: float,
+) -> TerrainResult:
+    if len(hits) != len(areas_m2):
+        raise RuntimeError("wetland area count does not match sample count")
+    samples = [
+        ClassifiedSample(hit.land_cover, hit.length_m, hit.nlcd_code, area)
+        for hit, area in zip(hits, areas_m2, strict=True)
+    ]
+    return apply_wetland_transfer(samples, row_width_ft)
 
 
 async def _require_auth(
@@ -402,6 +424,12 @@ async def analyze_route(
             zone_rows = await conn.fetch(_ZONE_MILES_SQL, geojson)
             point_rows = await conn.fetch(_SAMPLE_POINTS_SQL, geojson)
             endpoint_row = await conn.fetchrow(_ENDPOINT_SQL, geojson)
+            try:
+                areas = await fetch_wetland_areas_m2(
+                    conn, geojson, payload.row_width_ft
+                )
+            except asyncpg.UndefinedTableError:
+                return _unavailable("National Wetlands Inventory is not loaded.")
     except asyncpg.PostgresError as exc:
         sqlstate = getattr(exc, "sqlstate", "") or ""
         message = str(exc).lower()
@@ -419,7 +447,7 @@ async def analyze_route(
 
     points = [(float(row["x"]), float(row["y"]), float(row["spacing_m"])) for row in point_rows]
     try:
-        samples = await asyncio.to_thread(sample_terrain, points)
+        hits = await asyncio.to_thread(sample_terrain, points)
     except FileNotFoundError:
         return _unavailable(f"NLCD land-cover raster was not found at {nlcd_path()}.")
     except RuntimeError as exc:
@@ -431,7 +459,8 @@ async def analyze_route(
             content={"detail": "Terrain sampling failed."},
         )
 
-    terrain = miles_by_category(samples)
+    result = terrain_from_hits(hits, areas, payload.row_width_ft)
+    terrain = result.miles
     zones = zone_miles_from_rows(zone_rows)
     zones = normalize_zone_miles(zones, terrain)
 
@@ -440,6 +469,7 @@ async def analyze_route(
         "total_miles": round(float(total_miles), 2),
         "intersections": intersections,
         "changes": changes_for(intersections),
+        "open_water_miles": result.open_water_miles,
         **endpoint_context(endpoint_row),
     }
     return JSONResponse(sanitize_for_json(body))

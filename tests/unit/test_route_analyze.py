@@ -12,7 +12,8 @@ AUSTIN_DALLAS = {
     "route": {
         "type": "MultiLineString",
         "coordinates": [[[-97.74, 30.27], [-97.10, 31.50], [-96.80, 32.78]]],
-    }
+    },
+    "row_width_ft": 100,
 }
 
 TERRAIN_KEYS = (
@@ -71,6 +72,20 @@ def test_terrain_miles_scale_sample_spacing_and_keep_empty_categories():
     assert miles["mountain"] == 0
     assert miles["rolling_hills"] == 0
     assert set(miles) == set(TERRAIN_KEYS)
+
+
+def test_sample_hits_feed_the_transfer():
+    from app.route import terrain_from_hits
+    from app.terrain_rules import SampleHit
+
+    result = terrain_from_hits(
+        [SampleHit("forested", 30.0, 90), SampleHit("scrubbed_flat", 30.0, 11)],
+        [0.0, 0.0],
+        100.0,
+    )
+    assert result.miles["wetland"] == 0.0
+    assert result.open_water_miles == pytest.approx(30.0 / 1609.344, abs=0.005)
+    assert "subsea" not in result.miles
 
 
 def test_config_mapping_rules_file_is_gone():
@@ -152,7 +167,8 @@ def test_analyze_rejects_a_line_that_is_not_a_multilinestring():
             "route": {
                 "type": "LineString",
                 "coordinates": [[-97.74, 30.27], [-96.80, 32.78]],
-            }
+            },
+            "row_width_ft": 100,
         },
     )
     assert response.status_code == 422
@@ -164,7 +180,24 @@ def test_analyze_rejects_a_line_with_one_position():
     client = TestClient(app, raise_server_exceptions=False)
     response = client.post(
         "/api/route/analyze",
-        json={"route": {"type": "MultiLineString", "coordinates": [[[-97.74, 30.27]]]}},
+        json={
+            "route": {"type": "MultiLineString", "coordinates": [[[-97.74, 30.27]]]},
+            "row_width_ft": 100,
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_analyze_requires_a_positive_row_width():
+    from app.main import app
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.post(
+        "/api/route/analyze",
+        json={
+            "route": AUSTIN_DALLAS["route"],
+            "row_width_ft": 0,
+        },
     )
     assert response.status_code == 422
 
@@ -183,21 +216,24 @@ PORTLAND_LOS_ANGELES = {
     "route": {
         "type": "MultiLineString",
         "coordinates": [[[-122.67, 45.52], [-118.24, 34.05]]],
-    }
+    },
+    "row_width_ft": 100,
 }
 
 PACIFIC_OCEAN = {
     "route": {
         "type": "MultiLineString",
         "coordinates": [[[-130.0, 35.0], [-125.0, 38.0]]],
-    }
+    },
+    "row_width_ft": 100,
 }
 
 ANCHORAGE_FAIRBANKS = {
     "route": {
         "type": "MultiLineString",
         "coordinates": [[[-149.90, 61.22], [-147.72, 64.84]]],
-    }
+    },
+    "row_width_ft": 100,
 }
 
 ENDPOINT_KEYS = (
@@ -212,7 +248,9 @@ ENDPOINT_KEYS = (
 
 def _scrubbed_samples(points):
     """Stand in for NLCD so endpoint tests do not need the land-cover raster."""
-    return [("scrubbed_flat", spacing) for _x, _y, spacing in points]
+    from app.terrain_rules import SampleHit
+
+    return [SampleHit("scrubbed_flat", spacing, None) for _x, _y, spacing in points]
 
 
 def test_fips_to_state_covers_states_dc_and_territories():
@@ -274,8 +312,13 @@ def analyze_client(monkeypatch):
     from app import route as route_module
     from app.main import app
 
+    async def _zero_wetland_areas(conn, geojson: str, row_width_ft: float) -> list[float]:
+        rows = await conn.fetch(route_module._SAMPLE_POINTS_SQL, geojson)
+        return [0.0 for _ in rows]
+
     monkeypatch.setattr(main_module, "_FORGE_DATABASE_URL", dsn)
     monkeypatch.setattr(route_module, "sample_terrain", _scrubbed_samples)
+    monkeypatch.setattr(route_module, "fetch_wetland_areas_m2", _zero_wetland_areas)
     with TestClient(app) as client:
         yield client
 
@@ -335,3 +378,5 @@ def test_existing_analyze_unchanged(analyze_client):
     assert set(body["intersections"]["terrain/nlcd"]) == set(TERRAIN_KEYS)
     assert isinstance(body["changes"], dict)
     assert "sending_subregion" not in body["changes"]
+    assert "open_water_miles" in body
+    assert "open_water_miles" not in body["changes"]

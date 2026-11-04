@@ -64,13 +64,17 @@ def test_sample_terrain_uses_the_rules_file(
     monkeypatch, nlcd_code, slope, expected
 ):
     from app.route import sample_terrain
+    from app.terrain_rules import SampleHit
 
     _install_rasters(monkeypatch, [[nlcd_code]], [[slope]])
-    assert sample_terrain([(500000.0, 3000000.0, 30.0)]) == [(expected, 30.0)]
+    assert sample_terrain([(500000.0, 3000000.0, 30.0)]) == [
+        SampleHit(expected, 30.0, nlcd_code)
+    ]
 
 
 def test_sample_terrain_keeps_scrubbed_flat_when_slope_cog_is_missing(monkeypatch):
     from app.route import sample_terrain
+    from app.terrain_rules import SampleHit
 
     _install_rasters(monkeypatch, [[71], [71], [71]], None)
     points = [
@@ -79,7 +83,7 @@ def test_sample_terrain_keeps_scrubbed_flat_when_slope_cog_is_missing(monkeypatc
         (500060.0, 3000000.0, 15.0),
     ]
     assert sample_terrain(points) == [
-        ("scrubbed_flat", 30.0),
-        ("scrubbed_flat", 30.0),
-        ("scrubbed_flat", 15.0),
+        SampleHit("scrubbed_flat", 30.0, 71),
+        SampleHit("scrubbed_flat", 30.0, 71),
+        SampleHit("scrubbed_flat", 15.0, 71),
     ]

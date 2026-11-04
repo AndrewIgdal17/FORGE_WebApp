@@ -152,10 +152,14 @@ def equivalent_length_m(area_m2: float, row_width_ft: float) -> float:
 
 
 @dataclass(frozen=True)
-class ClassifiedSample:
+class SampleHit:
     land_cover: str
     length_m: float
     nlcd_code: int | None
+
+
+@dataclass(frozen=True)
+class ClassifiedSample(SampleHit):
     wetland_area_m2: float
 
 
