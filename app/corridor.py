@@ -78,10 +78,15 @@ blades AS (
   SELECT ST_Collect(blade) AS geom
   FROM (
     SELECT ST_MakeLine(
-             ST_Translate(pt, -dy * $2 * 10, dx * $2 * 10),
-             ST_Translate(pt, dy * $2 * 10, -dx * $2 * 10)
+             ST_Translate(pt, -ny * $2 * 10, nx * $2 * 10),
+             ST_Translate(pt, ny * $2 * 10, -nx * $2 * 10)
            ) AS blade
     FROM sample_cuts
+    CROSS JOIN LATERAL (
+      SELECT
+        dx / NULLIF(sqrt(dx * dx + dy * dy), 0) AS nx,
+        dy / NULLIF(sqrt(dx * dx + dy * dy), 0) AS ny
+    ) n
     UNION ALL
     SELECT ST_MakeLine(
              ST_Translate(pt, dirx * $2 * -10, diry * $2 * -10),
