@@ -15,7 +15,6 @@ const LOAD_SHED_HELP =
 const DURATION_TYPES = [
   { key: 'overhead', label: 'Overhead' },
   { key: 'underground', label: 'Underground' },
-  { key: 'subsea', label: 'Subsea' },
 ] as const;
 
 export function OutageRisk(): ReactElement {
@@ -137,13 +136,6 @@ export function OutageRisk(): ReactElement {
         path={`${OUTAGE}.outage_rate.underground`}
         label="Underground rate (outages/mi/year)"
         helpText="Line-level outage frequency for underground construction."
-        min={0}
-        step={0.0001}
-      />
-      <NumberField
-        path={`${OUTAGE}.outage_rate.subsea`}
-        label="Subsea rate (outages/mi/year)"
-        helpText="Line-level outage frequency for subsea construction."
         min={0}
         step={0.0001}
       />

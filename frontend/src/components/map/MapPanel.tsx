@@ -164,7 +164,6 @@ export function MapPanel({
       'desert_barren',
       'mountain',
       'rolling_hills',
-      'subsea',
     ];
     for (const cat of terrainCategories) {
       zeroChanges[`02_project_physical_details.terrain.terrain_miles.${cat}`] = 0;

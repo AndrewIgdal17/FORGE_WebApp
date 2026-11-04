@@ -472,7 +472,6 @@ export const CONDUCTOR_TYPE_BY_CONSTRUCTION: Record<string, readonly string[]> =
     ],
     'Underground Direct-Buried': ['Underground Copper Conductor'],
     'Underground Tunnel': ['Underground Copper Conductor'],
-    Subsea: ['Subsea Copper Conductor'],
   };
 
 export const CAPACITY_OPTIONS_BY_AC_DC: Record<'AC' | 'DC', readonly number[]> =

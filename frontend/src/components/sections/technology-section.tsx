@@ -45,7 +45,6 @@ const CONSTRUCTION_OPTIONS: SelectOption[] = [
   { value: 'Overhead', label: 'Overhead' },
   { value: 'Underground Direct-Buried', label: 'Underground Direct-Buried' },
   { value: 'Underground Tunnel', label: 'Underground Tunnel' },
-  { value: 'Subsea', label: 'Subsea' },
 ];
 
 const AC_DC_OPTIONS: SelectOption[] = [
@@ -146,7 +145,7 @@ export function TechnologySection(): ReactElement {
       <SelectField
         path={CONSTRUCTION_TYPE_PATH}
         label="Construction type"
-        helpText="Overhead, underground, or subsea transmission."
+        helpText="Overhead or underground transmission."
         options={CONSTRUCTION_OPTIONS}
       />
       <SelectField

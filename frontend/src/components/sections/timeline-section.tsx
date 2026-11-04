@@ -10,7 +10,6 @@ export function TimelineSection(): ReactElement {
         path={`${TIMELINE}.construction_years`}
         label="Construction years"
         helpText="Years of construction after the project starts."
-        min={1}
         step={1}
       />
       <NumberField

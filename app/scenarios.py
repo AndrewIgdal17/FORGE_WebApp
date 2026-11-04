@@ -171,6 +171,12 @@ def _calculate(name: str, changes: dict) -> tuple[dict | None, JSONResponse | No
             "One or more changes failed validation.",
             paths=exc.paths,
         )
+    except InvalidInputs as exc:
+        return None, _error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "invalid_changes",
+            str(exc),
+        )
 
     try:
         raw_results = forge.run_calculation(resolved, scenario_id=name)

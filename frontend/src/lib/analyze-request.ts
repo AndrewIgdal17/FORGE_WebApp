@@ -7,9 +7,6 @@ import {
   type ProjectFields,
 } from './lookups';
 
-const SUBSEA_TERRAIN_PATH =
-  '02_project_physical_details.terrain.terrain_miles.subsea';
-
 const TERRAIN_MILES_PREFIX =
   '02_project_physical_details.terrain.terrain_miles.';
 
@@ -40,10 +37,7 @@ export function analyzeRequestBody(
 export function changesAfterAnalyze(
   changes: Record<string, unknown>,
 ): Record<string, unknown> {
-  return {
-    ...changes,
-    [SUBSEA_TERRAIN_PATH]: 0,
-  };
+  return changes;
 }
 
 export function terrainMatchesRouteLength(

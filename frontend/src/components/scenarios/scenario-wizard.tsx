@@ -64,7 +64,6 @@ const CONSTRUCTION_TYPES = [
   'Overhead',
   'Underground Direct-Buried',
   'Underground Tunnel',
-  'Subsea',
 ] as const;
 
 const CONVERTER_OPTIONS = ['LCC Converter', 'VSC Converter'] as const;
@@ -144,7 +143,7 @@ function projectStepValid(state: WizardState): boolean {
 }
 
 function existingStepValid(state: WizardState): boolean {
-  return state.constructionYears >= 1 && state.delayYears >= 0 && state.projectLifetime >= 1;
+  return state.delayYears >= 0 && state.projectLifetime >= 1;
 }
 
 function validateCurrentStep(state: WizardState): boolean {
@@ -344,7 +343,7 @@ function NumberField({
   id: string;
   label: string;
   value: number | null;
-  min: number;
+  min?: number;
   hint?: string;
   onChange: (value: number) => void;
 }): ReactElement {
@@ -591,7 +590,6 @@ function ExistingLineStep({
         id="wizard-construction-years"
         label="Construction years"
         value={state.constructionYears}
-        min={1}
         onChange={(constructionYears) => onChange({ constructionYears: Math.max(0, constructionYears) })}
       />
       <NumberField

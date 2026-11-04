@@ -197,10 +197,20 @@ def make_user(client):
 
 LAREDO_FILE = "AEP_LRGV_Laredo_NewBuild.forge"
 
+ACRE_PATHS = (
+    "02_project_physical_details.terrain.protected_area_acres.forested",
+    "02_project_physical_details.terrain.protected_area_acres.scrubbed_flat",
+    "02_project_physical_details.terrain.protected_area_acres.desert_barren",
+    "02_project_physical_details.terrain.protected_area_acres.rolling_hills",
+    "02_project_physical_details.terrain.protected_area_acres.mountain",
+)
+
 
 def _laredo_changes() -> dict:
     document = json.loads(Path(forge.get_scenarios_path(), LAREDO_FILE).read_text())
-    return forge.diff_changes(document["inputs"])
+    changes = forge.diff_changes(document["inputs"])
+    changes.update({path: 0.0 for path in ACRE_PATHS})
+    return changes
 
 
 def _create_payload(name: str = "Test scenario", changes: dict | None = None) -> dict:
@@ -400,7 +410,11 @@ def test_calculator_failure_stores_calc_error(client, make_user):
     resolve_inputs still succeeds, so the row is saved with calc_error set."""
     _, headers = make_user("calc-failure")
 
-    response = client.post("/api/scenarios", json=_create_payload(changes={}), headers=headers)
+    response = client.post(
+        "/api/scenarios",
+        json=_create_payload(changes={path: 0.0 for path in ACRE_PATHS}),
+        headers=headers,
+    )
 
     assert response.status_code == 201, response.text
     body = response.json()
@@ -410,6 +424,16 @@ def test_calculator_failure_stores_calc_error(client, make_user):
     assert body["computed_at"] is None
     assert body["calc_error"]
     assert "capacity_mw" in body["calc_error"]
+
+
+def test_missing_protected_area_acres_are_rejected(client, make_user):
+    _, headers = make_user("missing-acres")
+    response = client.post("/api/scenarios", json=_create_payload(changes={}), headers=headers)
+    assert response.status_code == 422
+    message = response.json()["error"]["message"]
+    assert message.startswith("protected_area_acres are required. Missing: ")
+    for path in ACRE_PATHS:
+        assert path in message
 
 
 def test_results_in_request_body_are_ignored(client, make_user):

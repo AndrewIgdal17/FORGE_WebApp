@@ -13,13 +13,28 @@ from app.main import FORGE_CALC_WORKERS, app
 
 SCENARIOS_DIR = forge.get_scenarios_path()
 
+ACRE_PATHS = (
+    "02_project_physical_details.terrain.protected_area_acres.forested",
+    "02_project_physical_details.terrain.protected_area_acres.scrubbed_flat",
+    "02_project_physical_details.terrain.protected_area_acres.desert_barren",
+    "02_project_physical_details.terrain.protected_area_acres.rolling_hills",
+    "02_project_physical_details.terrain.protected_area_acres.mountain",
+)
+
+
+def _with_acres(changes: dict) -> dict:
+    """Explicit zeros so a case study can run. The bundled files omit acres."""
+    runnable = dict(changes)
+    runnable.update({path: 0.0 for path in ACRE_PATHS})
+    return runnable
+
 
 def _scenario_changes():
     """Load case-study diffs outside the async test so file IO stays synchronous."""
     cases = []
     for forge_file in sorted(SCENARIOS_DIR.glob("*.forge")):
         doc = json.loads(forge_file.read_text())
-        cases.append((forge_file.stem, forge.diff_changes(doc["inputs"])))
+        cases.append((forge_file.stem, _with_acres(forge.diff_changes(doc["inputs"]))))
     return cases
 
 
@@ -30,7 +45,7 @@ def anyio_backend():
 
 @pytest.mark.anyio
 async def test_concurrent_calculations():
-    """8 simultaneous requests, one per case study, all succeed."""
+    """One simultaneous request per case study, all succeed."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         tasks = []
@@ -58,7 +73,7 @@ async def test_concurrent_calculations():
 def _payload(scenario_id: str) -> dict:
     return {
         "defaults_id": forge.get_defaults_id(),
-        "changes": {},
+        "changes": {path: 0.0 for path in ACRE_PATHS},
         "scenario_id": scenario_id,
     }
 

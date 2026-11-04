@@ -49,7 +49,6 @@ const SYN: Record<string, readonly string[]> = {
     'terrain_urban',
     'terrain_rolling_hills',
     'terrain_mountain',
-    'terrain_subsea',
   ],
   row: ['uses_existing_row'],
   'right of way': ['uses_existing_row'],

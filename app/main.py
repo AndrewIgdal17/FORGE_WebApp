@@ -71,6 +71,15 @@ _health_ready = False
 _RENDER_GIT_COMMIT = os.environ.get("RENDER_GIT_COMMIT")
 
 
+_SELF_TEST_ACRE_PATHS = (
+    "02_project_physical_details.terrain.protected_area_acres.forested",
+    "02_project_physical_details.terrain.protected_area_acres.scrubbed_flat",
+    "02_project_physical_details.terrain.protected_area_acres.desert_barren",
+    "02_project_physical_details.terrain.protected_area_acres.rolling_hills",
+    "02_project_physical_details.terrain.protected_area_acres.mountain",
+)
+
+
 def _load_self_test_scenario() -> dict:
     """Load the Laredo case study used by the startup self-test."""
     scenarios_dir = forge.get_scenarios_path()
@@ -85,6 +94,9 @@ async def _startup_self_test() -> None:
     try:
         doc = _load_self_test_scenario()
         changes = forge.diff_changes(doc["inputs"])
+        # The bundled case study has no protected-area acres. Explicit zeros
+        # make it runnable; they do not invent a second validation rule.
+        changes.update({path: 0.0 for path in _SELF_TEST_ACRE_PATHS})
         resolved = forge.resolve_inputs(changes)
         results = forge.run_calculation(resolved, scenario_id="self-test")
         assert results.get("provenance"), "Self-test: missing provenance"
@@ -393,6 +405,11 @@ async def calculate_forge(
         resolved_inputs = forge.resolve_inputs(payload.changes)
     except UnknownInputPath as exc:
         return JSONResponse(status_code=422, content={"paths": exc.paths})
+    except forge.InvalidInputs as exc:
+        return JSONResponse(
+            status_code=422,
+            content={"error": {"code": "invalid_inputs", "message": str(exc)}},
+        )
 
     scenario_id = payload.scenario_id or datetime.now(UTC).strftime("%b %d %Y %H.%M.%S")
 

@@ -41,11 +41,19 @@ def test_mapping_rules_cover_terrain_and_row_zones():
     from app.route import load_mapping_rules
 
     rules = load_mapping_rules()
-    assert len(rules) == 23
+    assert len(rules) == 28
     terrain = [rule for rule in rules if rule["layer"] == "terrain/nlcd"]
     zones = [rule for rule in rules if rule["layer"] == "row/blm"]
+    habitat = [rule for rule in rules if rule["layer"] == "habitat/padus"]
     assert [rule["key"] for rule in terrain] == list(TERRAIN_KEYS)
     assert [rule["key"] for rule in zones] == [f"zone_{n}" for n in range(1, 16)]
+    assert [rule["key"] for rule in habitat] == [
+        "forested",
+        "scrubbed_flat",
+        "desert_barren",
+        "rolling_hills",
+        "mountain",
+    ]
     assert all(rule["transform"] == "direct" for rule in rules)
 
     template = forge.get_defaults_template()
@@ -53,6 +61,10 @@ def test_mapping_rules_cover_terrain_and_row_zones():
         if rule["layer"] == "terrain/nlcd":
             assert rule["forge_path"] == (
                 f"02_project_physical_details.terrain.terrain_miles.{rule['key']}"
+            )
+        elif rule["layer"] == "habitat/padus":
+            assert rule["forge_path"] == (
+                f"02_project_physical_details.terrain.protected_area_acres.{rule['key']}"
             )
         else:
             assert rule["forge_path"] == (

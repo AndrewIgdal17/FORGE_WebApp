@@ -18,7 +18,6 @@ const TERRAIN_LABELS: Record<TerrainId, string> = {
   urban: 'Urban',
   rolling_hills: 'Rolling hills',
   mountain: 'Mountain',
-  subsea: 'Subsea',
 };
 
 /** Form construction types mapped onto vegetation-management YAML keys. */
@@ -26,7 +25,6 @@ const VEG_LOOKUP_KEY: Record<string, string> = {
   Overhead: 'Overhead',
   'Underground Direct-Buried': 'Underground Direct Buried',
   'Underground Tunnel': 'Underground Tunnel',
-  Subsea: 'Subsea',
 };
 
 const cellFieldClass = 'px-2 py-1.5 [&_label]:sr-only';
@@ -54,8 +52,7 @@ export function VegetationMgmt(): ReactElement {
     return (
       <section id="vegetation-management">
         <p className="text-sm text-slate-600">
-          Vegetation management costs apply to overhead lines only. Underground and
-          subsea lines have no vegetation clearing.
+          Vegetation management costs apply to overhead lines only. Underground lines have no vegetation clearing.
         </p>
       </section>
     );

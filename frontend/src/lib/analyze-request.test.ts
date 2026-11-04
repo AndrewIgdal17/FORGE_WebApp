@@ -47,6 +47,15 @@ describe('analyze request', () => {
     expect(() => analyzeRequestBody(route, 0)).toThrow(/positive/);
   });
 
+  it('does not write a subsea mile', () => {
+    const changes = {
+      '02_project_physical_details.terrain.terrain_miles.forested': 80,
+      '02_project_physical_details.terrain.terrain_miles.wetland': 20,
+    };
+    expect(changesAfterAnalyze(changes)).toEqual(changes);
+    expect(JSON.stringify(changesAfterAnalyze(changes))).not.toContain('subsea');
+  });
+
   it('submitted terrain miles equal the analyzed route length', () => {
     const prior = {
       forested: 40,
@@ -57,7 +66,6 @@ describe('analyze request', () => {
       desert_barren: 0,
       mountain: 0,
       rolling_hills: 0,
-      subsea: 12,
     };
     const changes: Record<string, number> = {};
     for (const [key, miles] of Object.entries({
@@ -72,9 +80,7 @@ describe('analyze request', () => {
     })) {
       changes[`02_project_physical_details.terrain.terrain_miles.${key}`] = miles;
     }
-    const applied = changesAfterAnalyze(changes);
-    expect(submittedTerrainMiles(prior, applied)).toBeCloseTo(100);
-    expect(terrainMatchesRouteLength(submittedTerrainMiles(prior, applied), 100)).toBe(true);
+    expect(submittedTerrainMiles(prior, changesAfterAnalyze(changes))).toBeCloseTo(100);
   });
 
   it('keeps sub-hundredth miles and matches the route length within 1e-6', () => {
@@ -90,7 +96,6 @@ describe('analyze request', () => {
       desert_barren: 1.01,
       mountain: 1.01,
       rolling_hills: 1.01,
-      subsea: 9.01,
     };
     const changes: Record<string, number> = {};
     for (const [key, miles] of Object.entries({

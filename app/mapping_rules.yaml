@@ -70,6 +70,31 @@ rules:
     forge_path: "02_project_physical_details.terrain.terrain_miles.rolling_hills"
     transform: "direct"
 
+  - layer: "habitat/padus"
+    key: "forested"
+    forge_path: "02_project_physical_details.terrain.protected_area_acres.forested"
+    transform: "direct"
+
+  - layer: "habitat/padus"
+    key: "scrubbed_flat"
+    forge_path: "02_project_physical_details.terrain.protected_area_acres.scrubbed_flat"
+    transform: "direct"
+
+  - layer: "habitat/padus"
+    key: "desert_barren"
+    forge_path: "02_project_physical_details.terrain.protected_area_acres.desert_barren"
+    transform: "direct"
+
+  - layer: "habitat/padus"
+    key: "rolling_hills"
+    forge_path: "02_project_physical_details.terrain.protected_area_acres.rolling_hills"
+    transform: "direct"
+
+  - layer: "habitat/padus"
+    key: "mountain"
+    forge_path: "02_project_physical_details.terrain.protected_area_acres.mountain"
+    transform: "direct"
+
   # ROW zone miles (15 zones, from county → BLM zone crosswalk)
   - layer: "row/blm"
     key: "zone_1"

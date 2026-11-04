@@ -15,7 +15,6 @@ export const TERRAIN_IDS = [
   'urban',
   'rolling_hills',
   'mountain',
-  'subsea',
 ] as const;
 
 export type TerrainId = (typeof TERRAIN_IDS)[number];
@@ -29,14 +28,12 @@ const TERRAIN_LABELS: Record<TerrainId, string> = {
   urban: 'Urban',
   rolling_hills: 'Rolling Hills',
   mountain: 'Mountain',
-  subsea: 'Subsea',
 };
 
 const cellFieldClass = '[&_label]:sr-only';
 
-export function terrainsForConstruction(constructionType: unknown): TerrainId[] {
-  if (constructionType === 'Subsea') return ['subsea'];
-  return TERRAIN_IDS.filter((terrain) => terrain !== 'subsea');
+export function terrainsForConstruction(_constructionType: unknown): TerrainId[] {
+  return [...TERRAIN_IDS];
 }
 
 export function terrainMilesPath(terrain: TerrainId): string {

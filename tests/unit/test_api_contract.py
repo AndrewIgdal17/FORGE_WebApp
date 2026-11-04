@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import forge
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -17,23 +18,10 @@ def test_static_holds_no_parameter_tables():
 SCENARIO_FILES = sorted(Path(forge.get_scenarios_path()).glob("*.forge"))
 
 
-def _assert_api_matches_calculator(scenario_id: str, document: dict) -> None:
-    """Shared assertion for one .forge fixture: resolve its diff, call the API,
-    and check both halves of the contract against direct calculator calls.
-
-    `inputs_id` hashes the dict `run_calculation` actually receives. The API
-    receives `resolve_inputs(diff_changes(document["inputs"]))`, which fills
-    template-only nulls and drops keys the calculator does not read
-    (`project.name`, `habitat_credit_cost_per_acre.farmland`). That dict is not
-    byte-identical to the raw `.forge` `inputs`, so its hash is compared
-    against `run_calculation(resolved, ...)`, not against the raw document.
-    The calculation result itself (`bcr_ratepayer`) is compared against
-    `run_calculation` on the raw document, since the dropped/filled keys do
-    not affect the computed results.
-    """
+def _assert_unmodified_scenario_is_rejected(scenario_id: str, document: dict) -> None:
     changes = forge.diff_changes(document["inputs"])
-    resolved = forge.resolve_inputs(changes)
-
+    with pytest.raises(forge.InvalidInputs, match="protected_area_acres are required"):
+        forge.resolve_inputs(changes)
     response = client.post(
         "/api/forge/calculate",
         json={
@@ -42,19 +30,8 @@ def _assert_api_matches_calculator(scenario_id: str, document: dict) -> None:
             "scenario_id": scenario_id,
         },
     )
-    assert response.status_code == 200, (scenario_id, response.text)
-    body = response.json()
-
-    direct_resolved = forge.run_calculation(resolved, scenario_id=scenario_id)
-    assert (
-        body["results"]["provenance"]["inputs_id"]
-        == direct_resolved["provenance"]["inputs_id"]
-    ), scenario_id
-
-    direct_raw = forge.run_calculation(document["inputs"], scenario_id=scenario_id)
-    assert (
-        body["results"]["bcr"]["bcr_ratepayer"] == direct_raw["bcr"]["bcr_ratepayer"]
-    ), scenario_id
+    assert response.status_code == 422, (scenario_id, response.text)
+    assert "protected_area_acres are required" in response.text
 
 
 def test_defaults_and_laredo_match_the_calculator():
@@ -65,14 +42,14 @@ def test_defaults_and_laredo_match_the_calculator():
     document = json.loads(
         Path(forge.get_scenarios_path(), "AEP_LRGV_Laredo_NewBuild.forge").read_text()
     )
-    _assert_api_matches_calculator("AEP_LRGV_Laredo_NewBuild", document)
+    _assert_unmodified_scenario_is_rejected("AEP_LRGV_Laredo_NewBuild", document)
 
 
 def test_all_scenarios_match_the_calculator():
-    assert len(SCENARIO_FILES) == 8
+    assert len(SCENARIO_FILES) == 7
     for scenario_file in SCENARIO_FILES:
         document = json.loads(scenario_file.read_text())
-        _assert_api_matches_calculator(scenario_file.stem, document)
+        _assert_unmodified_scenario_is_rejected(scenario_file.stem, document)
 
 
 def test_invalid_inputs_returns_message():
@@ -84,6 +61,7 @@ def test_invalid_inputs_returns_message():
     body = response.json()
     assert body["error"]["code"] == "invalid_inputs"
     assert isinstance(body["error"]["message"], str) and body["error"]["message"]
+    assert "protected_area_acres" in body["error"]["message"]
     assert response.headers["x-request-id"]
 
 

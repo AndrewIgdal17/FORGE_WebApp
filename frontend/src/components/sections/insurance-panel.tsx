@@ -31,12 +31,6 @@ const LINE_RATE_BY_CONSTRUCTION_TYPE: Record<string, RateField> = {
     label: 'Tunnel premium rate (% of insurable value)',
     helpText: 'Same 0.20% reserve as direct-buried underground.',
   },
-  Subsea: {
-    path: `${INSURANCE}.premium_rate_by_type.subsea`,
-    label: 'Subsea premium rate (% of insurable value)',
-    helpText:
-      'Commercial property-damage premium. Market range about 2–4%. Default 3.0%.',
-  },
 };
 
 const CONVERTER_RATE: RateField = {

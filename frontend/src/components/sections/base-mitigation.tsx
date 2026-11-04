@@ -2,7 +2,6 @@ import type { ReactElement } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { CurrencyField } from '@/components/form/currency-field';
 import { NumberField } from '@/components/form/number-field';
-import { PercentageField } from '@/components/form/percentage-field';
 import { TERRAIN_IDS, terrainMilesPath } from '@/components/sections/terrain-mix';
 import type { TerrainId } from '@/components/sections/terrain-mix';
 import { milesToAcres } from '@/lib/geometry';
@@ -25,11 +24,6 @@ const TERRAIN_LABELS: Record<string, string> = {
   urban: 'Urban',
   rolling_hills: 'Rolling hills',
   mountain: 'Mountain',
-  subsea: 'Subsea',
-  linear_corridor_default: 'Linear corridor',
-  shaft_site_default: 'Shaft site',
-  seabed_corridor_default: 'Seabed corridor',
-  landfall_default: 'Landfall',
 };
 
 const ENV_TERRAINS: Record<string, { key: string; terrains: string[] }> = {
@@ -43,11 +37,7 @@ const ENV_TERRAINS: Record<string, { key: string; terrains: string[] }> = {
   },
   'Underground Tunnel': {
     key: 'underground_tunnel',
-    terrains: [...TERRAIN_IDS, 'linear_corridor_default', 'shaft_site_default'],
-  },
-  Subsea: {
-    key: 'subsea',
-    terrains: ['seabed_corridor_default', 'landfall_default'],
+    terrains: [...TERRAIN_IDS],
   },
 };
 
@@ -151,13 +141,6 @@ export function BaseMitigation(): ReactElement {
         min={0}
         step={0.05}
       />
-      {ctLabel === 'Subsea' ? (
-        <PercentageField
-          path={`${ENV}.marine_env_mitigation_pct_capex`}
-          label="Marine mitigation (% of subsea CAPEX)"
-          helpText="Added on subsea projects. Default 3% of subsea construction cost."
-        />
-      ) : null}
       <p className="text-sm text-slate-600">
         Total effective acres{' '}
         <span className="font-medium text-slate-900">

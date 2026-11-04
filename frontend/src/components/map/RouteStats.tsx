@@ -22,7 +22,6 @@ const TERRAIN_LABELS: Record<TerrainId, string> = {
   urban: 'Urban',
   rolling_hills: 'Rolling Hills',
   mountain: 'Mountain',
-  subsea: 'Subsea',
 };
 
 const TERRAIN_PATH_PREFIX = '02_project_physical_details.terrain.terrain_miles.';
