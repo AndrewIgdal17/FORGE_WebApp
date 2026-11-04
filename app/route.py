@@ -91,21 +91,25 @@ ORDER BY z.blm_zone_2022
 """
 
 # Midpoint of each ~30 m piece, so samples neither overlap nor leave a tail.
+# Part numbers are the ST_Dump geometry index. Rows are ordered by part id,
+# then piece index i, the same order as corridor slices.
 _SAMPLE_POINTS_SQL = """
 WITH route AS (
   SELECT ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326), 5070) AS geom
 ),
 parts AS (
-  SELECT (ST_Dump(geom)).geom AS line
+  SELECT (ST_Dump(geom)).path[1] AS part_id,
+         (ST_Dump(geom)).geom AS line
   FROM route
 ),
 measured AS (
-  SELECT line, ST_Length(line) AS meters
+  SELECT part_id, line, ST_Length(line) AS meters
   FROM parts
   WHERE ST_Length(line) > 0
 ),
 steps AS (
-  SELECT line,
+  SELECT part_id,
+         line,
          meters,
          GREATEST(1, CEIL(meters / 30.0))::int AS n
   FROM measured
@@ -118,6 +122,7 @@ CROSS JOIN LATERAL generate_series(0, n - 1) AS i
 CROSS JOIN LATERAL (
   SELECT ST_LineInterpolatePoint(line, ((i + 0.5) / n)::float8) AS pt
 ) sampled
+ORDER BY part_id, i
 """
 
 # First vertex is the sending end. Last vertex is the receiving end.

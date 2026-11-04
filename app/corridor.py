@@ -34,12 +34,15 @@ def wetland_filter_sql(rule: WetlandRule) -> str:
 # $1 geojson MultiLineString in EPSG:4326. $2 half-width in meters.
 # Sample boundaries are cut perpendicular to the segment. Corners are also
 # cut along the angle bisector. A straight joint is not.
+# Part numbers are the ST_Dump geometry index so these slices share the
+# sample order in route.py: part id, then piece index i.
 SLICE_FROM = """
 WITH route AS (
   SELECT ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326), 5070) AS geom
 ),
 parts AS (
-  SELECT row_number() OVER () AS part_id, (ST_Dump(geom)).geom AS line
+  SELECT (ST_Dump(geom)).path[1] AS part_id,
+         (ST_Dump(geom)).geom AS line
   FROM route
 ),
 measured AS (
@@ -174,8 +177,8 @@ async def fetch_wetland_areas_m2(
       ON a.geom IS NOT NULL
      AND ST_Intersects(a.geom, w.geom)
      AND {where}
-    GROUP BY s.slice_id
-    ORDER BY s.slice_id
+    GROUP BY s.part_id, s.i, s.slice_id
+    ORDER BY s.part_id, s.i
     """
     rows = await conn.fetch(sql, geojson, half_m)
     return [float(row["area_m2"]) for row in rows]
