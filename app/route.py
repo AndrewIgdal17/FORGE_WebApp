@@ -235,7 +235,7 @@ def miles_by_category(samples: list[tuple[str, float]]) -> dict[str, float]:
             category = "scrubbed_flat"
         totals[category] += spacing_m
     return {
-        category: round(meters / METERS_PER_MILE, 2)
+        category: meters / METERS_PER_MILE
         for category, meters in totals.items()
     }
 
@@ -244,7 +244,7 @@ def zone_miles_from_rows(zone_rows: list[Any]) -> dict[str, float]:
     """Miles for all 15 BLM zones. Zones the route misses stay at 0."""
     zones = {f"zone_{i}": 0.0 for i in range(1, 16)}
     for row in zone_rows:
-        miles = round(float(row["miles"]), 2)
+        miles = float(row["miles"])
         zone_number = int(row["zone"])
         if not 1 <= zone_number <= 15:
             logger.warning("Ignoring BLM zone %s outside 1–15", zone_number)
@@ -259,7 +259,7 @@ def normalize_zone_miles(
     """Scale zone miles so they sum to the terrain total.
 
     NLCD raster sampling and PostGIS vector intersection produce independent
-    totals. Scaling keeps the zone mix and makes the rounded sums match.
+    totals. Scaling keeps the zone mix and makes the sums match.
     Skip when either total is 0 (no terrain samples or no zone intersections).
     """
     terrain_total = sum(terrain.values())
@@ -267,7 +267,7 @@ def normalize_zone_miles(
     if terrain_total <= 0 or zone_total <= 0:
         return zones
     scale = terrain_total / zone_total
-    return {key: round(value * scale, 2) for key, value in zones.items()}
+    return {key: value * scale for key, value in zones.items()}
 
 
 def changes_for(intersections: dict[str, dict[str, float]]) -> dict[str, float]:
@@ -535,7 +535,7 @@ async def analyze_route(
 
     intersections = {TERRAIN_LAYER: terrain, ROW_LAYER: zones}
     body = {
-        "total_miles": round(float(total_miles), 2),
+        "total_miles": float(total_miles),
         "intersections": intersections,
         "changes": changes_for(intersections),
         "open_water_miles": result.open_water_miles,

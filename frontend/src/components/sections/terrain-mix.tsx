@@ -58,8 +58,8 @@ function readNumber(value: unknown): number {
 
 function formatFixed(value: number): string {
   return value.toLocaleString('en-US', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 }
 

@@ -6,6 +6,7 @@ import {
   changesAfterAnalyze,
   resolvedRowWidthFt,
   submittedTerrainMiles,
+  terrainMatchesRouteLength,
 } from './analyze-request';
 import type { LookupTables, ProjectFields } from './lookups';
 
@@ -73,5 +74,43 @@ describe('analyze request', () => {
     }
     const applied = changesAfterAnalyze(changes);
     expect(submittedTerrainMiles(prior, applied)).toBeCloseTo(100);
+    expect(terrainMatchesRouteLength(submittedTerrainMiles(prior, applied), 100)).toBe(true);
+  });
+
+  it('keeps sub-hundredth miles and matches the route length within 1e-6', () => {
+    const forested = 10.123456789;
+    const wetland = 2.00000007;
+    const routeLength = forested + wetland;
+    const prior = {
+      forested: 1.01,
+      wetland: 1.01,
+      scrubbed_flat: 1.01,
+      urban: 1.01,
+      farmland: 1.01,
+      desert_barren: 1.01,
+      mountain: 1.01,
+      rolling_hills: 1.01,
+      subsea: 9.01,
+    };
+    const changes: Record<string, number> = {};
+    for (const [key, miles] of Object.entries({
+      forested,
+      wetland,
+      scrubbed_flat: 0,
+      urban: 0,
+      farmland: 0,
+      desert_barren: 0,
+      mountain: 0,
+      rolling_hills: 0,
+    })) {
+      changes[`02_project_physical_details.terrain.terrain_miles.${key}`] = miles;
+    }
+    const submitted = submittedTerrainMiles(prior, changesAfterAnalyze(changes));
+    expect(submitted).toBe(routeLength);
+    expect(submitted).not.toBe(Math.round(routeLength * 100) / 100);
+    expect(terrainMatchesRouteLength(routeLength + 1e-7, routeLength)).toBe(true);
+    expect(terrainMatchesRouteLength(routeLength - 1e-7, routeLength)).toBe(true);
+    expect(terrainMatchesRouteLength(routeLength + 1e-6 + 1e-7, routeLength)).toBe(false);
+    expect(terrainMatchesRouteLength(routeLength - 2e-6, routeLength)).toBe(false);
   });
 });

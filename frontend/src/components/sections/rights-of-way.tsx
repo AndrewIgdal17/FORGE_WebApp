@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { terrainMilesPath, terrainsForConstruction } from '@/components/sections/terrain-mix';
 import type { TerrainId } from '@/components/sections/terrain-mix';
+import { terrainMatchesRouteLength } from '@/lib/analyze-request';
 import { milesToAcres } from '@/lib/geometry';
 import { buildCategoryKey, getRowWidthFeet } from '@/lib/lookups';
 import type { ProjectFields } from '@/lib/lookups';
@@ -47,8 +48,8 @@ function readNumber(value: unknown): number {
 
 function formatMiles(value: number): string {
   return value.toLocaleString('en-US', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 }
 
@@ -221,7 +222,9 @@ export function RightsOfWay({
       return sum + (miles > 0 ? milesToAcres(miles, rowWidthFeet) : 0);
     }, 0);
   });
-  const mismatch = Math.abs(terrainMilesTotal - rowMilesTotal) > MILES_TOLERANCE;
+  const mismatch = milesFromRoute
+    ? !terrainMatchesRouteLength(terrainMilesTotal, rowMilesTotal)
+    : Math.abs(terrainMilesTotal - rowMilesTotal) > MILES_TOLERANCE;
 
   function addZone(): void {
     setVisibleZones((current) => {

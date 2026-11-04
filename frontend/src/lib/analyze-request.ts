@@ -13,6 +13,9 @@ const SUBSEA_TERRAIN_PATH =
 const TERRAIN_MILES_PREFIX =
   '02_project_physical_details.terrain.terrain_miles.';
 
+/** Route-derived terrain totals match the route length inside this tolerance. */
+export const ROUTE_MILES_TOLERANCE = 1e-6;
+
 export function resolvedRowWidthFt(
   fields: ProjectFields,
   lookups: LookupTables,
@@ -41,6 +44,13 @@ export function changesAfterAnalyze(
     ...changes,
     [SUBSEA_TERRAIN_PATH]: 0,
   };
+}
+
+export function terrainMatchesRouteLength(
+  terrainMiles: number,
+  routeMiles: number,
+): boolean {
+  return Math.abs(terrainMiles - routeMiles) <= ROUTE_MILES_TOLERANCE;
 }
 
 export function submittedTerrainMiles(

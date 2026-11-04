@@ -57,8 +57,8 @@ function asMiles(value: unknown): number | null {
 
 function formatMiles(miles: number): string {
   return `${miles.toLocaleString('en-US', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   })} mi`;
 }
 

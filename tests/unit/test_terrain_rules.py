@@ -5,12 +5,14 @@ from __future__ import annotations
 import pytest
 
 from app.terrain_rules import (
+    METERS_PER_MILE,
     ClassifiedSample,
     apply_wetland_transfer,
     equivalent_length_m,
     land_cover_class,
     load_classification,
     retain_wetland,
+    terrain_matches_route_length,
 )
 
 
@@ -82,16 +84,37 @@ def test_transfer_caps_at_the_sample_length_and_reports_open_water():
         ClassifiedSample("scrubbed_flat", 30.0, 11, 0.0),
     ]
     result = apply_wetland_transfer(samples, 100.0)
-    assert result.miles["wetland"] == pytest.approx(30.0 / 1609.344, abs=0.005)
-    assert result.miles["forested"] == pytest.approx(30.0 / 1609.344, abs=0.005)
-    assert result.miles["scrubbed_flat"] == pytest.approx(30.0 / 1609.344, abs=0.005)
-    assert result.open_water_miles == pytest.approx(30.0 / 1609.344, abs=0.005)
+    assert result.miles["wetland"] == 30.0 / METERS_PER_MILE
+    assert result.miles["forested"] == 30.0 / METERS_PER_MILE
+    assert result.miles["scrubbed_flat"] == 30.0 / METERS_PER_MILE
+    assert result.open_water_miles == 30.0 / METERS_PER_MILE
     assert "subsea" not in result.miles
-    assert sum(result.miles.values()) == pytest.approx(90.0 / 1609.344, abs=0.05)
+    assert sum(result.miles.values()) == pytest.approx(90.0 / METERS_PER_MILE, abs=1e-12)
 
 
 def test_transfer_leaves_class_90_as_forest_when_no_polygon_is_retained():
     samples = [ClassifiedSample("forested", 30.0, 90, 0.0)]
     result = apply_wetland_transfer(samples, 100.0)
     assert result.miles["wetland"] == 0
-    assert result.miles["forested"] == pytest.approx(30.0 / 1609.344, abs=0.005)
+    assert result.miles["forested"] == 30.0 / METERS_PER_MILE
+
+
+def test_transfer_keeps_sub_hundredth_precision_and_route_tolerance():
+    samples = [
+        ClassifiedSample("forested", 30.0, 41, 0.0),
+        ClassifiedSample("urban", 17.0, 21, 0.0),
+    ]
+    result = apply_wetland_transfer(samples, 100.0)
+    forested = 30.0 / METERS_PER_MILE
+    urban = 17.0 / METERS_PER_MILE
+    route_miles = forested + urban
+    assert result.miles["forested"] == forested
+    assert result.miles["urban"] == urban
+    assert result.miles["forested"] != round(forested, 2)
+    assert result.open_water_miles == 0.0
+    terrain_total = sum(result.miles.values())
+    assert terrain_matches_route_length(terrain_total, route_miles)
+    assert terrain_matches_route_length(route_miles + 1e-7, route_miles)
+    assert terrain_matches_route_length(route_miles - 1e-7, route_miles)
+    assert not terrain_matches_route_length(route_miles + 1e-6 + 1e-7, route_miles)
+    assert not terrain_matches_route_length(route_miles - 2e-6, route_miles)

@@ -67,8 +67,8 @@ def test_terrain_miles_scale_sample_spacing_and_keep_empty_categories():
     miles = miles_by_category(
         [("wetland", 30.0), ("wetland", 30.0), ("forested", 30.0)]
     )
-    assert miles["wetland"] == pytest.approx(60 / 1609.344, abs=0.005)
-    assert miles["forested"] == pytest.approx(30 / 1609.344, abs=0.005)
+    assert miles["wetland"] == 60 / 1609.344
+    assert miles["forested"] == 30 / 1609.344
     assert miles["mountain"] == 0
     assert miles["rolling_hills"] == 0
     assert set(miles) == set(TERRAIN_KEYS)
@@ -84,7 +84,7 @@ def test_sample_hits_feed_the_transfer():
         100.0,
     )
     assert result.miles["wetland"] == 0.0
-    assert result.open_water_miles == pytest.approx(30.0 / 1609.344, abs=0.005)
+    assert result.open_water_miles == 30.0 / 1609.344
     assert "subsea" not in result.miles
 
 
@@ -98,14 +98,14 @@ def test_zone_miles_keep_every_zone_so_a_redraw_can_zero_old_counties():
     from app.route import changes_for, zone_miles_from_rows
 
     zones = zone_miles_from_rows([{"zone": 6, "miles": 80.004}, {"zone": 99, "miles": 3}])
-    assert zones["zone_6"] == 80.0
+    assert zones["zone_6"] == 80.004
     assert zones["zone_1"] == 0.0
     assert zones["zone_15"] == 0.0
     assert "zone_99" not in zones
     assert set(zones) == {f"zone_{n}" for n in range(1, 16)}
 
     changes = changes_for({"terrain/nlcd": {}, "row/blm": zones})
-    assert changes["11_project_row_details.right_of_way.zone_6.miles"] == 80.0
+    assert changes["11_project_row_details.right_of_way.zone_6.miles"] == 80.004
     assert changes["11_project_row_details.right_of_way.zone_1.miles"] == 0.0
     assert changes["11_project_row_details.right_of_way.zone_15.miles"] == 0.0
 
@@ -118,9 +118,10 @@ def test_normalize_zone_miles_scales_to_terrain_total():
     zones["zone_6"] = 80.0
     zones["zone_7"] = 40.0
     scaled = normalize_zone_miles(zones, terrain)
-    assert sum(scaled.values()) == pytest.approx(100.0, abs=0.01)
-    assert scaled["zone_6"] == pytest.approx(66.67, abs=0.01)
-    assert scaled["zone_7"] == pytest.approx(33.33, abs=0.01)
+    assert sum(scaled.values()) == pytest.approx(100.0, abs=1e-9)
+    assert scaled["zone_6"] == pytest.approx(80.0 * 100.0 / 120.0, rel=0, abs=1e-12)
+    assert scaled["zone_7"] == pytest.approx(40.0 * 100.0 / 120.0, rel=0, abs=1e-12)
+    assert scaled["zone_6"] != round(scaled["zone_6"], 2)
     assert scaled["zone_1"] == 0.0
 
 
@@ -440,7 +441,7 @@ def test_endpoint_fields_present_on_normal_route(analyze_client):
 
 def test_existing_analyze_unchanged(analyze_client):
     body = _analyze(analyze_client, AUSTIN_DALLAS)
-    assert body["total_miles"] == 183.4
+    assert body["total_miles"] == pytest.approx(183.4, abs=0.01)
     assert set(body["intersections"]) == {"terrain/nlcd", "row/blm"}
     assert set(body["intersections"]["terrain/nlcd"]) == set(TERRAIN_KEYS)
     assert isinstance(body["changes"], dict)

@@ -18,6 +18,7 @@ import { ContributionStrip } from '@/components/workspace/contribution-strip';
 import { WorkspaceHeader } from '@/components/workspace/workspace-header';
 import { SIDEBAR_SECTIONS } from '@/data/sidebar-sections';
 import { useNavigation } from '@/hooks/use-navigation';
+import { terrainMatchesRouteLength } from '@/lib/analyze-request';
 import { ApiError, calculate } from '@/lib/api';
 import { diffChanges } from '@/lib/changes';
 import { debounce } from '@/lib/debounce';
@@ -117,7 +118,10 @@ function hasRequiredFields(data: Record<string, unknown> | null): boolean {
   return terrainMilesTotal(data) > 0;
 }
 
-function validationBadges(data: Record<string, unknown> | null): Record<string, SubItemValidation> {
+function validationBadges(
+  data: Record<string, unknown> | null,
+  milesFromRoute: boolean,
+): Record<string, SubItemValidation> {
   if (!data) return {};
   const badges: Record<string, SubItemValidation> = {};
   let technologyMissing = 0;
@@ -142,8 +146,10 @@ function validationBadges(data: Record<string, unknown> | null): Record<string, 
 
   const terrainTotal = terrainMilesTotal(data);
   const rowTotal = rowMilesTotal(data);
-  const mismatch =
-    (terrainTotal > 0 || rowTotal > 0) && Math.abs(terrainTotal - rowTotal) >= MILES_TOLERANCE;
+  const milesDiffer = milesFromRoute
+    ? !terrainMatchesRouteLength(terrainTotal, rowTotal)
+    : Math.abs(terrainTotal - rowTotal) >= MILES_TOLERANCE;
+  const mismatch = (terrainTotal > 0 || rowTotal > 0) && milesDiffer;
   if (terrainTotal <= 0 || mismatch) {
     badges['terrain-mix'] = {
       invalidCount: terrainTotal <= 0 ? 1 : 0,
@@ -236,7 +242,15 @@ function WorkspaceBody(): ReactElement {
   const scheduleRef = useRef<() => void>(() => {});
 
   const activeScenario = scenarios.find((scenario) => scenario.id === activeScenarioId) ?? null;
-  const validation = useMemo(() => validationBadges(data), [data]);
+  const savedRoutePresent =
+    draft !== null ||
+    activeScenario?.route != null ||
+    (Array.isArray(activeScenario?.segments) && activeScenario.segments.length > 0);
+  const milesFromRoute = drawn !== undefined ? drawn.route != null : savedRoutePresent;
+  const validation = useMemo(
+    () => validationBadges(data, milesFromRoute),
+    [data, milesFromRoute],
+  );
 
   const rememberBaseline = useCallback((): void => {
     try {
@@ -528,11 +542,6 @@ function WorkspaceBody(): ReactElement {
   const reconductoring = useFormStore.getState().isReconductoring();
   const showRouteMap = view === 'inputs' && subItemId === 'route';
   const createMode = draft !== null && activeScenarioId === null;
-  const savedRoutePresent =
-    draft !== null ||
-    activeScenario?.route != null ||
-    (Array.isArray(activeScenario?.segments) && activeScenario.segments.length > 0);
-  const milesFromRoute = drawn !== undefined ? drawn.route != null : savedRoutePresent;
   const canCreate = createMode && terrainMilesTotal(data ?? {}) > 0;
 
   return (

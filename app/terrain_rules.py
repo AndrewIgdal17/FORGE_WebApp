@@ -169,6 +169,15 @@ class TerrainResult:
     open_water_miles: float
 
 
+# Route-derived terrain totals match the route length inside this tolerance.
+ROUTE_MILES_TOLERANCE = 1e-6
+
+
+def terrain_matches_route_length(terrain_miles: float, route_miles: float) -> bool:
+    """True when a terrain total is within 1e-6 mile of the route length."""
+    return abs(terrain_miles - route_miles) <= ROUTE_MILES_TOLERANCE
+
+
 def apply_wetland_transfer(
     samples: list[ClassifiedSample],
     row_width_ft: float,
@@ -188,6 +197,6 @@ def apply_wetland_transfer(
         if sample.nlcd_code == 11:
             open_water_m += sample.length_m
     return TerrainResult(
-        miles={name: round(value / METERS_PER_MILE, 2) for name, value in meters.items()},
-        open_water_miles=round(open_water_m / METERS_PER_MILE, 2),
+        miles={name: value / METERS_PER_MILE for name, value in meters.items()},
+        open_water_miles=open_water_m / METERS_PER_MILE,
     )
