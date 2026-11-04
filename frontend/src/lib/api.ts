@@ -1,5 +1,6 @@
 import type { Geometry, MultiLineString } from 'geojson';
 
+import { analyzeRequestBody } from '@/lib/analyze-request';
 import { supabase } from '@/lib/supabase';
 
 export interface CalculatorInfo {
@@ -111,6 +112,7 @@ export interface AnalyzeResponse {
   receiving_gea: string | null;
   sending_state: string | null;
   receiving_state: string | null;
+  open_water_miles?: number;
 }
 
 export interface ScenarioCreate {
@@ -243,13 +245,14 @@ const ANALYZE_TIMEOUT_MS = 30_000;
 
 export async function analyzeRoute(
   route: MultiLineString,
+  rowWidthFt: number,
   signal?: AbortSignal,
 ): Promise<AnalyzeResponse> {
   const timeout = AbortSignal.timeout(ANALYZE_TIMEOUT_MS);
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
   return apiFetch<AnalyzeResponse>('/api/route/analyze', {
     method: 'POST',
-    body: JSON.stringify({ route }),
+    body: JSON.stringify(analyzeRequestBody(route, rowWidthFt)),
     signal: combined,
   });
 }

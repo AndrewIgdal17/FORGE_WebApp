@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import type { MultiLineString } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
@@ -13,6 +13,7 @@ import { RouteStats } from '@/components/map/RouteStats';
 import { useRouteAnalyze } from '@/hooks/use-route-analyze';
 import { useRouteDraw, type EndpointSubstations } from '@/hooks/use-route-draw';
 import type { AnalyzeResponse } from '@/lib/api';
+import { changesAfterAnalyze, resolvedRowWidthFt } from '@/lib/analyze-request';
 import { useFormStore } from '@/stores/form-store';
 import { useMapStore } from '@/stores/map-store';
 
@@ -69,6 +70,12 @@ export function MapPanel({
   const endpointSubstationsRef = useRef(endpointSubstations);
   endpointSubstationsRef.current = endpointSubstations;
   const { analyze, loading, error } = useRouteAnalyze();
+  const data = useFormStore((state) => state.data);
+  const lookups = useFormStore((state) => state.lookups);
+  const rowWidthFt = useMemo(() => {
+    if (!lookups || !data) return null;
+    return resolvedRowWidthFt(useFormStore.getState().getProjectFields(), lookups);
+  }, [lookups, data]);
 
   useLayoutEffect(() => {
     if (!map) return;
@@ -116,23 +123,26 @@ export function MapPanel({
   // line so a drag does not re-analyze the pre-drag geometry.
   useEffect(() => {
     if (!finishedRoute) return;
+    if (rowWidthFt === null) return;
     const id = requestId.current + 1;
     requestId.current = id;
     const endpoints = endpointSubstationsRef.current;
     let cancelled = false;
-    void analyze(finishedRoute).then((response) => {
+    void analyze(finishedRoute, rowWidthFt).then((response) => {
       if (cancelled || id !== requestId.current || !response) return;
       setAnalyzed(response);
       onRouteChangeRef.current?.(
         finishedRoute,
         segmentsFor(finishedRoute, response.intersections, endpoints),
       );
-      useFormStore.getState().applyChanges(response.changes);
+      useFormStore
+        .getState()
+        .applyChanges(changesAfterAnalyze(response.changes));
     });
     return () => {
       cancelled = true;
     };
-  }, [analyze, finishedRoute]);
+  }, [analyze, finishedRoute, rowWidthFt]);
 
   const showExisting = !clearedExisting && existingRoute && !routeGeoJSON ? existingRoute : null;
   const statsRoute = routeGeoJSON ?? showExisting;

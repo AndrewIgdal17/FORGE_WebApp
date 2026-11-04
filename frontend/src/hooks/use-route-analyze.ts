@@ -4,7 +4,10 @@ import type { MultiLineString } from 'geojson';
 import { analyzeRoute, type AnalyzeResponse } from '@/lib/api';
 
 export interface RouteAnalyze {
-  analyze: (route: MultiLineString) => Promise<AnalyzeResponse | null>;
+  analyze: (
+    route: MultiLineString,
+    rowWidthFt: number,
+  ) => Promise<AnalyzeResponse | null>;
   result: AnalyzeResponse | null;
   loading: boolean;
   error: Error | null;
@@ -25,7 +28,10 @@ export function useRouteAnalyze(): RouteAnalyze {
   const [error, setError] = useState<Error | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const analyze = useCallback(async (route: MultiLineString): Promise<AnalyzeResponse | null> => {
+  const analyze = useCallback(async (
+    route: MultiLineString,
+    rowWidthFt: number,
+  ): Promise<AnalyzeResponse | null> => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -33,7 +39,7 @@ export function useRouteAnalyze(): RouteAnalyze {
     setError(null);
 
     try {
-      const next = await analyzeRoute(route, controller.signal);
+      const next = await analyzeRoute(route, rowWidthFt, controller.signal);
       if (controller.signal.aborted) return null;
       setResult(next);
       return next;
