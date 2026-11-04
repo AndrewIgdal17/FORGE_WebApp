@@ -3,6 +3,31 @@
 # calculator input path. All MVP rules use the "direct" transform (value
 # passes through unchanged as miles).
 
+classification:
+  default: scrubbed_flat
+  slope:
+    mountain_above_pct: 8.0
+    rolling_hills_at_or_above_pct: 2.0
+  # "slope" means the slope rule. Every other value is a terrain class.
+  nlcd:
+    11: slope
+    12: mountain
+    21: urban
+    22: urban
+    23: urban
+    24: urban
+    31: desert_barren
+    41: forested
+    42: forested
+    43: forested
+    81: farmland
+    82: farmland
+    90: forested
+    95: slope
+  wetland:
+    stems: [PEM, PFO, PSS, E2EM, E2FO, E2SS]
+    mixed: exclude
+
 rules:
   # Terrain miles (9 categories, from NLCD + 3DEP slope crosswalk)
   - layer: "terrain/nlcd"

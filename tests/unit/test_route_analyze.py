@@ -61,34 +61,6 @@ def test_mapping_rules_cover_terrain_and_row_zones():
         _leaf(template, rule["forge_path"])
 
 
-@pytest.mark.parametrize(
-    ("code", "expected"),
-    [
-        (90, "wetland"),
-        (95, "wetland"),
-        (41, "forested"),
-        (42, "forested"),
-        (43, "forested"),
-        (21, "urban"),
-        (22, "urban"),
-        (23, "urban"),
-        (24, "urban"),
-        (81, "farmland"),
-        (82, "farmland"),
-        (31, "desert_barren"),
-        (52, "scrubbed_flat"),
-        (71, "scrubbed_flat"),
-        (11, "scrubbed_flat"),
-        (12, "scrubbed_flat"),
-        (0, "scrubbed_flat"),
-    ],
-)
-def test_classify_nlcd_uses_precedence_and_defaults_the_rest(code, expected):
-    from app.route import classify_nlcd
-
-    assert classify_nlcd(code) == expected
-
-
 def test_terrain_miles_scale_sample_spacing_and_keep_empty_categories():
     from app.route import miles_by_category
 

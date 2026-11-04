@@ -13,11 +13,9 @@ import json
 import logging
 import os
 import threading
-from pathlib import Path
 from typing import Any
 
 import asyncpg
-import yaml
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -26,6 +24,7 @@ from pydantic import BaseModel, Field, field_validator
 from . import db as db_module
 from .models import sanitize_for_json
 from .states import fips_to_abbrev
+from .terrain_rules import land_cover_class, load_classification, load_mapping_rules
 
 logger = logging.getLogger(__name__)
 
@@ -57,22 +56,6 @@ TERRAIN_CATEGORIES = (
     "subsea",
 )
 
-_NLCD_TO_TERRAIN = {
-    90: "wetland",
-    95: "wetland",
-    41: "forested",
-    42: "forested",
-    43: "forested",
-    21: "urban",
-    22: "urban",
-    23: "urban",
-    24: "urban",
-    81: "farmland",
-    82: "farmland",
-    31: "desert_barren",
-}
-
-_rules_cache: list[dict[str, Any]] | None = None
 _nlcd_dataset: Any = None
 _nlcd_lock = threading.Lock()
 _slope_dataset: Any = None
@@ -212,29 +195,6 @@ class RouteGeometry(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     route: RouteGeometry
-
-
-def load_mapping_rules() -> list[dict[str, Any]]:
-    """Return the 24 terrain and ROW-zone rules. Parsed once per process."""
-    global _rules_cache
-    if _rules_cache is None:
-        path = Path(__file__).with_name("mapping_rules.yaml")
-        with path.open() as handle:
-            document = yaml.safe_load(handle)
-        rules = document["rules"]
-        if not isinstance(rules, list):
-            raise RuntimeError("mapping_rules.yaml is missing a rules list")
-        _rules_cache = rules
-    return _rules_cache
-
-
-def classify_nlcd(code: int) -> str:
-    """Map one NLCD class to a terrain category.
-
-    Unlisted classes stay scrubbed_flat. ``sample_terrain`` may reclassify
-    those points from the slope COG. Subsea comes from construction type.
-    """
-    return _NLCD_TO_TERRAIN.get(int(code), "scrubbed_flat")
 
 
 def miles_by_category(samples: list[tuple[str, float]]) -> dict[str, float]:
@@ -390,21 +350,14 @@ def sample_terrain(points: list[tuple[float, float, float]]) -> list[tuple[str, 
             list(slope_ds.sample(coords)) if slope_ds else [None] * len(coords)
         )
 
+    classification = load_classification()
     classified: list[tuple[str, float]] = []
     for nlcd_sample, slope_sample, (_x, _y, spacing_m) in zip(
         nlcd_samples, slope_samples, points, strict=True
     ):
         code = _pixel_code(nlcd_sample)
-        category = "scrubbed_flat" if code is None else classify_nlcd(code)
-
-        # Slope only governs when NLCD doesn't assign a specific category.
-        if category == "scrubbed_flat" and slope_sample is not None:
-            slope_val = _slope_value(slope_sample)
-            if slope_val is not None:
-                if slope_val > 8.0:
-                    category = "mountain"
-                elif slope_val >= 2.0:
-                    category = "rolling_hills"
+        slope_pct = _slope_value(slope_sample) if slope_sample is not None else None
+        category = land_cover_class(code, slope_pct, classification)
 
         classified.append((category, float(spacing_m)))
     return classified

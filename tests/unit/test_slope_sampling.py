@@ -54,9 +54,13 @@ def test_slope_value_keeps_flat_ground_and_drops_missing(sample, expected):
         (71, 5.0, "rolling_hills"),
         (71, 0.5, "scrubbed_flat"),
         (71, -9999, "scrubbed_flat"),
+        (90, 15.0, "forested"),
+        (95, 5.0, "rolling_hills"),
+        (11, 0.5, "scrubbed_flat"),
+        (12, 0.0, "mountain"),
     ],
 )
-def test_sample_terrain_reclassifies_only_scrubbed_flat(
+def test_sample_terrain_uses_the_rules_file(
     monkeypatch, nlcd_code, slope, expected
 ):
     from app.route import sample_terrain
