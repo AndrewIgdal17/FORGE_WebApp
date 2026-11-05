@@ -60,25 +60,19 @@ for zip in "$SRC"/*.zip; do
   ogr2ogr -f PostgreSQL "PG:$DATABASE_URL" "$gdb" "$layer" \
     -t_srs EPSG:5070 -nlt MULTIPOLYGON -nln ref.nwi_staging -overwrite \
     -lco GEOMETRY_NAME=geom
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
-INSERT INTO ref.nwi_wetlands (state, attribute, geom)
-SELECT '${state}', s.attribute,
-       ST_Multi(ST_CollectionExtract(ST_Intersection(s.geom, c.geom), 3))
-FROM ref.nwi_staging s
-JOIN (
-  SELECT ST_Union(geom) AS geom
-  FROM ref.counties_tiger
-  WHERE statefp = '${fips}'
-) c ON ST_Intersects(s.geom, c.geom)
-WHERE NOT ST_IsEmpty(ST_Intersection(s.geom, c.geom));
-INSERT INTO ref.nwi_provenance (state, release_label, downloaded_on)
-VALUES ('${state}', '${NWI_RELEASE}', '${NWI_DOWNLOADED_ON}')
-ON CONFLICT (state) DO UPDATE
-SET release_label = EXCLUDED.release_label,
-    downloaded_on = EXCLUDED.downloaded_on,
-    loaded_at = now();
-DROP TABLE ref.nwi_staging;
-SQL
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction \
+    -c "SET max_parallel_workers_per_gather = 4" \
+    -c "SET parallel_setup_cost = 0" \
+    -c "SET parallel_tuple_cost = 0" \
+    -c "SET min_parallel_table_scan_size = '8MB'" \
+    -c "DROP TABLE IF EXISTS ref.nwi_fixed" \
+    -v state="$state" -v fips="$fips" \
+    -v release="$NWI_RELEASE" -v downloaded_on="$NWI_DOWNLOADED_ON" \
+    -f "$(dirname "$0")/nwi_repair.sql" \
+    -f "$(dirname "$0")/nwi_clip.sql" \
+    -f "$(dirname "$0")/nwi_finish.sql"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS ref.nwi_fixed"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS ref.nwi_staging"
   rm -rf "$work"
 done
 
