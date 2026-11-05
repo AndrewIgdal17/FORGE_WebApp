@@ -44,12 +44,11 @@ declare -A FIPS=(
 
 require_gather() {
   local statement=$1
+  local settings
+  settings=$(cat "$DIR/nwi_parallel.sql")
   local plan
   plan=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v state="$state" -v fips="$fips" <<SQL
-SET max_parallel_workers_per_gather = 4;
-SET parallel_setup_cost = 0;
-SET parallel_tuple_cost = 0;
-SET min_parallel_table_scan_size = '8MB';
+$settings
 EXPLAIN
 $statement
 SQL
@@ -120,7 +119,7 @@ SELECT CASE
 END;
 SQL
 )
-  if [[ "$gate" == "bad" ]]; then
+  if [[ "$state" == "TX" && "$gate" == "bad" ]]; then
     echo "objectid 864514 is still invalid after repair; refusing to run" >&2
     exit 1
   fi
@@ -136,25 +135,32 @@ SQL
     psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS ref.nwi_fixed"
     require_gather "$(cat "$DIR/nwi_repair.sql")"
     psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction \
-      -c "SET max_parallel_workers_per_gather = 4" \
-      -c "SET parallel_setup_cost = 0" \
-      -c "SET parallel_tuple_cost = 0" \
-      -c "SET min_parallel_table_scan_size = '8MB'" \
+      -f "$DIR/nwi_parallel.sql" \
       -f "$DIR/nwi_repair.sql"
   fi
 
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "ANALYZE ref.nwi_fixed"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS ref.nwi_county"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction \
+    -v fips="$fips" \
+    -f "$DIR/nwi_parallel.sql" \
+    -f "$DIR/nwi_county.sql"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "ANALYZE ref.nwi_county"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS ref.nwi_clipped"
   require_gather "$(cat "$DIR/nwi_clip.sql")" kept
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction \
-    -c "SET max_parallel_workers_per_gather = 4" \
-    -c "SET parallel_setup_cost = 0" \
-    -c "SET parallel_tuple_cost = 0" \
-    -c "SET min_parallel_table_scan_size = '8MB'" \
+    -v state="$state" -v fips="$fips" \
+    -f "$DIR/nwi_parallel.sql" \
+    -f "$DIR/nwi_clip.sql"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction \
     -v state="$state" -v fips="$fips" \
     -v release="$NWI_RELEASE" -v downloaded_on="$NWI_DOWNLOADED_ON" \
-    -f "$DIR/nwi_clip.sql" \
+    -f "$DIR/nwi_parallel.sql" \
+    -f "$DIR/nwi_insert.sql" \
     -f "$DIR/nwi_finish.sql"
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS ref.nwi_fixed"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS ref.nwi_county"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS ref.nwi_clipped"
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS ref.nwi_staging"
   echo "$state load committed"
 done

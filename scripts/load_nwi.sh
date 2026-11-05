@@ -61,17 +61,21 @@ for zip in "$SRC"/*.zip; do
     -t_srs EPSG:5070 -nlt MULTIPOLYGON -nln ref.nwi_staging -overwrite \
     -lco GEOMETRY_NAME=geom
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction \
-    -c "SET max_parallel_workers_per_gather = 4" \
-    -c "SET parallel_setup_cost = 0" \
-    -c "SET parallel_tuple_cost = 0" \
-    -c "SET min_parallel_table_scan_size = '8MB'" \
     -c "DROP TABLE IF EXISTS ref.nwi_fixed" \
+    -c "DROP TABLE IF EXISTS ref.nwi_county" \
+    -c "DROP TABLE IF EXISTS ref.nwi_clipped" \
     -v state="$state" -v fips="$fips" \
     -v release="$NWI_RELEASE" -v downloaded_on="$NWI_DOWNLOADED_ON" \
+    -f "$(dirname "$0")/nwi_parallel.sql" \
     -f "$(dirname "$0")/nwi_repair.sql" \
+    -f "$(dirname "$0")/nwi_county.sql" \
+    -c "ANALYZE ref.nwi_county" \
     -f "$(dirname "$0")/nwi_clip.sql" \
+    -f "$(dirname "$0")/nwi_insert.sql" \
     -f "$(dirname "$0")/nwi_finish.sql"
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS ref.nwi_fixed"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS ref.nwi_county"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS ref.nwi_clipped"
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS ref.nwi_staging"
   rm -rf "$work"
 done

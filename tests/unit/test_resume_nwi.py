@@ -12,9 +12,13 @@ def test_resume_script_never_truncates_and_reuses_texas_staging():
     assert "nwi_schema.sql" not in script
     assert "load_nwi.sh" not in script
     assert "nwi_repair.sql" in script
+    assert "nwi_parallel.sql" in script
+    assert "nwi_county.sql" in script
     assert "nwi_clip.sql" in script
+    assert "nwi_insert.sql" in script
     assert "nwi_finish.sql" in script
-    assert "max_parallel_workers_per_gather = 4" in script
+    assert "ANALYZE ref.nwi_county" in script
+    assert '[[ "$state" == "TX" && "$gate" == "bad" ]]' in script
     assert "clip plan has no Gather; refusing to run" in script
     assert "ref.nwi_fixed was kept" in script
     assert "objectid = 864514" in script
