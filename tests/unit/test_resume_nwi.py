@@ -42,3 +42,29 @@ def test_existing_staging_flag_rejects_a_non_texas_list():
     )
     assert result.returncode == 1
     assert "existing staging is only valid for TX" in result.stderr
+
+
+FINISHED = (
+    "AL AR AZ CA CO CT DC DE FL GA IA ID IL IN KS KY LA MA MD ME "
+    "MI MN MO MS MT NC ND NE NH NJ NM NV NY OH OK OR PA RI SC SD TN"
+).split()
+
+
+def test_provenance_migration_records_finished_states_only():
+    sql = (ROOT / "scripts" / "nwi_provenance_migrate.sql").read_text()
+    assert len(FINISHED) == 41
+    for code in FINISHED:
+        assert f"('{code}')" in sql
+    for code in ("TX", "UT", "VA", "VT", "WA", "WI", "WV", "WY"):
+        assert f"('{code}')" not in sql
+    assert "BEGIN;" in sql
+    assert "COMMIT;" in sql
+    assert "WHERE p.id = 1" in sql
+    assert "DROP TABLE ref.nwi_provenance;" in sql
+    assert "ALTER TABLE ref.nwi_provenance_state RENAME TO nwi_provenance;" in sql
+    assert "GRANT SELECT ON ref.nwi_provenance TO forge_api;" in sql
+    assert "TRUNCATE" not in sql
+    assert "DELETE FROM ref.nwi_wetlands" not in sql
+    assert "DROP TABLE ref.nwi_wetlands" not in sql
+    assert "ref.nwi_provenance has no id column; refusing to migrate" in sql
+    assert "ref.nwi_wetlands has a state outside the finished load" in sql
