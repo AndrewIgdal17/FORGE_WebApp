@@ -7,11 +7,19 @@ import time
 
 import forge
 import pytest
+from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
 
+from app.layer_releases import layer_releases
 from app.main import FORGE_CALC_WORKERS, app
 
 SCENARIOS_DIR = forge.get_scenarios_path()
+
+# Austin to Dallas. RouteGeometry accepts it; analysis is stubbed below.
+COVERED_ROUTE = {
+    "type": "MultiLineString",
+    "coordinates": [[[-97.74, 30.27], [-97.10, 31.50], [-96.80, 32.78]]],
+}
 
 ACRE_PATHS = (
     "02_project_physical_details.terrain.protected_area_acres.forested",
@@ -43,6 +51,22 @@ def anyio_backend():
     return "asyncio"
 
 
+@pytest.fixture(autouse=True)
+def stub_route_analysis(monkeypatch):
+    """Return empty measured changes so the request acres reach the workers."""
+
+    async def fake_analysis(route, row_width_ft):
+        return JSONResponse(
+            status_code=200,
+            content={
+                "changes": {},
+                "layer_releases": layer_releases([]),
+            },
+        )
+
+    monkeypatch.setattr("app.route.run_route_analysis", fake_analysis)
+
+
 @pytest.mark.anyio
 async def test_concurrent_calculations():
     """One simultaneous request per case study, all succeed."""
@@ -56,6 +80,8 @@ async def test_concurrent_calculations():
                     "defaults_id": forge.get_defaults_id(),
                     "changes": ch,
                     "scenario_id": name,
+                    "route": COVERED_ROUTE,
+                    "row_width_ft": 100,
                 })
                 return name, resp
 
@@ -75,6 +101,8 @@ def _payload(scenario_id: str) -> dict:
         "defaults_id": forge.get_defaults_id(),
         "changes": {path: 0.0 for path in ACRE_PATHS},
         "scenario_id": scenario_id,
+        "route": COVERED_ROUTE,
+        "row_width_ft": 100,
     }
 
 
