@@ -231,7 +231,11 @@ class _FakeNwiConn:
     async def fetchval(self, query: str, *args: object) -> float:
         return 12.0
 
-    async def fetchrow(self, query: str, *args: object) -> dict[str, None]:
+    async def fetchrow(
+        self, query: str, *args: object
+    ) -> dict[str, float] | dict[str, None]:
+        if "route_m" in query:
+            return {"route_m": 1000.0, "inside_m": 1000.0}
         return {
             "sending_subregion": None,
             "receiving_subregion": None,
@@ -242,9 +246,15 @@ class _FakeNwiConn:
         }
 
     async def fetch(self, query: str, *args: object) -> list[dict[str, str]]:
+        if "release_label" in query:
+            return [{"release_label": "NWI"}]
         if "ref.nwi_provenance" in query and "ref.counties_tiger" not in query:
             return [{"state": "OK"}]
-        if "statefp" in query and "ref.counties_tiger" in query:
+        if (
+            "statefp" in query
+            and "ref.counties_tiger" in query
+            and "route_m" not in query
+        ):
             return [{"statefp": "48"}]
         return []
 
@@ -435,18 +445,19 @@ def test_endpoint_attribution_cross_region(analyze_client):
 
 
 def test_endpoint_attribution_ocean(analyze_client):
-    body = _analyze(analyze_client, PACIFIC_OCEAN)
-    assert {key: body[key] for key in ENDPOINT_KEYS} == {key: None for key in ENDPOINT_KEYS}
+    from app.route import ROUTE_REQUIRED
+
+    response = analyze_client.post("/api/route/analyze", json=PACIFIC_OCEAN)
+    assert response.status_code == 422
+    assert response.json()["detail"] == ROUTE_REQUIRED
 
 
 def test_endpoint_attribution_partial_null(analyze_client):
-    body = _analyze(analyze_client, ANCHORAGE_FAIRBANKS)
-    assert body["sending_subregion"] == "AKGD"
-    assert body["receiving_subregion"] == "AKGD"
-    assert body["sending_gea"] is None
-    assert body["receiving_gea"] is None
-    assert body["sending_state"] == "AK"
-    assert body["receiving_state"] == "AK"
+    from app.route import ROUTE_REQUIRED
+
+    response = analyze_client.post("/api/route/analyze", json=ANCHORAGE_FAIRBANKS)
+    assert response.status_code == 422
+    assert response.json()["detail"] == ROUTE_REQUIRED
 
 
 def test_endpoint_fields_present_on_normal_route(analyze_client):
@@ -472,13 +483,18 @@ def test_existing_analyze_unchanged(analyze_client):
     assert "sending_subregion" not in body["changes"]
     assert "open_water_miles" in body
     assert "open_water_miles" not in body["changes"]
+    assert body["layer_releases"]["land_cover"].startswith("NLCD 2021")
 
 
 class _FakePadusConn:
     async def fetchval(self, query: str, *args: object) -> float:
         return 1.0
 
-    async def fetchrow(self, query: str, *args: object) -> dict[str, None]:
+    async def fetchrow(
+        self, query: str, *args: object
+    ) -> dict[str, float] | dict[str, None]:
+        if "route_m" in query:
+            return {"route_m": 1000.0, "inside_m": 1000.0}
         return {key: None for key in (
             "sending_subregion",
             "receiving_subregion",
@@ -489,13 +505,19 @@ class _FakePadusConn:
         )}
 
     async def fetch(self, query: str, *args: object) -> list[dict[str, object]]:
+        if "release_label" in query:
+            return [{"release_label": "NWI"}]
         if "blm_zone_2022" in query:
             return []
         if "spacing_m" in query:
             return [{"x": 0.0, "y": 0.0, "spacing_m": 1609.344}]
         if "ref.nwi_provenance" in query and "ref.counties_tiger" not in query:
             return [{"state": "TX"}]
-        if "statefp" in query and "ref.counties_tiger" in query:
+        if (
+            "statefp" in query
+            and "ref.counties_tiger" in query
+            and "route_m" not in query
+        ):
             return [{"statefp": "48"}]
         return []
 
@@ -550,6 +572,49 @@ def test_analyze_returns_protected_acres_for_one_forested_mile(monkeypatch):
     ] == 0.0
     assert "open_water_miles" in body
     assert set(body["intersections"]["terrain/nlcd"]) == set(TERRAIN_KEYS)
+
+
+WA_BC = {
+    "route": {
+        "type": "MultiLineString",
+        "coordinates": [[[-122.75, 48.99], [-122.75, 49.10]]],
+    },
+    "row_width_ft": 100,
+}
+
+
+def test_washington_to_british_columbia_is_rejected(monkeypatch):
+    from app import route as route_module
+    from app.main import app
+
+    class _Conn:
+        async def fetchval(self, query: str, *args: object) -> float:
+            return 1.0
+
+        async def fetchrow(self, query: str, *args: object) -> dict[str, float]:
+            return {"route_m": 5000.0, "inside_m": 2100.0}
+
+        async def fetch(self, query: str, *args: object) -> list[dict[str, str]]:
+            if "statefp" in query:
+                return [{"statefp": "53"}]
+            return []
+
+    class _Acquire:
+        async def __aenter__(self) -> _Conn:
+            return _Conn()
+
+        async def __aexit__(self, *exc: object) -> bool:
+            return False
+
+    class _Pool:
+        def acquire(self) -> _Acquire:
+            return _Acquire()
+
+    monkeypatch.setattr(route_module.db_module, "get_db_pool", lambda: _Pool())
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.post("/api/route/analyze", json=WA_BC)
+    assert response.status_code == 422
+    assert response.json() == {"detail": "A drawn route inside the lower 48 is required."}
 
 
 def test_analyze_returns_503_when_protected_areas_are_not_loaded(monkeypatch):

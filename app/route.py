@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from . import db as db_module
 from .corridor import fetch_protected_areas_m2, fetch_wetland_areas_m2
+from .layer_releases import layer_releases
 from .models import sanitize_for_json
 from .states import FIPS_TO_STATE, fips_to_abbrev
 from .terrain_rules import (
@@ -513,14 +514,20 @@ def missing_required_nwi_state(statefps: list[Any], loaded_states: set[str]) -> 
     return False
 
 
-async def _route_missing_nwi_state(conn: Any, geojson: str) -> bool:
-    state_rows = await conn.fetch(_ROUTE_STATEFP_SQL, geojson)
+async def _route_missing_nwi_state(conn: Any, statefps: list[Any]) -> bool:
     loaded_rows = await conn.fetch(_LOADED_NWI_STATES_SQL)
     loaded = {str(row["state"]) for row in loaded_rows if row["state"] is not None}
-    return missing_required_nwi_state(
-        [row["statefp"] for row in state_rows],
-        loaded,
-    )
+    return missing_required_nwi_state(statefps, loaded)
+
+
+def _provenance_abbrevs(statefps: list[Any]) -> list[str]:
+    """USPS abbreviations for the states a route crosses."""
+    abbrevs: list[str] = []
+    for raw in statefps:
+        abbrev = fips_to_abbrev(_statefp_key(raw))
+        if abbrev:
+            abbrevs.append(abbrev)
+    return abbrevs
 
 
 @router.post("/api/route/analyze")
@@ -537,13 +544,23 @@ async def analyze_route(
     user_id = user.get("sub")
     if user_id:
         request.state.user_id = user_id
+    return await run_route_analysis(payload.route, payload.row_width_ft)
 
+
+async def run_route_analysis(
+    route: RouteGeometry, row_width_ft: float
+) -> JSONResponse:
+    """Run the analyze query sequence and return its JSON response.
+
+    A route that is not wholly inside the lower 48 and DC is 422. The success
+    body includes ``layer_releases`` for the states the route crosses.
+    """
     if rasterio is None:
         return _unavailable(
             "Terrain sampling is unavailable because rasterio is not installed."
         )
 
-    geojson = json.dumps(payload.route.model_dump())
+    geojson = json.dumps(route.model_dump())
     try:
         pool = db_module.get_db_pool()
     except RuntimeError:
@@ -551,24 +568,42 @@ async def analyze_route(
         return _unavailable("Database is not available.")
 
     endpoint_row = None
+    label_rows: list[Any] = []
     try:
         async with pool.acquire() as conn:
+            state_rows = await conn.fetch(_ROUTE_STATEFP_SQL, geojson)
+            coverage = await conn.fetchrow(
+                _COVERAGE_SQL, geojson, lower_48_dc_fips()
+            )
+            statefps = [row["statefp"] for row in state_rows]
+            if route_not_covered(
+                None if coverage is None else coverage["route_m"],
+                None if coverage is None else coverage["inside_m"],
+                statefps,
+            ):
+                return JSONResponse(
+                    status_code=422, content={"detail": ROUTE_REQUIRED}
+                )
             total_miles = await conn.fetchval(_TOTAL_MILES_SQL, geojson)
             zone_rows = await conn.fetch(_ZONE_MILES_SQL, geojson)
             point_rows = await conn.fetch(_SAMPLE_POINTS_SQL, geojson)
             endpoint_row = await conn.fetchrow(_ENDPOINT_SQL, geojson)
             try:
-                if await _route_missing_nwi_state(conn, geojson):
+                if await _route_missing_nwi_state(conn, statefps):
                     return _unavailable(_NWI_UNAVAILABLE)
-                areas = await fetch_wetland_areas_m2(
-                    conn, geojson, payload.row_width_ft
+                areas = await fetch_wetland_areas_m2(conn, geojson, row_width_ft)
+                label_rows = await conn.fetch(
+                    """
+                    SELECT DISTINCT release_label
+                    FROM ref.nwi_provenance
+                    WHERE state = ANY($1::text[])
+                    """,
+                    _provenance_abbrevs(statefps),
                 )
             except asyncpg.UndefinedTableError:
                 return _unavailable(_NWI_UNAVAILABLE)
             try:
-                overlap = await fetch_protected_areas_m2(
-                    conn, geojson, payload.row_width_ft
-                )
+                overlap = await fetch_protected_areas_m2(conn, geojson, row_width_ft)
             except asyncpg.UndefinedTableError:
                 return _unavailable(_PADUS_UNAVAILABLE)
     except asyncpg.PostgresError as exc:
@@ -601,8 +636,8 @@ async def analyze_route(
         )
 
     samples = classified_samples_from_hits(hits, areas)
-    result = apply_wetland_transfer(samples, payload.row_width_ft)
-    gap = protected_acres(samples, overlap, payload.row_width_ft)
+    result = apply_wetland_transfer(samples, row_width_ft)
+    gap = protected_acres(samples, overlap, row_width_ft)
     terrain = result.miles
     zones = zone_miles_from_rows(zone_rows)
     zones = normalize_zone_miles(zones, terrain)
@@ -617,6 +652,9 @@ async def analyze_route(
         "intersections": intersections,
         "changes": changes_for(intersections),
         "open_water_miles": result.open_water_miles,
+        "layer_releases": layer_releases(
+            [row["release_label"] for row in label_rows]
+        ),
         **endpoint_context(endpoint_row),
     }
     return JSONResponse(sanitize_for_json(body))
