@@ -182,3 +182,39 @@ async def fetch_wetland_areas_m2(
     """
     rows = await conn.fetch(sql, geojson, half_m)
     return [float(row["area_m2"]) for row in rows]
+
+
+PROTECTED_AREA_SQL = """
+SELECT s.slice_id,
+       COALESCE(
+         ST_Area(
+           ST_UnaryUnion(
+             ST_Collect(
+               ST_CollectionExtract(ST_Intersection(a.geom, p.geom), 3)
+             )
+           )
+         ),
+         0
+       ) AS area_m2
+FROM segs s
+LEFT JOIN assigned a ON a.slice_id = s.slice_id
+LEFT JOIN habitat.padus_gap123 p
+  ON a.geom IS NOT NULL
+ AND p.gap_sts IN (1, 2, 3)
+ AND ST_Intersects(a.geom, p.geom)
+GROUP BY s.part_id, s.i, s.slice_id
+ORDER BY s.part_id, s.i
+"""
+
+
+async def fetch_protected_areas_m2(
+    conn: asyncpg.Connection, geojson: str, row_width_ft: float
+) -> list[float]:
+    """GAP 1–3 overlap, square meters, one value per 30 m sample."""
+    half_m = row_width_ft * 0.3048 / 2.0
+    sql = f"""
+    {SLICE_FROM}
+    {PROTECTED_AREA_SQL}
+    """
+    rows = await conn.fetch(sql, geojson, half_m)
+    return [float(row["area_m2"]) for row in rows]

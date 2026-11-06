@@ -68,3 +68,57 @@ def test_sample_and_slice_midpoints_coincide():
     for sample, slice_row in zip(samples, slices, strict=True):
         assert float(sample["x"]) == pytest.approx(float(slice_row["x"]), abs=1e-4)
         assert float(sample["y"]) == pytest.approx(float(slice_row["y"]), abs=1e-4)
+
+
+def test_protected_area_sql_unions_gap_status_1_through_3():
+    from app.corridor import PROTECTED_AREA_SQL
+
+    assert "habitat.padus_gap123" in PROTECTED_AREA_SQL
+    assert "gap_sts IN (1, 2, 3)" in PROTECTED_AREA_SQL
+    assert "ST_UnaryUnion" in PROTECTED_AREA_SQL
+    assert "ST_CollectionExtract" in PROTECTED_AREA_SQL
+    assert "padus_sub" not in PROTECTED_AREA_SQL
+    assert "critical_habitat" not in PROTECTED_AREA_SQL
+    assert "SUM(ST_Area" not in PROTECTED_AREA_SQL
+
+
+@pytest.mark.skipif(
+    not os.environ.get("FORGE_DATABASE_URL_TEST"),
+    reason="FORGE_DATABASE_URL_TEST is not set",
+)
+def test_two_copies_of_one_square_count_once():
+    import asyncio
+
+    import asyncpg
+
+    square = "POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))"
+
+    async def run():
+        conn = await asyncpg.connect(os.environ["FORGE_DATABASE_URL_TEST"])
+        try:
+            await conn.execute(
+                "CREATE TEMP TABLE padus_overlap_fixture "
+                "(geom geometry(Polygon, 5070))"
+            )
+            await conn.execute(
+                """
+                INSERT INTO padus_overlap_fixture (geom)
+                VALUES
+                  (ST_GeomFromText($1, 5070)),
+                  (ST_GeomFromText($1, 5070))
+                """,
+                square,
+            )
+            return await conn.fetchrow(
+                """
+                SELECT ST_Area(ST_UnaryUnion(ST_Collect(geom))) AS union_area,
+                       SUM(ST_Area(geom)) AS summed_area
+                FROM padus_overlap_fixture
+                """
+            )
+        finally:
+            await conn.close()
+
+    row = asyncio.run(run())
+    assert float(row["union_area"]) == pytest.approx(100.0)
+    assert float(row["summed_area"]) == pytest.approx(200.0)
