@@ -366,6 +366,14 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
     defaults, missing row, wrong owner, missing route, non-positive width)
     never burns a rate-limit slot.
 
+    The SELECT is its own transaction. It ends once not_found and not_owner
+    have been applied and the fields the rest of this function needs are
+    copied off the row. Route and width checks, rate limits, route analysis,
+    and calculation then run with no scenario connection held: analysis
+    acquires a second connection from the same pool, and holding the first
+    across that acquire deadlocks the pool once enough PATCHes overlap. A
+    second transaction runs only the UPDATE.
+
     `revision` is enforced as a compare-and-swap in the UPDATE's WHERE
     clause (`revision = $old_revision`), not by a separate SELECT-then-compare
     check beforehand: two concurrent PATCHes that both read the same
@@ -388,94 +396,111 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
             return _error(status.HTTP_404_NOT_FOUND, "not_found", "No such scenario.")
         if str(existing["user_id"]) != user_id:
             return _error(status.HTTP_403_FORBIDDEN, "not_owner", "This scenario belongs to another user.")
+        # Copied before this transaction ends. Later steps must not touch the
+        # row or the connection: route analysis acquires its own.
+        stored = {
+            "id": existing["id"],
+            "user_id": existing["user_id"],
+            "name": existing["name"],
+            "defaults_id": existing["defaults_id"],
+            "changes": existing["changes"],
+            "route": existing["route"],
+            "results": existing["results"],
+            "calculator": existing["calculator"],
+            "inputs_id": existing["inputs_id"],
+            "computed_at": existing["computed_at"],
+            "calc_error": existing["calc_error"],
+            "revision": existing["revision"],
+        }
 
-        recalculate = (
-            "changes" in payload.model_fields_set or "defaults_id" in payload.model_fields_set
-        )
-        new_name = payload.name if payload.name is not None else existing["name"]
-        new_defaults_id = (
-            payload.defaults_id if payload.defaults_id is not None else existing["defaults_id"]
-        )
-        new_changes = (
-            payload.changes if payload.changes is not None else _decode_jsonb(existing["changes"])
-        )
+    recalculate = (
+        "changes" in payload.model_fields_set or "defaults_id" in payload.model_fields_set
+    )
+    new_name = payload.name if payload.name is not None else stored["name"]
+    new_defaults_id = (
+        payload.defaults_id if payload.defaults_id is not None else stored["defaults_id"]
+    )
+    new_changes = (
+        payload.changes if payload.changes is not None else _decode_jsonb(stored["changes"])
+    )
 
-        prepared: tuple[RouteGeometry, float] | None = None
-        if recalculate:
-            prepared_route = _prepare_route(
-                _route_to_measure(
-                    payload.route, "route" in payload.model_fields_set, existing["route"]
-                ),
-                payload.row_width_ft,
-            )
-            if isinstance(prepared_route, JSONResponse):
-                return prepared_route
-            prepared = prepared_route
+    prepared: tuple[RouteGeometry, float] | None = None
+    if recalculate:
+        prepared_route = _prepare_route(
+            _route_to_measure(
+                payload.route, "route" in payload.model_fields_set, stored["route"]
+            ),
+            payload.row_width_ft,
+        )
+        if isinstance(prepared_route, JSONResponse):
+            return prepared_route
+        prepared = prepared_route
 
-        if not auth_module.rate_limiter.allow_write(user_id):
+    if not auth_module.rate_limiter.allow_write(user_id):
+        return _rate_limited()
+
+    releases = None
+    if recalculate:
+        assert prepared is not None
+        geometry, row_width_ft = prepared
+        if not auth_module.rate_limiter.allow_calculation(user_id):
             return _rate_limited()
+        measured = await _measure_changes(geometry, row_width_ft, new_changes)
+        if isinstance(measured, JSONResponse):
+            return measured
+        new_changes, releases = measured
+        calc_fields, error_response = _calculate(new_name, new_changes)
+        if error_response is not None:
+            return error_response
+    else:
+        # Name-only update: keep whatever results/calc_error are already stored.
+        calc_fields = {
+            "results": _decode_jsonb(stored["results"]),
+            "calculator": _decode_jsonb(stored["calculator"]),
+            "inputs_id": stored["inputs_id"],
+            "computed_at": stored["computed_at"],
+            "calc_error": stored["calc_error"],
+        }
 
-        releases = None
-        if recalculate:
-            assert prepared is not None
-            geometry, row_width_ft = prepared
-            if not auth_module.rate_limiter.allow_calculation(user_id):
-                return _rate_limited()
-            measured = await _measure_changes(geometry, row_width_ft, new_changes)
-            if isinstance(measured, JSONResponse):
-                return measured
-            new_changes, releases = measured
-            calc_fields, error_response = _calculate(new_name, new_changes)
-            if error_response is not None:
-                return error_response
-        else:
-            # Name-only update: keep whatever results/calc_error are already stored.
-            calc_fields = {
-                "results": _decode_jsonb(existing["results"]),
-                "calculator": _decode_jsonb(existing["calculator"]),
-                "inputs_id": existing["inputs_id"],
-                "computed_at": existing["computed_at"],
-                "calc_error": existing["calc_error"],
-            }
+    assignments = [
+        "name = $1",
+        "defaults_id = $2",
+        "changes = $3::jsonb",
+        "results = $4::jsonb",
+        "calculator = $5::jsonb",
+        "inputs_id = $6",
+        "computed_at = $7",
+        "calc_error = $8",
+    ]
+    params: list[Any] = [
+        new_name,
+        new_defaults_id,
+        json.dumps(new_changes),
+        _jsonb_param(calc_fields["results"]),
+        _jsonb_param(calc_fields["calculator"]),
+        calc_fields["inputs_id"],
+        calc_fields["computed_at"],
+        calc_fields["calc_error"],
+    ]
+    # Only fields the caller sent. A name-only PATCH must not null the route.
+    if "route" in payload.model_fields_set:
+        params.append(_geojson_param(payload.route))
+        assignments.append(
+            f"route = ST_SetSRID(ST_GeomFromGeoJSON(${len(params)}::text), 4326)"
+        )
+    if "segments" in payload.model_fields_set:
+        params.append(_jsonb_param(payload.segments))
+        assignments.append(f"segments = ${len(params)}::jsonb")
+    if recalculate:
+        params.append(_jsonb_param(releases))
+        assignments.append(f"layer_releases = ${len(params)}::jsonb")
+    assignments.append("revision = revision + 1")
+    params.append(stored["id"])
+    id_param = len(params)
+    params.append(payload.revision)
+    revision_param = len(params)
 
-        assignments = [
-            "name = $1",
-            "defaults_id = $2",
-            "changes = $3::jsonb",
-            "results = $4::jsonb",
-            "calculator = $5::jsonb",
-            "inputs_id = $6",
-            "computed_at = $7",
-            "calc_error = $8",
-        ]
-        params: list[Any] = [
-            new_name,
-            new_defaults_id,
-            json.dumps(new_changes),
-            _jsonb_param(calc_fields["results"]),
-            _jsonb_param(calc_fields["calculator"]),
-            calc_fields["inputs_id"],
-            calc_fields["computed_at"],
-            calc_fields["calc_error"],
-        ]
-        # Only fields the caller sent. A name-only PATCH must not null the route.
-        if "route" in payload.model_fields_set:
-            params.append(_geojson_param(payload.route))
-            assignments.append(
-                f"route = ST_SetSRID(ST_GeomFromGeoJSON(${len(params)}::text), 4326)"
-            )
-        if "segments" in payload.model_fields_set:
-            params.append(_jsonb_param(payload.segments))
-            assignments.append(f"segments = ${len(params)}::jsonb")
-        if recalculate:
-            params.append(_jsonb_param(releases))
-            assignments.append(f"layer_releases = ${len(params)}::jsonb")
-        assignments.append("revision = revision + 1")
-        params.append(existing["id"])
-        id_param = len(params)
-        params.append(payload.revision)
-        revision_param = len(params)
-
+    async with db_module.forge_api_transaction(user_id) as conn:
         record = await conn.fetchrow(
             f"""
             update public.scenario
