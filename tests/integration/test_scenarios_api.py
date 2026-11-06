@@ -29,6 +29,7 @@ import asyncpg
 import forge
 import httpx
 import pytest
+from fastapi.responses import JSONResponse
 
 from app import scenarios as scenarios_module
 from app.models import ScenarioUpdate
@@ -170,6 +171,25 @@ def _delete_user(user_id: str) -> None:
 # --- Fixtures ----------------------------------------------------------------
 
 
+# scenarios.py binds `from .route import run_route_analysis` and awaits that
+# name. Patch the scenarios module, not app.route, or the real GIS call runs.
+@pytest.fixture(autouse=True)
+def _stub_route_analysis(monkeypatch):
+    async def fake_analysis(_route, _row_width_ft):
+        return JSONResponse(
+            status_code=200,
+            content={
+                "changes": {},
+                "layer_releases": {
+                    "land_cover": "NLCD 2021",
+                    "wetlands": "file dates 2026-10-09",
+                },
+            },
+        )
+
+    monkeypatch.setattr(scenarios_module, "run_route_analysis", fake_analysis)
+
+
 @pytest.fixture
 def client(_real_auth_app):
     with TestClient(app_main_module.app) as test_client:
@@ -197,6 +217,14 @@ def make_user(client):
 
 LAREDO_FILE = "AEP_LRGV_Laredo_NewBuild.forge"
 
+# Austin–Dallas. Empty measured changes must not overwrite the request changes,
+# and the stub must not invent protected-area acres.
+ROUTE = {
+    "type": "MultiLineString",
+    "coordinates": [[[-97.74, 30.27], [-96.80, 32.78]]],
+}
+ROW_WIDTH_FT = 100
+
 ACRE_PATHS = (
     "02_project_physical_details.terrain.protected_area_acres.forested",
     "02_project_physical_details.terrain.protected_area_acres.scrubbed_flat",
@@ -219,6 +247,8 @@ def _create_payload(name: str = "Test scenario", changes: dict | None = None) ->
         "source": "manual",
         "defaults_id": forge.get_defaults_id(),
         "changes": changes if changes is not None else _laredo_changes(),
+        "route": ROUTE,
+        "row_width_ft": ROW_WIDTH_FT,
     }
 
 
@@ -252,7 +282,12 @@ def test_patch_with_changes_recalculates_and_bumps_revision(client, make_user):
 
     response = client.patch(
         f"/api/scenarios/{created['id']}",
-        json={"revision": created["revision"], "changes": new_changes},
+        json={
+            "revision": created["revision"],
+            "changes": new_changes,
+            "route": ROUTE,
+            "row_width_ft": ROW_WIDTH_FT,
+        },
         headers=headers,
     )
 
