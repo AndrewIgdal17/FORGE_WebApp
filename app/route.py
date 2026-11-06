@@ -26,7 +26,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator
 
 from . import db as db_module
-from .corridor import fetch_wetland_areas_m2
+from .corridor import fetch_protected_areas_m2, fetch_wetland_areas_m2
 from .models import sanitize_for_json
 from .states import fips_to_abbrev
 from .terrain_rules import (
@@ -38,6 +38,7 @@ from .terrain_rules import (
     land_cover_class,
     load_classification,
     load_mapping_rules,
+    protected_acres,
 )
 
 logger = logging.getLogger(__name__)
@@ -173,6 +174,7 @@ SELECT state FROM ref.nwi_provenance
 _NWI_STATEFP_NOT_REQUIRED = frozenset({"02", "15", "60", "66", "69", "72", "78"})
 
 _NWI_UNAVAILABLE = "National Wetlands Inventory is not loaded."
+_PADUS_UNAVAILABLE = "Protected areas are not loaded."
 
 
 def _text_cell(row: Any | None, column: str) -> str | None:
@@ -499,6 +501,12 @@ async def analyze_route(
                 )
             except asyncpg.UndefinedTableError:
                 return _unavailable(_NWI_UNAVAILABLE)
+            try:
+                overlap = await fetch_protected_areas_m2(
+                    conn, geojson, payload.row_width_ft
+                )
+            except asyncpg.UndefinedTableError:
+                return _unavailable(_PADUS_UNAVAILABLE)
     except asyncpg.PostgresError as exc:
         sqlstate = getattr(exc, "sqlstate", "") or ""
         message = str(exc).lower()
@@ -528,12 +536,23 @@ async def analyze_route(
             content={"detail": "Terrain sampling failed."},
         )
 
-    result = terrain_from_hits(hits, areas, payload.row_width_ft)
+    if len(hits) != len(areas):
+        raise RuntimeError("wetland area count does not match sample count")
+    samples = [
+        ClassifiedSample(hit.land_cover, hit.length_m, hit.nlcd_code, area)
+        for hit, area in zip(hits, areas, strict=True)
+    ]
+    result = apply_wetland_transfer(samples, payload.row_width_ft)
+    gap = protected_acres(samples, overlap, payload.row_width_ft)
     terrain = result.miles
     zones = zone_miles_from_rows(zone_rows)
     zones = normalize_zone_miles(zones, terrain)
 
-    intersections = {TERRAIN_LAYER: terrain, ROW_LAYER: zones}
+    intersections = {
+        TERRAIN_LAYER: result.miles,
+        ROW_LAYER: zones,
+        "habitat/padus": gap,
+    }
     body = {
         "total_miles": float(total_miles),
         "intersections": intersections,

@@ -396,9 +396,14 @@ def analyze_client(monkeypatch):
         rows = await conn.fetch(route_module._SAMPLE_POINTS_SQL, geojson)
         return [0.0 for _ in rows]
 
+    async def _zero_protected_areas(conn, geojson: str, row_width_ft: float) -> list[float]:
+        rows = await conn.fetch(route_module._SAMPLE_POINTS_SQL, geojson)
+        return [0.0 for _ in rows]
+
     monkeypatch.setattr(main_module, "_FORGE_DATABASE_URL", dsn)
     monkeypatch.setattr(route_module, "sample_terrain", _scrubbed_samples)
     monkeypatch.setattr(route_module, "fetch_wetland_areas_m2", _zero_wetland_areas)
+    monkeypatch.setattr(route_module, "fetch_protected_areas_m2", _zero_protected_areas)
     with TestClient(app) as client:
         yield client
 
@@ -454,9 +459,115 @@ def test_endpoint_fields_present_on_normal_route(analyze_client):
 def test_existing_analyze_unchanged(analyze_client):
     body = _analyze(analyze_client, AUSTIN_DALLAS)
     assert body["total_miles"] == pytest.approx(183.4, abs=0.01)
-    assert set(body["intersections"]) == {"terrain/nlcd", "row/blm"}
+    assert set(body["intersections"]) == {"terrain/nlcd", "row/blm", "habitat/padus"}
+    assert set(body["intersections"]["habitat/padus"]) == {
+        "forested",
+        "scrubbed_flat",
+        "desert_barren",
+        "rolling_hills",
+        "mountain",
+    }
     assert set(body["intersections"]["terrain/nlcd"]) == set(TERRAIN_KEYS)
     assert isinstance(body["changes"], dict)
     assert "sending_subregion" not in body["changes"]
     assert "open_water_miles" in body
     assert "open_water_miles" not in body["changes"]
+
+
+class _FakePadusConn:
+    async def fetchval(self, query: str, *args: object) -> float:
+        return 1.0
+
+    async def fetchrow(self, query: str, *args: object) -> dict[str, None]:
+        return {key: None for key in (
+            "sending_subregion",
+            "receiving_subregion",
+            "sending_gea",
+            "receiving_gea",
+            "sending_statefp",
+            "receiving_statefp",
+        )}
+
+    async def fetch(self, query: str, *args: object) -> list[dict[str, object]]:
+        if "blm_zone_2022" in query:
+            return []
+        if "spacing_m" in query:
+            return [{"x": 0.0, "y": 0.0, "spacing_m": 1609.344}]
+        if "ref.nwi_provenance" in query and "ref.counties_tiger" not in query:
+            return [{"state": "TX"}]
+        if "statefp" in query and "ref.counties_tiger" in query:
+            return [{"statefp": "48"}]
+        return []
+
+
+class _FakePadusAcquire:
+    async def __aenter__(self) -> _FakePadusConn:
+        return _FakePadusConn()
+
+    async def __aexit__(self, *exc: object) -> bool:
+        return False
+
+
+class _FakePadusPool:
+    def acquire(self) -> _FakePadusAcquire:
+        return _FakePadusAcquire()
+
+
+def test_analyze_returns_protected_acres_for_one_forested_mile(monkeypatch):
+    from app import route as route_module
+    from app.main import app
+    from app.terrain_rules import SampleHit
+
+    async def _no_wetland(conn, geojson: str, row_width_ft: float) -> list[float]:
+        return [0.0]
+
+    async def _one_acre(conn, geojson: str, row_width_ft: float) -> list[float]:
+        return [4046.8564224]
+
+    def _forested_mile(points):
+        return [SampleHit("forested", points[0][2], 41)]
+
+    monkeypatch.setattr(route_module.db_module, "get_db_pool", lambda: _FakePadusPool())
+    monkeypatch.setattr(route_module, "fetch_wetland_areas_m2", _no_wetland)
+    monkeypatch.setattr(route_module, "fetch_protected_areas_m2", _one_acre)
+    monkeypatch.setattr(route_module, "sample_terrain", _forested_mile)
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.post("/api/route/analyze", json=AUSTIN_DALLAS)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    gap = body["intersections"]["habitat/padus"]
+    assert gap["forested"] == pytest.approx(1.0)
+    assert gap["scrubbed_flat"] == 0.0
+    assert gap["desert_barren"] == 0.0
+    assert gap["rolling_hills"] == 0.0
+    assert gap["mountain"] == 0.0
+    changes = body["changes"]
+    assert changes[
+        "02_project_physical_details.terrain.protected_area_acres.forested"
+    ] == pytest.approx(1.0)
+    assert changes[
+        "02_project_physical_details.terrain.protected_area_acres.scrubbed_flat"
+    ] == 0.0
+    assert "open_water_miles" in body
+    assert set(body["intersections"]["terrain/nlcd"]) == set(TERRAIN_KEYS)
+
+
+def test_analyze_returns_503_when_protected_areas_are_not_loaded(monkeypatch):
+    import asyncpg
+
+    from app import route as route_module
+    from app.main import app
+
+    async def _no_wetland(conn, geojson: str, row_width_ft: float) -> list[float]:
+        return [0.0]
+
+    async def _missing_table(conn, geojson: str, row_width_ft: float) -> list[float]:
+        raise asyncpg.UndefinedTableError("habitat.padus_gap123")
+
+    monkeypatch.setattr(route_module.db_module, "get_db_pool", lambda: _FakePadusPool())
+    monkeypatch.setattr(route_module, "fetch_wetland_areas_m2", _no_wetland)
+    monkeypatch.setattr(route_module, "fetch_protected_areas_m2", _missing_table)
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.post("/api/route/analyze", json=AUSTIN_DALLAS)
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Protected areas are not loaded."}
