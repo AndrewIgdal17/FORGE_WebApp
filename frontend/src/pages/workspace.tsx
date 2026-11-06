@@ -18,12 +18,16 @@ import { ContributionStrip } from '@/components/workspace/contribution-strip';
 import { WorkspaceHeader } from '@/components/workspace/workspace-header';
 import { SIDEBAR_SECTIONS } from '@/data/sidebar-sections';
 import { useNavigation } from '@/hooks/use-navigation';
-import { terrainMatchesRouteLength } from '@/lib/analyze-request';
+import {
+  calculateRequestBody,
+  resolvedRowWidthFt,
+  terrainMatchesRouteLength,
+} from '@/lib/analyze-request';
 import { ApiError, calculate } from '@/lib/api';
 import { diffChanges } from '@/lib/changes';
 import { debounce } from '@/lib/debounce';
 import { getValueAtPath } from '@/lib/path';
-import { scenarioMapRoute } from '@/lib/route-geometry';
+import { isMultiLineString, scenarioMapRoute } from '@/lib/route-geometry';
 import { useFormStore } from '@/stores/form-store';
 import { exportAsCsv, exportAsForge, useScenarioStore } from '@/stores/scenario-store';
 import type { Scenario, ScenarioGeometry } from '@/stores/scenario-store';
@@ -160,6 +164,26 @@ function validationBadges(
   return badges;
 }
 
+function calculationRoute(
+  drawn: ScenarioGeometry | undefined,
+  scenario: Scenario | null,
+): MultiLineString | null {
+  if (drawn !== undefined) {
+    return isMultiLineString(drawn.route) ? drawn.route : null;
+  }
+  return scenarioMapRoute(scenario);
+}
+
+function plainRoute(route: MultiLineString): Record<string, unknown> {
+  return { type: route.type, coordinates: route.coordinates };
+}
+
+function currentRowWidthFt(): number | null {
+  const form = useFormStore.getState();
+  if (!form.lookups) return null;
+  return resolvedRowWidthFt(form.getProjectFields(), form.lookups);
+}
+
 function storeResults(scenarioId: string, results: Record<string, unknown>): void {
   useScenarioStore.setState((state) => ({
     scenarios: state.scenarios.map((scenario) =>
@@ -277,6 +301,9 @@ function WorkspaceBody(): ReactElement {
     const form = useFormStore.getState();
     const active = useScenarioStore.getState().getActiveScenario();
     if (!active || !form.defaultsId || !form.data || !hasRequiredFields(form.data)) return;
+    const route = calculationRoute(drawn, active);
+    const rowWidthFt = currentRowWidthFt();
+    if (route == null || rowWidthFt == null) return;
     if (inFlightRef.current) {
       queuedRef.current = true;
       return;
@@ -288,11 +315,9 @@ function WorkspaceBody(): ReactElement {
     setCalculationStatus('Calculating...');
     try {
       const changes = form.getChanges();
-      const response = await calculate({
-        defaults_id: form.defaultsId,
-        changes,
-        scenario_id: scenarioId,
-      });
+      const response = await calculate(
+        calculateRequestBody(form.defaultsId, changes, route, rowWidthFt, scenarioId),
+      );
       if (useScenarioStore.getState().activeScenarioId !== scenarioId) return;
       const status = `Calculated in ${((performance.now() - started) / 1000).toFixed(1)}s`;
       lastStatusRef.current = status;
@@ -308,7 +333,7 @@ function WorkspaceBody(): ReactElement {
         scheduleRef.current();
       }
     }
-  }, []);
+  }, [drawn]);
 
   const scheduleCalculation = useMemo(
     () => debounce(() => { void runCalculation(); }, 300),
@@ -396,10 +421,12 @@ function WorkspaceBody(): ReactElement {
     const active = useScenarioStore.getState().getActiveScenario();
     if (!active || savingRef.current) return;
     if (!useScenarioStore.getState().unsavedChanges && drawn === undefined) return;
+    const rowWidthFt = currentRowWidthFt();
+    if (calculationRoute(drawn, active) == null || rowWidthFt == null) return;
     savingRef.current = true;
     try {
       const changes = useFormStore.getState().getChanges();
-      await saveScenario(active.id, changes, active.revision, drawn);
+      await saveScenario(active.id, changes, active.revision, drawn, rowWidthFt);
       setDrawn(undefined);
       baselineRef.current = JSON.stringify(changes);
       const latest = JSON.stringify(useFormStore.getState().getChanges());
@@ -498,14 +525,18 @@ function WorkspaceBody(): ReactElement {
     if (!draft || savingRef.current) return;
     const form = useFormStore.getState();
     if (!form.data || terrainMilesTotal(form.data) <= 0) return;
+    const route = calculationRoute(drawn, null);
+    const rowWidthFt = currentRowWidthFt();
+    if (route == null || rowWidthFt == null) return;
     savingRef.current = true;
     try {
       const scenario = await createScenario(
         draft.name,
         draft.source,
         form.getChanges(),
-        drawn?.route ?? null,
+        plainRoute(route),
         drawn?.segments ?? null,
+        rowWidthFt,
       );
       setDraft(null);
       setDrawn(undefined);
@@ -542,7 +573,11 @@ function WorkspaceBody(): ReactElement {
   const reconductoring = useFormStore.getState().isReconductoring();
   const showRouteMap = view === 'inputs' && subItemId === 'route';
   const createMode = draft !== null && activeScenarioId === null;
-  const canCreate = createMode && terrainMilesTotal(data ?? {}) > 0;
+  const canCreate =
+    createMode &&
+    terrainMilesTotal(data ?? {}) > 0 &&
+    calculationRoute(drawn, null) != null &&
+    currentRowWidthFt() != null;
 
   return (
     <div className="flex h-screen flex-col bg-slate-50">

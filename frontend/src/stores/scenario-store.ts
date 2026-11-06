@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { resolvedRowWidthFt } from '@/lib/analyze-request';
 import {
   createScenario as createScenarioApi,
   getDefaults,
@@ -9,6 +10,7 @@ import {
 import type { ScenarioResponse } from '@/lib/api';
 import { acceptedForge, diffChanges, forgeDocument } from '@/lib/changes';
 import { csvEscape, parseCsvLine } from '@/lib/csv';
+import { loadLookups, type ProjectFields } from '@/lib/lookups';
 import { flattenObject, getValueAtPath, setValueAtPath } from '@/lib/path';
 import { routeFromSegments } from '@/lib/route-geometry';
 import { supabase } from '@/lib/supabase';
@@ -59,12 +61,14 @@ interface ScenarioStore {
     changes: Record<string, unknown>,
     route?: Record<string, unknown> | null,
     segments?: unknown[] | null,
+    rowWidthFt?: number,
   ) => Promise<Scenario>;
   saveScenario: (
     id: string,
     changes: Record<string, unknown>,
     revision: number,
     geometry?: ScenarioGeometry,
+    rowWidthFt?: number,
   ) => Promise<Scenario>;
   renameScenario: (
     id: string,
@@ -169,6 +173,42 @@ function routePayload(
   const rebuilt = routeFromSegments(segments);
   if (!rebuilt) return null;
   return { type: rebuilt.type, coordinates: rebuilt.coordinates };
+}
+
+const PROJECT_FIELDS = '01_project_technical_details.project';
+
+function positiveWidth(rowWidthFt: number | undefined): rowWidthFt is number {
+  return typeof rowWidthFt === 'number' && rowWidthFt > 0;
+}
+
+function readProjectString(data: Record<string, unknown>, key: string): string {
+  const value = getValueAtPath(data, `${PROJECT_FIELDS}.${key}`);
+  return typeof value === 'string' ? value : '';
+}
+
+function projectFieldsFromDocument(data: Record<string, unknown>): ProjectFields {
+  const capacity = getValueAtPath(data, `${PROJECT_FIELDS}.capacity_mw`);
+  const fields: ProjectFields = {
+    constructionType: readProjectString(data, 'construction_type'),
+    acDc: readProjectString(data, 'ac_dc'),
+    capacityMw:
+      typeof capacity === 'number' && Number.isFinite(capacity) ? capacity : 0,
+    conductorType: readProjectString(data, 'conductor_type'),
+  };
+  const converter = readProjectString(data, 'converter_type');
+  if (converter) fields.converterType = converter;
+  return fields;
+}
+
+function rowWidthForDocument(
+  defaults: Record<string, unknown>,
+  changes: Record<string, unknown>,
+): number | null {
+  const data = structuredClone(defaults);
+  for (const [path, value] of Object.entries(changes)) {
+    setValueAtPath(data, path, value);
+  }
+  return resolvedRowWidthFt(projectFieldsFromDocument(data), loadLookups(defaults));
 }
 
 function deepClone<T>(value: T): T {
@@ -642,14 +682,22 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
     });
   },
 
-  createScenario: async (name, source, changes, route, segments) => {
+  createScenario: async (name, source, changes, route, segments, rowWidthFt) => {
+    if (route == null || !positiveWidth(rowWidthFt)) {
+      throw new Error(
+        route == null
+          ? 'A drawn route inside the lower 48 is required.'
+          : 'row_width_ft must be a positive number',
+      );
+    }
     const defaults = await getDefaults();
     const row = await createScenarioApi({
       name,
       source,
       defaults_id: defaults.calculator.defaults_id,
       changes,
-      ...(route !== undefined ? { route } : {}),
+      route,
+      row_width_ft: rowWidthFt,
       ...(segments !== undefined ? { segments } : {}),
     });
     const ownerUsername = get().scenarios.find(
@@ -660,17 +708,26 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
     return scenario;
   },
 
-  saveScenario: async (id, changes, revision, geometry) => {
+  saveScenario: async (id, changes, revision, geometry, rowWidthFt) => {
     const current = get().scenarios.find((scenario) => scenario.id === id);
+    const route =
+      geometry !== undefined
+        ? geometry.route
+        : routePayload(current?.route ?? null, current?.segments ?? null);
+    if (route == null || !positiveWidth(rowWidthFt)) {
+      if (!current) throw new Error('Scenario not found');
+      return current;
+    }
     const row = await updateScenarioApi(id, {
       revision,
       changes,
+      row_width_ft: rowWidthFt,
       ...(current
         ? { name: current.name, defaults_id: current.defaults_id }
         : {}),
       ...(geometry
         ? { route: geometry.route, segments: geometry.segments }
-        : {}),
+        : { route }),
     });
     const scenario = fromResponse(row, current?.ownerUsername);
     set((state) => ({
@@ -696,12 +753,15 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
       `${source.name} (copy)`,
       get().scenarios.map((scenario) => scenario.name),
     );
+    const defaults = await getDefaults();
+    const rowWidthFt = rowWidthForDocument(defaults.defaults, source.changes);
     return get().createScenario(
       name,
       'manual',
       deepClone(source.changes),
       routePayload(source.route, source.segments),
       source.segments == null ? null : deepClone(source.segments),
+      rowWidthFt ?? undefined,
     );
   },
 

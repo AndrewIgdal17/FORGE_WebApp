@@ -301,7 +301,7 @@ export function RightsOfWay({
                 rowWidthFeet={rowWidthFeet}
                 showAcquisition={showAcquisition}
                 canRemove={visibleZones.length > 1}
-                milesReadOnly={milesFromRoute && terrainMilesTotal > 0}
+                milesReadOnly={milesFromRoute}
                 onRemove={removeZone}
               />
             ))}

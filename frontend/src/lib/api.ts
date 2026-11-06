@@ -91,6 +91,8 @@ export type InputMetadataResponse = InputFieldMetadata[];
 export interface CalculateRequest {
   defaults_id: string;
   changes: Record<string, unknown>;
+  route: MultiLineString;
+  row_width_ft: number;
   scenario_id?: string;
 }
 
@@ -99,6 +101,7 @@ export interface CalculateResponse {
   scenario_id: string;
   timestamp: string;
   results: Record<string, unknown>;
+  layer_releases?: Record<string, string>;
   error: null;
 }
 
@@ -120,8 +123,9 @@ export interface ScenarioCreate {
   source: string;
   defaults_id: string;
   changes: Record<string, unknown>;
-  route?: Record<string, unknown> | null;
+  route: Record<string, unknown>;
   segments?: unknown[] | null;
+  row_width_ft: number;
 }
 
 export interface ScenarioUpdate {
@@ -131,6 +135,7 @@ export interface ScenarioUpdate {
   changes?: Record<string, unknown>;
   route?: Record<string, unknown> | null;
   segments?: unknown[] | null;
+  row_width_ft?: number;
 }
 
 export interface ScenarioResponse {

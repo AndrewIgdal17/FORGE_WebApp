@@ -3,6 +3,7 @@ import type { MultiLineString } from 'geojson';
 
 import {
   analyzeRequestBody,
+  calculateRequestBody,
   changesAfterAnalyze,
   resolvedRowWidthFt,
   submittedTerrainMiles,
@@ -37,6 +38,19 @@ function lookups(): LookupTables {
 }
 
 describe('analyze request', () => {
+  it('builds a calculate body with the drawn route and width', () => {
+    expect(calculateRequestBody('sha', { a: 1 }, route, 100, 'scn')).toEqual({
+      defaults_id: 'sha',
+      changes: { a: 1 },
+      route,
+      row_width_ft: 100,
+      scenario_id: 'scn',
+    });
+    expect(() => calculateRequestBody('sha', { a: 1 }, route, 0, 'scn')).toThrow(
+      'row_width_ft must be a positive number',
+    );
+  });
+
   it('sends the category width in feet', () => {
     expect(resolvedRowWidthFt(fields, lookups())).toBe(100);
     expect(analyzeRequestBody(route, 100)).toEqual({ route, row_width_ft: 100 });

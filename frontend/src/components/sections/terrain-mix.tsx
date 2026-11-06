@@ -156,7 +156,7 @@ export function TerrainMix({ milesFromRoute = false }: { milesFromRoute?: boolea
               <TerrainRow
                 key={terrain}
                 terrain={terrain}
-                readOnly={milesFromRoute && totalMiles > 0}
+                readOnly={milesFromRoute}
               />
             ))}
           </tbody>

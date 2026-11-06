@@ -12,12 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/hooks/use-toast';
 import { getDefaults } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import {
-  importCsvFile,
-  importForgeFile,
-  useScenarioStore,
-  type Scenario,
-} from '@/stores/scenario-store';
+import { useScenarioStore, type Scenario } from '@/stores/scenario-store';
 
 type ManagerTab = 'manage' | 'compare';
 type UploadKind = 'csv' | 'forge';
@@ -41,7 +36,6 @@ export default function ScenariosManagerPage(): ReactElement {
 
   const scenarios = useScenarioStore((state) => state.scenarios);
   const loadScenarios = useScenarioStore((state) => state.loadScenarios);
-  const createScenario = useScenarioStore((state) => state.createScenario);
   const setActiveScenario = useScenarioStore((state) => state.setActiveScenario);
 
   const [tab, setTab] = useState<ManagerTab>('manage');
@@ -109,17 +103,7 @@ export default function ScenariosManagerPage(): ReactElement {
           toast.error('Reference data is not loaded yet. Please wait a moment and try again.');
           continue;
         }
-        try {
-          const text = await file.text();
-          const draft =
-            kind === 'csv' && defaults
-              ? importCsvFile(text, file.name, defaults)
-              : importForgeFile(text, file.name);
-          const scenario = await createScenario(draft.name, draft.source, draft.changes);
-          toast.success(`Imported "${scenario.name}"`);
-        } catch (error) {
-          toast.error(errorMessage(error));
-        }
+        toast.error('A drawn route inside the lower 48 is required.');
       }
     } finally {
       setBusy(false);

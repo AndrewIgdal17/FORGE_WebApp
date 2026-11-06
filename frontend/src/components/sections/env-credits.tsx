@@ -12,6 +12,7 @@ import { useFormStore } from '@/stores/form-store';
 
 const PROJECT = '01_project_technical_details.project';
 const ENV = '09_environmental_mitigation.environmental_mitigation';
+const PROTECTED_ACRES = '02_project_physical_details.terrain.protected_area_acres';
 const UPLIFT_PATH = `${ENV}.mitigation_uplift_factor`;
 const CONFIGURE = 'Configure project first';
 
@@ -73,6 +74,15 @@ function formatAcres(value: number): string {
   return value.toLocaleString('en-US', { maximumFractionDigits: 1 });
 }
 
+function protectedAcresPath(terrain: TerrainId): string {
+  return `${PROTECTED_ACRES}.${terrain}`;
+}
+
+function wetlandAcres(miles: number, rowWidth: number | null, uplift: number): number | null {
+  if (rowWidth === null) return null;
+  return miles > 0 ? milesToAcres(miles, rowWidth) * uplift : 0;
+}
+
 export function EnvCredits(): ReactElement {
   const lookups = useFormStore((state) => state.lookups);
   const constructionType = useFormStore((state) =>
@@ -100,6 +110,16 @@ export function EnvCredits(): ReactElement {
       return miles;
     }),
   );
+  const protectedAcres = useFormStore(
+    useShallow((state) => {
+      const acres: Partial<Record<TerrainId, number>> = {};
+      for (const credit of CREDITS) {
+        if (credit.terrain === 'wetland') continue;
+        acres[credit.terrain] = readNumber(state.getFieldValue(protectedAcresPath(credit.terrain)));
+      }
+      return acres;
+    }),
+  );
 
   const fields: ProjectFields = {
     constructionType: readString(constructionType),
@@ -112,11 +132,13 @@ export function EnvCredits(): ReactElement {
   const categoryKey = buildCategoryKey(fields);
   const rowWidth = lookups && categoryKey ? getRowWidthFeet(lookups, categoryKey) : null;
 
+  const wetland = wetlandAcres(milesByTerrain.wetland ?? 0, rowWidth, uplift);
   let totalAcres = 0;
-  if (rowWidth !== null) {
+  if (wetland !== null) {
+    totalAcres = wetland;
     for (const credit of CREDITS) {
-      const miles = milesByTerrain[credit.terrain] ?? 0;
-      if (miles > 0) totalAcres += milesToAcres(miles, rowWidth) * uplift;
+      if (credit.terrain === 'wetland') continue;
+      totalAcres += protectedAcres[credit.terrain] ?? 0;
     }
   }
 
@@ -131,7 +153,7 @@ export function EnvCredits(): ReactElement {
       <p className="text-sm text-slate-600">
         Total effective acres{' '}
         <span className="font-medium text-slate-900">
-          {rowWidth === null ? CONFIGURE : formatAcres(totalAcres)}
+          {wetland === null ? CONFIGURE : formatAcres(totalAcres)}
         </span>
       </p>
       <div className="max-w-xl">
@@ -164,16 +186,17 @@ export function EnvCredits(): ReactElement {
           </thead>
           <tbody>
             {CREDITS.map((credit) => {
-              const miles = milesByTerrain[credit.terrain] ?? 0;
               const acres =
-                rowWidth !== null && miles > 0 ? milesToAcres(miles, rowWidth) * uplift : 0;
+                credit.terrain === 'wetland'
+                  ? wetlandAcres(milesByTerrain.wetland ?? 0, rowWidth, uplift)
+                  : (protectedAcres[credit.terrain] ?? 0);
               return (
                 <tr key={credit.path} className="border-b last:border-b-0">
                   <th scope="row" className="px-3 py-2 text-left text-sm font-medium text-slate-800">
                     {credit.label}
                   </th>
                   <td className="px-3 py-2 text-sm tabular-nums text-slate-700">
-                    {rowWidth === null ? CONFIGURE : formatAcres(acres)}
+                    {acres === null ? CONFIGURE : formatAcres(acres)}
                   </td>
                   <td className={cellFieldClass}>
                     <CurrencyField
