@@ -31,7 +31,7 @@ from pydantic import BaseModel, Field, field_validator
 from . import db as db_module
 from .corridor import fetch_protected_areas_m2, fetch_wetland_areas_m2
 from .models import sanitize_for_json
-from .states import fips_to_abbrev
+from .states import FIPS_TO_STATE, fips_to_abbrev
 from .terrain_rules import (
     TERRAIN_CLASSES,
     ClassifiedSample,
@@ -175,6 +175,52 @@ SELECT state FROM ref.nwi_provenance
 # Alaska, Hawaii, and the territories. DC (11) stays required: the loader's
 # file set is the states plus DC, and a missing DC file is the same silent zero.
 _NWI_STATEFP_NOT_REQUIRED = frozenset({"02", "15", "60", "66", "69", "72", "78"})
+
+COVERAGE_TOLERANCE_M = 1.0
+ROUTE_REQUIRED = "A drawn route inside the lower 48 is required."
+
+_COVERAGE_SQL = """
+WITH route AS (
+  SELECT ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326), 5070) AS geom
+),
+inside AS (
+  SELECT ST_UnaryUnion(ST_Collect(c.geom)) AS geom
+  FROM ref.counties_tiger c
+  WHERE c.statefp = ANY($2::text[])
+)
+SELECT
+  ST_Length(r.geom) AS route_m,
+  COALESCE(ST_Length(ST_Intersection(r.geom, i.geom)), 0) AS inside_m
+FROM route r
+LEFT JOIN inside i ON TRUE
+"""
+
+
+def lower_48_dc_fips() -> list[str]:
+    return sorted(
+        code for code in FIPS_TO_STATE if code not in _NWI_STATEFP_NOT_REQUIRED
+    )
+
+
+def route_not_covered(
+    route_m: float | None,
+    inside_m: float | None,
+    statefps: list[Any],
+) -> bool:
+    """True when the route is not wholly inside the lower 48 and DC."""
+    codes: list[str] = []
+    for raw in statefps:
+        code = _statefp_key(raw)
+        if code is not None:
+            codes.append(code)
+    if any(code in _NWI_STATEFP_NOT_REQUIRED for code in codes):
+        return True
+    if not any(code in FIPS_TO_STATE and code not in _NWI_STATEFP_NOT_REQUIRED for code in codes):
+        return True
+    if route_m is None or inside_m is None:
+        return True
+    return (float(route_m) - float(inside_m)) > COVERAGE_TOLERANCE_M
+
 
 _NWI_UNAVAILABLE = "National Wetlands Inventory is not loaded."
 _PADUS_UNAVAILABLE = "Protected areas are not loaded."
