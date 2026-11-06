@@ -5,6 +5,7 @@ The rules file is the only crosswalk. route.py does not keep a second copy.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -116,6 +117,53 @@ TERRAIN_CLASSES = (
     "mountain",
     "rolling_hills",
 )
+
+HABITAT_CLASSES = (
+    "forested",
+    "scrubbed_flat",
+    "desert_barren",
+    "rolling_hills",
+    "mountain",
+)
+
+
+def protected_acres(
+    samples: list[ClassifiedSample],
+    overlap_m2: list[float],
+    row_width_ft: float,
+) -> dict[str, float]:
+    """PAD-US overlap acres left in each habitat class after the wetland transfer.
+
+    NLCD code 11 contributes nothing. The terrain name is not the test.
+    """
+    if len(samples) != len(overlap_m2):
+        raise RuntimeError("protected-area count does not match sample count")
+    acres = {name: 0.0 for name in HABITAT_CLASSES}
+    for sample, area_m2 in zip(samples, overlap_m2, strict=True):
+        if sample.length_m < 0 or sample.wetland_area_m2 < 0 or area_m2 < 0:
+            raise ValueError(
+                "sample length, wetland area, and overlap must be non-negative"
+            )
+        if sample.nlcd_code == 11 or sample.length_m == 0 or area_m2 == 0:
+            continue
+        source = (
+            sample.land_cover if sample.land_cover in TERRAIN_CLASSES else "scrubbed_flat"
+        )
+        if source not in acres:
+            continue
+        equivalent = equivalent_length_m(sample.wetland_area_m2, row_width_ft)
+        # The acre round trip can undershoot the slice by a few ulps.
+        if sample.length_m - equivalent <= 8 * math.ulp(sample.length_m):
+            equivalent = sample.length_m
+        moved = min(sample.length_m, equivalent)
+        remaining = sample.length_m - moved
+        share = remaining / sample.length_m
+        overlap_acres = area_m2 / (METERS_PER_FOOT ** 2) / SQ_FT_PER_ACRE
+        remaining_acres = (
+            remaining / METERS_PER_MILE * FT_PER_MILE * row_width_ft / SQ_FT_PER_ACRE
+        )
+        acres[source] += min(overlap_acres * share, remaining_acres)
+    return acres
 
 
 def retain_wetland(code: str, rule: WetlandRule) -> bool:
