@@ -12,8 +12,11 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from uuid import UUID
 
+from fastapi.responses import JSONResponse
+
 from app import scenarios as scenarios_module
 from app.models import ScenarioCreate, ScenarioUpdate
+from app.route import ROUTE_REQUIRED
 
 USER_ID = "11111111-1111-1111-1111-111111111111"
 SCENARIO_ID = UUID("22222222-2222-2222-2222-222222222222")
@@ -21,6 +24,13 @@ ROUTE = {
     "type": "MultiLineString",
     "coordinates": [[[-97.74, 30.27], [-96.80, 32.78]]],
 }
+# Same Austin–Dallas line the calculate route tests use.
+AUSTIN_DALLAS_ROUTE = {
+    "type": "MultiLineString",
+    "coordinates": [[[-97.74, 30.27], [-97.10, 31.50], [-96.80, 32.78]]],
+}
+FORESTED = "02_project_physical_details.terrain.terrain_miles.forested"
+LAYER_RELEASES = {"wetlands": "file dates 2026-10-09", "land_cover": "NLCD 2021"}
 SEGMENTS = [
     {
         "id": "seg-1",
@@ -71,6 +81,19 @@ def _patch_db(monkeypatch, conn: _Capture) -> None:
     monkeypatch.setattr(scenarios_module.db_module, "forge_api_transaction", _tx)
 
 
+def _patch_analysis(monkeypatch, body: dict) -> list:
+    calls: list[tuple] = []
+
+    async def fake_analysis(route, row_width_ft):
+        calls.append((route, row_width_ft))
+        return JSONResponse(content=body)
+
+    monkeypatch.setattr(
+        scenarios_module, "run_route_analysis", fake_analysis, raising=False
+    )
+    return calls
+
+
 def _patch_calc(monkeypatch) -> None:
     def _calculate(_name, _changes):
         return {
@@ -109,36 +132,28 @@ def test_row_to_dict_keeps_route_dict_and_null_segments():
     assert row["segments"] is None
 
 
-def test_create_without_route_inserts_null_geometry(monkeypatch):
+def test_create_without_route_is_422_and_does_not_insert(monkeypatch):
     conn = _Capture([_record()])
     _patch_db(monkeypatch, conn)
     _patch_calc(monkeypatch)
 
     response = asyncio.run(scenarios_module.create_scenario(USER_ID, _create_payload()))
 
-    assert response.status_code == 201
-    sql, args = conn.calls[0]
-    assert "ST_GeomFromGeoJSON($11::text)" in sql
-    assert "ST_SetSRID" in sql
-    assert "$12::jsonb" in sql
-    assert "segments" in sql
-    assert "ST_AsGeoJSON(route)::jsonb AS route" in sql
-    assert args[10] is None
-    assert args[11] is None
-    body = json.loads(response.body)
-    assert body["route"] is None
-    assert "segments" in body
-    assert body["segments"] is None
+    assert response.status_code == 422
+    assert json.loads(response.body) == {"detail": ROUTE_REQUIRED}
+    assert conn.calls == []
 
 
 def test_create_with_route_passes_geojson_text(monkeypatch):
     conn = _Capture([_record(route=ROUTE, segments=SEGMENTS)])
     _patch_db(monkeypatch, conn)
     _patch_calc(monkeypatch)
+    _patch_analysis(monkeypatch, {"changes": {}, "layer_releases": {}})
 
     response = asyncio.run(
         scenarios_module.create_scenario(
-            USER_ID, _create_payload(route=ROUTE, segments=SEGMENTS)
+            USER_ID,
+            _create_payload(route=ROUTE, segments=SEGMENTS, row_width_ft=100),
         )
     )
 
@@ -149,6 +164,37 @@ def test_create_with_route_passes_geojson_text(monkeypatch):
     body = json.loads(response.body)
     assert body["route"]["type"] == "MultiLineString"
     assert body["segments"][0]["id"] == "seg-1"
+
+
+def test_create_stores_measured_changes_and_layer_releases(monkeypatch):
+    conn = _Capture([_record(route=AUSTIN_DALLAS_ROUTE)])
+    _patch_db(monkeypatch, conn)
+    _patch_calc(monkeypatch)
+    calls = _patch_analysis(
+        monkeypatch,
+        {"changes": {FORESTED: 10}, "layer_releases": LAYER_RELEASES},
+    )
+
+    response = asyncio.run(
+        scenarios_module.create_scenario(
+            USER_ID,
+            _create_payload(
+                route=AUSTIN_DALLAS_ROUTE,
+                row_width_ft=100,
+                changes={FORESTED: 99},
+            ),
+        )
+    )
+
+    assert response.status_code == 201
+    assert calls, "run_route_analysis was not called"
+    route, width = calls[0]
+    assert width == 100
+    assert route.model_dump() == AUSTIN_DALLAS_ROUTE
+    sql, args = conn.calls[0]
+    assert json.loads(args[4])[FORESTED] == 10
+    assert "layer_releases" in sql
+    assert json.dumps(LAYER_RELEASES) in args
 
 
 def test_update_name_only_does_not_rewrite_route(monkeypatch):
@@ -174,6 +220,63 @@ def test_update_name_only_does_not_rewrite_route(monkeypatch):
     body = json.loads(response.body)
     assert body["route"] == ROUTE
     assert body["name"] == "Renamed"
+
+
+def test_update_name_only_does_not_call_analysis_or_assign_layer_releases(monkeypatch):
+    existing = _record(route=json.dumps(ROUTE), segments=json.dumps(SEGMENTS))
+    updated = _record(name="Renamed", revision=2, route=ROUTE, segments=SEGMENTS)
+    conn = _Capture([existing, updated])
+    _patch_db(monkeypatch, conn)
+    calls = _patch_analysis(
+        monkeypatch,
+        {"changes": {FORESTED: 10}, "layer_releases": LAYER_RELEASES},
+    )
+
+    response = asyncio.run(
+        scenarios_module.update_scenario(
+            USER_ID,
+            str(SCENARIO_ID),
+            ScenarioUpdate(revision=1, name="Renamed"),
+        )
+    )
+
+    assert response.status_code == 200
+    assert calls == []
+    _select_sql, _select_args = conn.calls[0]
+    update_sql, _update_args = conn.calls[1]
+    assert "layer_releases =" not in update_sql
+
+
+def test_update_with_changes_stores_measured_miles_and_layer_releases(monkeypatch):
+    existing = _record(
+        route=json.dumps(AUSTIN_DALLAS_ROUTE),
+        changes=json.dumps({FORESTED: 1}),
+    )
+    conn = _Capture([existing, _record(revision=2, route=AUSTIN_DALLAS_ROUTE)])
+    _patch_db(monkeypatch, conn)
+    _patch_calc(monkeypatch)
+    calls = _patch_analysis(
+        monkeypatch,
+        {"changes": {FORESTED: 10}, "layer_releases": LAYER_RELEASES},
+    )
+
+    response = asyncio.run(
+        scenarios_module.update_scenario(
+            USER_ID,
+            str(SCENARIO_ID),
+            ScenarioUpdate(revision=1, changes={FORESTED: 99}, row_width_ft=100),
+        )
+    )
+
+    assert response.status_code == 200
+    assert calls, "run_route_analysis was not called"
+    route, width = calls[0]
+    assert width == 100
+    assert route.model_dump() == AUSTIN_DALLAS_ROUTE
+    update_sql, update_args = conn.calls[1]
+    assert json.loads(update_args[2])[FORESTED] == 10
+    assert "layer_releases =" in update_sql
+    assert json.dumps(LAYER_RELEASES) in update_args
 
 
 def test_update_sets_route_and_segments_when_present(monkeypatch):

@@ -24,10 +24,12 @@ from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from forge.errors import CalculationError, InvalidInputs, UnknownInputPath
+from pydantic import ValidationError
 
 from . import auth as auth_module
 from . import db as db_module
 from .models import ScenarioCreate, ScenarioUpdate, sanitize_for_json
+from .route import ROUTE_REQUIRED, RouteGeometry, run_route_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +45,7 @@ _DEFAULTS_ID = forge.get_defaults_id()
 _SCENARIO_COLUMNS = (
     "id, user_id, name, source, defaults_id, changes, results, calculator, "
     "inputs_id, computed_at, calc_error, revision, created_at, updated_at, "
-    "ST_AsGeoJSON(route)::jsonb AS route, segments"
+    "ST_AsGeoJSON(route)::jsonb AS route, segments, layer_releases"
 )
 
 _security = HTTPBearer(auto_error=False)
@@ -121,7 +123,7 @@ def _decode_jsonb(value: Any) -> Any:
 def _row_to_dict(record) -> dict:
     row = dict(record)
     # asyncpg has no jsonb codec, so route and segments may arrive as text.
-    for key in ("changes", "results", "calculator", "route", "segments"):
+    for key in ("changes", "results", "calculator", "route", "segments", "layer_releases"):
         row[key] = _decode_jsonb(row.get(key))
     for key in ("id", "user_id"):
         if isinstance(row.get(key), UUID):
@@ -222,13 +224,79 @@ def _geojson_param(value: dict | None) -> str | None:
     return json.dumps(value) if value is not None else None
 
 
+# --- Route measurement ---------------------------------------------------------
+
+
+def _route_required() -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={"detail": ROUTE_REQUIRED},
+    )
+
+
+def _checked_route(route: dict | None) -> RouteGeometry | JSONResponse:
+    """Same acceptance rule as ``calculate_forge``: a MultiLineString, or 422."""
+    if route is None:
+        return _route_required()
+    try:
+        return RouteGeometry.model_validate(route)
+    except ValidationError:
+        return _route_required()
+
+
+def _checked_width(row_width_ft: float | None) -> float | JSONResponse:
+    if row_width_ft is None or row_width_ft <= 0:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={"detail": "row_width_ft must be positive"},
+        )
+    return row_width_ft
+
+
+def _prepare_route(
+    route: dict | None, row_width_ft: float | None
+) -> tuple[RouteGeometry, float] | JSONResponse:
+    geometry = _checked_route(route)
+    if isinstance(geometry, JSONResponse):
+        return geometry
+    width = _checked_width(row_width_ft)
+    if isinstance(width, JSONResponse):
+        return width
+    return geometry, width
+
+
+def _route_to_measure(
+    payload_route: dict | None, route_was_sent: bool, stored: Any
+) -> dict | None:
+    """Payload route when one was sent; otherwise the stored GeoJSON object."""
+    if route_was_sent and payload_route is not None:
+        return payload_route
+    stored_route = _decode_jsonb(stored)
+    if isinstance(stored_route, dict):
+        return stored_route
+    return None
+
+
+async def _measure_changes(
+    geometry: RouteGeometry, row_width_ft: float, changes: dict
+) -> tuple[dict, Any] | JSONResponse:
+    """Run analysis and overwrite typed changes with measured miles."""
+    analyzed = await run_route_analysis(geometry, row_width_ft)
+    if analyzed.status_code != 200:
+        return analyzed
+    body = json.loads(analyzed.body)
+    measured = body.get("changes") or {}
+    return {**changes, **measured}, body.get("layer_releases")
+
+
 # --- Business logic ------------------------------------------------------------
 
 
 async def create_scenario(user_id: str, payload: ScenarioCreate) -> JSONResponse:
     # Check order: auth (already done by the route's dependency) -> stale_defaults
-    # -> rate limit -> calculate -> save. A request that was always going to be
-    # rejected for stale_defaults never burns a rate-limit slot.
+    # -> route and row width -> rate limit -> route analysis -> calculate ->
+    # save. A missing route, a non-positive width, or stale defaults never
+    # burns a rate-limit slot.
     if payload.defaults_id != _DEFAULTS_ID:
         return _error(
             status.HTTP_409_CONFLICT,
@@ -236,12 +304,22 @@ async def create_scenario(user_id: str, payload: ScenarioCreate) -> JSONResponse
             "The deployed calculator's defaults have changed; refetch /api/defaults.",
         )
 
+    prepared = _prepare_route(payload.route, payload.row_width_ft)
+    if isinstance(prepared, JSONResponse):
+        return prepared
+    geometry, row_width_ft = prepared
+
     if not auth_module.rate_limiter.allow_write(user_id):
         return _rate_limited()
     if not auth_module.rate_limiter.allow_calculation(user_id):
         return _rate_limited()
 
-    calc_fields, error_response = _calculate(payload.name, payload.changes)
+    measured = await _measure_changes(geometry, row_width_ft, payload.changes)
+    if isinstance(measured, JSONResponse):
+        return measured
+    changes, releases = measured
+
+    calc_fields, error_response = _calculate(payload.name, changes)
     if error_response is not None:
         return error_response
 
@@ -251,18 +329,19 @@ async def create_scenario(user_id: str, payload: ScenarioCreate) -> JSONResponse
             insert into public.scenario
                 (user_id, name, source, defaults_id, changes,
                  results, calculator, inputs_id, computed_at, calc_error,
-                 route, segments)
+                 route, segments, layer_releases)
             values
                 ($1, $2, $3, $4, $5::jsonb,
                  $6::jsonb, $7::jsonb, $8, $9, $10,
-                 ST_SetSRID(ST_GeomFromGeoJSON($11::text), 4326), $12::jsonb)
+                 ST_SetSRID(ST_GeomFromGeoJSON($11::text), 4326), $12::jsonb,
+                 $13::jsonb)
             returning {_SCENARIO_COLUMNS}
             """,
             UUID(user_id),
             payload.name,
             payload.source,
             payload.defaults_id,
-            json.dumps(payload.changes),
+            json.dumps(changes),
             _jsonb_param(calc_fields["results"]),
             _jsonb_param(calc_fields["calculator"]),
             calc_fields["inputs_id"],
@@ -270,6 +349,7 @@ async def create_scenario(user_id: str, payload: ScenarioCreate) -> JSONResponse
             calc_fields["calc_error"],
             _geojson_param(payload.route),
             _jsonb_param(payload.segments),
+            _jsonb_param(releases),
         )
 
     return JSONResponse(status_code=status.HTTP_201_CREATED, content=_row_to_dict(record))
@@ -279,9 +359,12 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
     """Update the caller's scenario, racing safely against concurrent PATCHes.
 
     Check order: auth (the route's dependency) -> stale_defaults -> fetch row
-    -> not_found -> not_owner -> rate limit -> calculate -> save. A request
-    that was always going to be rejected (unknown defaults, missing row,
-    wrong owner) never burns a rate-limit slot.
+    -> not_found -> not_owner -> route and row width when the caller sent
+    changes or defaults_id -> rate limit -> route analysis -> calculate ->
+    save. A name-only PATCH does not analyze the route or assign
+    layer_releases. A request that was always going to be rejected (unknown
+    defaults, missing row, wrong owner, missing route, non-positive width)
+    never burns a rate-limit slot.
 
     `revision` is enforced as a compare-and-swap in the UPDATE's WHERE
     clause (`revision = $old_revision`), not by a separate SELECT-then-compare
@@ -306,10 +389,9 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
         if str(existing["user_id"]) != user_id:
             return _error(status.HTTP_403_FORBIDDEN, "not_owner", "This scenario belongs to another user.")
 
-        if not auth_module.rate_limiter.allow_write(user_id):
-            return _rate_limited()
-
-        recalculate = payload.changes is not None or payload.defaults_id is not None
+        recalculate = (
+            "changes" in payload.model_fields_set or "defaults_id" in payload.model_fields_set
+        )
         new_name = payload.name if payload.name is not None else existing["name"]
         new_defaults_id = (
             payload.defaults_id if payload.defaults_id is not None else existing["defaults_id"]
@@ -318,9 +400,31 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
             payload.changes if payload.changes is not None else _decode_jsonb(existing["changes"])
         )
 
+        prepared: tuple[RouteGeometry, float] | None = None
         if recalculate:
+            prepared_route = _prepare_route(
+                _route_to_measure(
+                    payload.route, "route" in payload.model_fields_set, existing["route"]
+                ),
+                payload.row_width_ft,
+            )
+            if isinstance(prepared_route, JSONResponse):
+                return prepared_route
+            prepared = prepared_route
+
+        if not auth_module.rate_limiter.allow_write(user_id):
+            return _rate_limited()
+
+        releases = None
+        if recalculate:
+            assert prepared is not None
+            geometry, row_width_ft = prepared
             if not auth_module.rate_limiter.allow_calculation(user_id):
                 return _rate_limited()
+            measured = await _measure_changes(geometry, row_width_ft, new_changes)
+            if isinstance(measured, JSONResponse):
+                return measured
+            new_changes, releases = measured
             calc_fields, error_response = _calculate(new_name, new_changes)
             if error_response is not None:
                 return error_response
@@ -363,6 +467,9 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
         if "segments" in payload.model_fields_set:
             params.append(_jsonb_param(payload.segments))
             assignments.append(f"segments = ${len(params)}::jsonb")
+        if recalculate:
+            params.append(_jsonb_param(releases))
+            assignments.append(f"layer_releases = ${len(params)}::jsonb")
         assignments.append("revision = revision + 1")
         params.append(existing["id"])
         id_param = len(params)

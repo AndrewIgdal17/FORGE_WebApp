@@ -42,6 +42,7 @@ class ScenarioCreate(BaseModel):
     changes: dict[str, Any]
     route: dict[str, Any] | None = None  # GeoJSON MultiLineString
     segments: list[dict[str, Any]] | None = None
+    row_width_ft: float | None = None
 
 
 class ScenarioUpdate(BaseModel):
@@ -51,3 +52,4 @@ class ScenarioUpdate(BaseModel):
     changes: dict[str, Any] | None = None
     route: dict[str, Any] | None = None
     segments: list[dict[str, Any]] | None = None
+    row_width_ft: float | None = None
