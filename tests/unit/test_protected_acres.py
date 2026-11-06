@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from app.terrain_rules import (
@@ -11,7 +13,9 @@ from app.terrain_rules import (
     METERS_PER_MILE,
     SQ_FT_PER_ACRE,
     ClassifiedSample,
+    apply_wetland_transfer,
     equivalent_length_m,
+    moved_length_m,
     protected_acres,
 )
 
@@ -64,6 +68,30 @@ def test_a_full_wetland_transfer_contributes_nothing():
     )
     result = protected_acres([sample], [ACRE_M2], WIDTH_FT)
     assert result == _zeros()
+
+
+def test_a_shortfall_past_the_snap_band_leaves_a_remainder(monkeypatch):
+    length = MILE_M
+    shortfall = 9 * math.ulp(length)
+
+    def _nine_ulps_short(area_m2: float, row_width_ft: float) -> float:
+        return length - shortfall
+
+    monkeypatch.setattr(
+        "app.terrain_rules.equivalent_length_m",
+        _nine_ulps_short,
+    )
+    sample = ClassifiedSample("forested", length, 41, 1.0)
+    moved = moved_length_m(length, 1.0, WIDTH_FT)
+    assert moved < length
+    assert length - moved == pytest.approx(shortfall)
+
+    terrain = apply_wetland_transfer([sample], WIDTH_FT)
+    assert terrain.miles["forested"] > 0
+    assert terrain.miles["wetland"] > 0
+
+    result = protected_acres([sample], [ACRE_M2], WIDTH_FT)
+    assert result["forested"] > 0
 
 
 def test_farmland_overlap_contributes_nothing():

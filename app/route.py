@@ -1,13 +1,16 @@
-"""POST /api/route/analyze: terrain and ROW-zone miles for a drawn route.
+"""POST /api/route/analyze: terrain, ROW zones, and protected-area acres.
 
 The browser sends a GeoJSON MultiLineString in EPSG:4326. PostGIS measures
 the line and the county intersections in EPSG:5070 (meters). NLCD land-cover
 samples classify terrain. Wetland length comes from the National Wetlands
 Inventory; NLCD class 90 is forested. 3DEP slope sampling classifies
 unresolved pixels as mountain (>8%), rolling hills (2–8%), or scrubbed
-flat (<2%). A route that enters a lower-48 state or the District of Columbia
-with no inventory load is unavailable, the same as a missing inventory table.
-Alaska, Hawaii, and the territories are not that check.
+flat (<2%). Protected-area acres come from PAD-US GAP 1–3 overlap on the
+corridor slices and are returned under ``habitat/padus``. A route that
+enters a lower-48 state or the District of Columbia with no inventory load
+is unavailable, the same as a missing inventory table. A missing
+protected-area table is unavailable with detail ``Protected areas are not
+loaded.`` Alaska, Hawaii, and the territories are not the inventory check.
 """
 
 from __future__ import annotations
@@ -395,18 +398,29 @@ def sample_terrain(points: list[tuple[float, float, float]]) -> list[SampleHit]:
     return classified
 
 
+def classified_samples_from_hits(
+    hits: list[SampleHit],
+    areas_m2: list[float],
+) -> list[ClassifiedSample]:
+    """Pair each sample hit with its retained wetland area."""
+    if len(hits) != len(areas_m2):
+        raise RuntimeError("wetland area count does not match sample count")
+    return [
+        ClassifiedSample(hit.land_cover, hit.length_m, hit.nlcd_code, area)
+        for hit, area in zip(hits, areas_m2, strict=True)
+    ]
+
+
 def terrain_from_hits(
     hits: list[SampleHit],
     areas_m2: list[float],
     row_width_ft: float,
 ) -> TerrainResult:
-    if len(hits) != len(areas_m2):
-        raise RuntimeError("wetland area count does not match sample count")
-    samples = [
-        ClassifiedSample(hit.land_cover, hit.length_m, hit.nlcd_code, area)
-        for hit, area in zip(hits, areas_m2, strict=True)
-    ]
-    return apply_wetland_transfer(samples, row_width_ft)
+    """Thin wrapper for tests that start from sample hits."""
+    return apply_wetland_transfer(
+        classified_samples_from_hits(hits, areas_m2),
+        row_width_ft,
+    )
 
 
 async def _require_auth(
@@ -469,7 +483,11 @@ async def analyze_route(
     payload: AnalyzeRequest,
     user: dict = Depends(_require_auth),
 ) -> JSONResponse:
-    """Intersect a route with counties, NLCD, and slope, then map miles to input paths."""
+    """Intersect a route with counties, NLCD, slope, wetlands, and PAD-US.
+
+    The response includes ``habitat/padus`` acres. A missing protected-area
+    table is 503 with detail ``Protected areas are not loaded.``
+    """
     user_id = user.get("sub")
     if user_id:
         request.state.user_id = user_id
@@ -536,12 +554,7 @@ async def analyze_route(
             content={"detail": "Terrain sampling failed."},
         )
 
-    if len(hits) != len(areas):
-        raise RuntimeError("wetland area count does not match sample count")
-    samples = [
-        ClassifiedSample(hit.land_cover, hit.length_m, hit.nlcd_code, area)
-        for hit, area in zip(hits, areas, strict=True)
-    ]
+    samples = classified_samples_from_hits(hits, areas)
     result = apply_wetland_transfer(samples, payload.row_width_ft)
     gap = protected_acres(samples, overlap, payload.row_width_ft)
     terrain = result.miles

@@ -107,6 +107,11 @@ SQ_FT_PER_ACRE = 43560
 FT_PER_MILE = 5280
 METERS_PER_MILE = 1609.344
 
+# equivalent_length_m undershoots a full-slice area by a few ulps
+# (one ulp on a mile at 100 ft). A shortfall inside this band is a
+# complete move. One ulp past it leaves a remainder.
+WETLAND_TRANSFER_SNAP_ULPS = 8
+
 TERRAIN_CLASSES = (
     "forested",
     "wetland",
@@ -125,6 +130,22 @@ HABITAT_CLASSES = (
     "rolling_hills",
     "mountain",
 )
+
+
+def moved_length_m(
+    length_m: float, wetland_area_m2: float, row_width_ft: float
+) -> float:
+    """Meters moved onto wetland for one sample.
+
+    Terrain miles and protected acres both call this so they keep the same
+    remaining length after the transfer.
+    """
+    if length_m < 0 or wetland_area_m2 < 0:
+        raise ValueError("sample length and wetland area must be non-negative")
+    equivalent = equivalent_length_m(wetland_area_m2, row_width_ft)
+    if length_m - equivalent <= WETLAND_TRANSFER_SNAP_ULPS * math.ulp(length_m):
+        equivalent = length_m
+    return min(length_m, equivalent)
 
 
 def protected_acres(
@@ -151,11 +172,7 @@ def protected_acres(
         )
         if source not in acres:
             continue
-        equivalent = equivalent_length_m(sample.wetland_area_m2, row_width_ft)
-        # The acre round trip can undershoot the slice by a few ulps.
-        if sample.length_m - equivalent <= 8 * math.ulp(sample.length_m):
-            equivalent = sample.length_m
-        moved = min(sample.length_m, equivalent)
+        moved = moved_length_m(sample.length_m, sample.wetland_area_m2, row_width_ft)
         remaining = sample.length_m - moved
         share = remaining / sample.length_m
         overlap_acres = area_m2 / (METERS_PER_FOOT ** 2) / SQ_FT_PER_ACRE
@@ -236,10 +253,7 @@ def apply_wetland_transfer(
         if sample.length_m < 0 or sample.wetland_area_m2 < 0:
             raise ValueError("sample length and wetland area must be non-negative")
         source = sample.land_cover if sample.land_cover in meters else "scrubbed_flat"
-        moved = min(
-            sample.length_m,
-            equivalent_length_m(sample.wetland_area_m2, row_width_ft),
-        )
+        moved = moved_length_m(sample.length_m, sample.wetland_area_m2, row_width_ft)
         meters[source] += sample.length_m - moved
         meters["wetland"] += moved
         if sample.nlcd_code == 11:

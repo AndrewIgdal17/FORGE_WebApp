@@ -1,4 +1,4 @@
-"""Corridor slices in EPSG:5070 and retained wetland area per sample."""
+"""Corridor slices in EPSG:5070, retained wetland area, and PAD-US overlap."""
 
 from __future__ import annotations
 
