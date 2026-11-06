@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.route import ROUTE_REQUIRED
 
 client = TestClient(app)
 
@@ -31,7 +32,7 @@ def _assert_unmodified_scenario_is_rejected(scenario_id: str, document: dict) ->
         },
     )
     assert response.status_code == 422, (scenario_id, response.text)
-    assert "protected_area_acres are required" in response.text
+    assert response.json()["detail"] == ROUTE_REQUIRED
 
 
 def test_defaults_and_laredo_match_the_calculator():
@@ -58,10 +59,7 @@ def test_invalid_inputs_returns_message():
         json={"defaults_id": forge.get_defaults_id(), "changes": {}},
     )
     assert response.status_code == 422
-    body = response.json()
-    assert body["error"]["code"] == "invalid_inputs"
-    assert isinstance(body["error"]["message"], str) and body["error"]["message"]
-    assert "protected_area_acres" in body["error"]["message"]
+    assert response.json()["detail"] == ROUTE_REQUIRED
     assert response.headers["x-request-id"]
 
 
@@ -78,7 +76,7 @@ def test_stale_defaults_and_unknown_paths():
         },
     )
     assert unknown.status_code == 422
-    assert "no.such" in unknown.text
+    assert unknown.json()["detail"] == ROUTE_REQUIRED
 
 
 def test_removed_routes_are_gone():

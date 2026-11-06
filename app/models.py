@@ -30,6 +30,8 @@ def sanitize_for_json(obj: Any) -> Any:
 class CalculateRequest(BaseModel):
     defaults_id: str
     changes: dict[str, Any]
+    route: dict[str, Any] | None = None
+    row_width_ft: float | None = None
     scenario_id: str | None = None
 
 

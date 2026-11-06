@@ -22,6 +22,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from forge.errors import UnknownInputPath
+from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 
@@ -386,9 +387,12 @@ async def calculate_forge(
 
     The client must send the `defaults_id` it last fetched; if the deployed
     calculator's defaults have since changed, this returns 409 along with the
-    currently deployed `calculator_info()` so the client can refetch. Unknown
-    or non-scalar change paths return 422 with the offending paths. User-fixable
-    calculator errors return 422; internal failures return 500 with a request id.
+    currently deployed `calculator_info()` so the client can refetch. A missing
+    route, a route that is not a covered MultiLineString, or a non-positive
+    row width returns 422 before inputs are resolved. Measured route changes
+    overwrite typed values. Unknown or non-scalar change paths return 422 with
+    the offending paths. User-fixable calculator errors return 422; internal
+    failures return 500 with a request id.
     A 503 means every worker stayed busy for 30 seconds. A calculation that
     has taken a slot runs to completion.
     """
@@ -401,8 +405,31 @@ async def calculate_forge(
     if payload.defaults_id != _DEFAULTS_ID:
         return JSONResponse(status_code=409, content=sanitize_for_json(_CALCULATOR_INFO))
 
+    if payload.route is None:
+        return JSONResponse(
+            status_code=422, content={"detail": route_module.ROUTE_REQUIRED}
+        )
     try:
-        resolved_inputs = forge.resolve_inputs(payload.changes)
+        route = route_module.RouteGeometry.model_validate(payload.route)
+    except ValidationError:
+        return JSONResponse(
+            status_code=422, content={"detail": route_module.ROUTE_REQUIRED}
+        )
+    if payload.row_width_ft is None or payload.row_width_ft <= 0:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "row_width_ft must be positive"},
+        )
+    analyzed = await route_module.run_route_analysis(route, payload.row_width_ft)
+    if analyzed.status_code != 200:
+        return analyzed
+    analyzed_body = json.loads(analyzed.body)
+    measured = analyzed_body.get("changes") or {}
+    releases = analyzed_body.get("layer_releases")
+    effective = {**payload.changes, **measured}
+
+    try:
+        resolved_inputs = forge.resolve_inputs(effective)
     except UnknownInputPath as exc:
         return JSONResponse(status_code=422, content={"paths": exc.paths})
     except forge.InvalidInputs as exc:
@@ -458,6 +485,7 @@ async def calculate_forge(
         "scenario_id": scenario_id,
         "timestamp": results.get("timestamp", datetime.now(UTC).isoformat()),
         "results": results,
+        "layer_releases": releases,
         "error": None,
     }))
 
