@@ -3,6 +3,10 @@ import type { ReactElement } from 'react';
 import type { MultiLineString } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { DrawingToolbar } from '@/components/map/DrawingToolbar';
+import {
+  finishedRouteStep,
+  type HeldRouteSegments,
+} from '@/components/map/finished-route';
 import { LayerPanel } from '@/components/map/LayerPanel';
 import { MapLegend } from '@/components/map/MapLegend';
 import { MapTooltip } from '@/components/map/MapTooltip';
@@ -51,6 +55,7 @@ export function MapPanel({
   const [analyzed, setAnalyzed] = useState<AnalyzeResponse | null>(null);
   const wasDrawingRef = useRef(false);
   const requestId = useRef(0);
+  const heldSegmentsRef = useRef<HeldRouteSegments | null>(null);
   const onRouteChangeRef = useRef(onRouteChange);
   onRouteChangeRef.current = onRouteChange;
 
@@ -76,6 +81,10 @@ export function MapPanel({
     if (!lookups || !data) return null;
     return resolvedRowWidthFt(useFormStore.getState().getProjectFields(), lookups);
   }, [lookups, data]);
+  const widthError = useMemo(() => {
+    const step = finishedRouteStep(finishedRoute, rowWidthFt, null);
+    return step.kind === 'pending' ? new Error(step.message) : null;
+  }, [finishedRoute, rowWidthFt]);
 
   useLayoutEffect(() => {
     if (!map) return;
@@ -120,21 +129,30 @@ export function MapPanel({
   }, [isDrawing, routeGeoJSON]);
 
   // Identity refreshes on vertex drag. This effect stays tied to the finished
-  // line so a drag does not re-analyze the pre-drag geometry.
+  // line so a drag does not re-analyze the pre-drag geometry. A missing width
+  // still publishes that line and does not call analyze.
   useEffect(() => {
-    if (!finishedRoute) return;
-    if (rowWidthFt === null) return;
+    const step = finishedRouteStep(finishedRoute, rowWidthFt, heldSegmentsRef.current);
+    if (step.kind === 'none') {
+      heldSegmentsRef.current = null;
+      return;
+    }
+    if (step.kind === 'pending') {
+      requestId.current += 1;
+      setAnalyzed(null);
+      onRouteChangeRef.current?.(step.route, step.segments);
+      return;
+    }
     const id = requestId.current + 1;
     requestId.current = id;
     const endpoints = endpointSubstationsRef.current;
     let cancelled = false;
-    void analyze(finishedRoute, rowWidthFt).then((response) => {
+    void analyze(step.route, step.rowWidthFt).then((response) => {
       if (cancelled || id !== requestId.current || !response) return;
       setAnalyzed(response);
-      onRouteChangeRef.current?.(
-        finishedRoute,
-        segmentsFor(finishedRoute, response.intersections, endpoints),
-      );
+      const segments = segmentsFor(step.route, response.intersections, endpoints);
+      heldSegmentsRef.current = { route: step.route, segments };
+      onRouteChangeRef.current?.(step.route, segments);
       useFormStore
         .getState()
         .applyChanges(changesAfterAnalyze(response.changes));
@@ -184,7 +202,7 @@ export function MapPanel({
         result={analyzed}
         endpoints={endpointSubstations}
         loading={loading && !isDrawing}
-        error={error}
+        error={widthError ?? error}
       />
       <LayerPanel />
       <MapLegend />

@@ -169,9 +169,22 @@ export class ApiError extends Error {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function formatErrorBody(body: unknown): string {
   if (typeof body === 'string' && body.length > 0) {
     return body;
+  }
+  if (isRecord(body)) {
+    if (typeof body.detail === 'string' && body.detail.length > 0) {
+      return body.detail;
+    }
+    const nested = body.error;
+    if (isRecord(nested) && typeof nested.message === 'string' && nested.message.length > 0) {
+      return nested.message;
+    }
   }
   if (body === undefined || body === null || body === '') {
     return 'Request failed';
