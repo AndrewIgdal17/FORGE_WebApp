@@ -30,7 +30,7 @@ import { getValueAtPath } from '@/lib/path';
 import { isMultiLineString, scenarioMapRoute } from '@/lib/route-geometry';
 import { useFormStore } from '@/stores/form-store';
 import { exportAsCsv, exportAsForge, useScenarioStore } from '@/stores/scenario-store';
-import type { Scenario, ScenarioGeometry } from '@/stores/scenario-store';
+import type { Scenario, ScenarioDraft, ScenarioGeometry } from '@/stores/scenario-store';
 
 interface WizardDraft {
   name: string;
@@ -184,6 +184,18 @@ function currentRowWidthFt(): number | null {
   const form = useFormStore.getState();
   if (!form.lookups) return null;
   return resolvedRowWidthFt(form.getProjectFields(), form.lookups);
+}
+
+let formLoad: Promise<void> | null = null;
+
+/** Share one in-flight defaults load so a second boot cannot reset the form after a draft is applied. */
+function loadFormDefaults(): Promise<void> {
+  if (!formLoad) {
+    formLoad = useFormStore.getState().loadAll().finally(() => {
+      formLoad = null;
+    });
+  }
+  return formLoad;
 }
 
 function storeResults(scenarioId: string, results: Record<string, unknown>): void {
@@ -358,15 +370,45 @@ function WorkspaceBody(): ReactElement {
   const applyScenarioRef = useRef(applyScenario);
   applyScenarioRef.current = applyScenario;
 
+  const beginImportedDraft = useCallback((imported: ScenarioDraft): void => {
+    const snapshot = useFormStore.getState().defaults;
+    if (!snapshot) return;
+    setDrawn(undefined);
+    useScenarioStore.setState({
+      activeScenarioId: null,
+      unsavedChanges: false,
+      savedResults: null,
+    });
+    loadScenarioChanges(imported.changes);
+    const fullInputs = useFormStore.getState().data ?? snapshot;
+    setDraft({ name: imported.name, source: imported.source, fullInputs });
+    lastStatusRef.current = 'Not calculated';
+    setCalculationStatus('Not calculated');
+    openInputsSubItem('routing', 'route');
+  }, [loadScenarioChanges, openInputsSubItem]);
+
+  const beginImportedDraftRef = useRef(beginImportedDraft);
+  useEffect(() => {
+    beginImportedDraftRef.current = beginImportedDraft;
+  }, [beginImportedDraft]);
+
   useEffect(() => {
     let cancelled = false;
     const params = new URLSearchParams(window.location.search);
 
     async function boot(): Promise<void> {
       try {
-        await useFormStore.getState().loadAll();
+        await loadFormDefaults();
         await useScenarioStore.getState().loadScenarios();
         if (cancelled) return;
+
+        if (useFormStore.getState().defaults) {
+          const pending = useScenarioStore.getState().consumePendingDraft();
+          if (pending) {
+            beginImportedDraftRef.current(pending);
+            return;
+          }
+        }
 
         // `?tutorial=sunzia` is ignored until the tutorial player exists.
         if (params.get('new') === '1') setWizardOpen(true);

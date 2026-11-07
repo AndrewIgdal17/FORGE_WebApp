@@ -52,6 +52,7 @@ interface ScenarioStore {
   unsavedChanges: boolean;
   loading: boolean;
   savedResults: Record<string, unknown> | null;
+  pendingDraft: ScenarioDraft | null;
 
   loadScenarios: () => Promise<void>;
   setActiveScenario: (id: string) => void;
@@ -78,6 +79,8 @@ interface ScenarioStore {
   duplicateScenario: (id: string) => Promise<Scenario>;
   deleteScenario: (id: string) => Promise<void>;
   setUnsavedChanges: (value: boolean) => void;
+  setPendingDraft: (draft: ScenarioDraft) => void;
+  consumePendingDraft: () => ScenarioDraft | null;
   getActiveScenario: () => Scenario | null;
 }
 
@@ -639,6 +642,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
   unsavedChanges: false,
   loading: false,
   savedResults: null,
+  pendingDraft: null,
 
   loadScenarios: async () => {
     set({ loading: true });
@@ -778,6 +782,17 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
 
   setUnsavedChanges: (value) => {
     set({ unsavedChanges: value });
+  },
+
+  setPendingDraft: (draft) => {
+    set({ pendingDraft: draft });
+  },
+
+  consumePendingDraft: () => {
+    const draft = get().pendingDraft;
+    if (!draft) return null;
+    set({ pendingDraft: null });
+    return draft;
   },
 
   getActiveScenario: () => getActiveScenario(get()),

@@ -23,9 +23,9 @@ export default function HomePage(): ReactElement {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scenarios = useScenarioStore((state) => state.scenarios);
   const loadScenarios = useScenarioStore((state) => state.loadScenarios);
-  const createScenario = useScenarioStore((state) => state.createScenario);
   const duplicateScenario = useScenarioStore((state) => state.duplicateScenario);
   const setActiveScenario = useScenarioStore((state) => state.setActiveScenario);
+  const setPendingDraft = useScenarioStore((state) => state.setPendingDraft);
 
   const [defaults, setDefaults] = useState<Record<string, unknown> | null>(null);
   const [busy, setBusy] = useState(false);
@@ -71,9 +71,9 @@ export default function HomePage(): ReactElement {
         isCsv && loadedDefaults
           ? importCsvFile(text, file.name, loadedDefaults)
           : importForgeFile(text, file.name);
-      const scenario = await createScenario(draft.name, draft.source, draft.changes);
-      setActiveScenario(scenario.id);
-      toast.success(`Imported "${scenario.name}"`);
+      setPendingDraft(draft);
+      toast.error('A drawn route inside the lower 48 is required.');
+      navigate('/app/workspace');
     } catch (error) {
       toast.error(errorMessage(error));
     } finally {

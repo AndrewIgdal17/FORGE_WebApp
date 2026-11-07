@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, ReactElement } from 'react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { AuthGuard } from '@/components/auth-guard';
 import { ComparisonTable } from '@/components/comparison/comparison-table';
 import { AppNav } from '@/components/layout/app-nav';
@@ -12,10 +12,18 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/hooks/use-toast';
 import { getDefaults } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { useScenarioStore, type Scenario } from '@/stores/scenario-store';
+import {
+  importCsvFile,
+  importForgeFile,
+  useScenarioStore,
+  type Scenario,
+  type ScenarioDraft,
+} from '@/stores/scenario-store';
 
 type ManagerTab = 'manage' | 'compare';
 type UploadKind = 'csv' | 'forge';
+
+const ROUTE_REQUIRED = 'A drawn route inside the lower 48 is required.';
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -29,7 +37,23 @@ function uploadKind(fileName: string): UploadKind | null {
   return null;
 }
 
+function readDraft(
+  text: string,
+  fileName: string,
+  kind: UploadKind,
+  defaults: Record<string, unknown> | null,
+): ScenarioDraft {
+  if (kind === 'csv') {
+    if (!defaults) {
+      throw new Error('Reference data is not loaded yet. Please wait a moment and try again.');
+    }
+    return importCsvFile(text, fileName, defaults);
+  }
+  return importForgeFile(text, fileName);
+}
+
 export default function ScenariosManagerPage(): ReactElement {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const promptedUpload = useRef(false);
@@ -37,6 +61,7 @@ export default function ScenariosManagerPage(): ReactElement {
   const scenarios = useScenarioStore((state) => state.scenarios);
   const loadScenarios = useScenarioStore((state) => state.loadScenarios);
   const setActiveScenario = useScenarioStore((state) => state.setActiveScenario);
+  const setPendingDraft = useScenarioStore((state) => state.setPendingDraft);
 
   const [tab, setTab] = useState<ManagerTab>('manage');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -93,7 +118,14 @@ export default function ScenariosManagerPage(): ReactElement {
 
     setBusy(true);
     try {
-      for (const file of files) {
+      let draft: ScenarioDraft | null = null;
+      const otherNames: string[] = [];
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        if (draft) {
+          otherNames.push(file.name);
+          continue;
+        }
         const kind = uploadKind(file.name);
         if (!kind) {
           toast.error(`Unsupported file type: ${file.name}`);
@@ -103,8 +135,24 @@ export default function ScenariosManagerPage(): ReactElement {
           toast.error('Reference data is not loaded yet. Please wait a moment and try again.');
           continue;
         }
-        toast.error('A drawn route inside the lower 48 is required.');
+        try {
+          const text = await file.text();
+          draft = readDraft(text, file.name, kind, defaults);
+        } catch (error) {
+          toast.error(errorMessage(error));
+          const rest = files.slice(index + 1).map((item) => item.name);
+          if (rest.length > 0) toast.error(`Not opened: ${rest.join(', ')}`);
+          return;
+        }
       }
+      if (!draft) return;
+      setPendingDraft(draft);
+      toast.error(
+        otherNames.length > 0
+          ? `${ROUTE_REQUIRED} Other files: ${otherNames.join(', ')}`
+          : ROUTE_REQUIRED,
+      );
+      navigate('/app/workspace');
     } finally {
       setBusy(false);
     }
