@@ -273,7 +273,7 @@ function WorkspaceBody(): ReactElement {
     activeScenario?.route != null ||
     (Array.isArray(activeScenario?.segments) && activeScenario.segments.length > 0);
   const milesFromRoute = drawn !== undefined ? drawn.route != null : savedRoutePresent;
-  const routeDrawn = drawn?.route != null || activeScenario?.route != null;
+  const routeDrawn = calculationRoute(drawn, activeScenario) != null;
   const validation = useMemo(
     () => validationBadges(data, milesFromRoute),
     [data, milesFromRoute],
