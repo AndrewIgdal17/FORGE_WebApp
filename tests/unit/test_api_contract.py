@@ -53,7 +53,7 @@ def test_all_scenarios_match_the_calculator():
         _assert_unmodified_scenario_is_rejected(scenario_file.stem, document)
 
 
-def test_invalid_inputs_returns_message():
+def test_calculate_without_a_route_returns_the_route_sentence():
     response = client.post(
         "/api/forge/calculate",
         json={"defaults_id": forge.get_defaults_id(), "changes": {}},

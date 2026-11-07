@@ -57,6 +57,22 @@ def test_missing_route_is_required_and_skips_calculation(monkeypatch):
     assert response.json() == {"detail": ROUTE_REQUIRED}
 
 
+def test_linestring_route_is_rejected_and_skips_calculation(monkeypatch):
+    _forbid_calculation(monkeypatch)
+    response = client.post(
+        "/api/forge/calculate",
+        json=_live(
+            route={
+                "type": "LineString",
+                "coordinates": [[-97.74, 30.27], [-96.80, 32.78]],
+            },
+            row_width_ft=100,
+        ),
+    )
+    assert response.status_code == 422
+    assert response.json() == {"detail": ROUTE_REQUIRED}
+
+
 def test_zero_row_width_is_rejected_and_skips_calculation(monkeypatch):
     _forbid_calculation(monkeypatch)
     response = client.post(

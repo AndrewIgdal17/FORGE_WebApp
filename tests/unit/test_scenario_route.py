@@ -279,6 +279,91 @@ def test_update_with_changes_stores_measured_miles_and_layer_releases(monkeypatc
     assert json.dumps(LAYER_RELEASES) in update_args
 
 
+def test_update_omitted_route_measures_stored_line_and_does_not_assign_it(monkeypatch):
+    existing = _record(
+        route=json.dumps(AUSTIN_DALLAS_ROUTE),
+        changes=json.dumps({FORESTED: 1}),
+    )
+    conn = _Capture([existing, _record(revision=2, route=AUSTIN_DALLAS_ROUTE)])
+    _patch_db(monkeypatch, conn)
+    _patch_calc(monkeypatch)
+    calls = _patch_analysis(
+        monkeypatch,
+        {"changes": {FORESTED: 10}, "layer_releases": LAYER_RELEASES},
+    )
+    payload = ScenarioUpdate(revision=1, changes={FORESTED: 99}, row_width_ft=100)
+    assert "route" not in payload.model_fields_set
+
+    response = asyncio.run(
+        scenarios_module.update_scenario(USER_ID, str(SCENARIO_ID), payload)
+    )
+
+    assert response.status_code == 200
+    assert calls, "run_route_analysis was not called"
+    route, width = calls[0]
+    assert width == 100
+    assert route.model_dump() == AUSTIN_DALLAS_ROUTE
+    update_sql, _update_args = conn.calls[1]
+    assert "ST_GeomFromGeoJSON" not in update_sql
+    assert "layer_releases =" in update_sql
+
+
+def test_update_explicit_null_route_while_recalculating_is_422(monkeypatch):
+    existing = _record(
+        route=json.dumps(AUSTIN_DALLAS_ROUTE),
+        changes=json.dumps({FORESTED: 1}),
+    )
+    conn = _Capture([existing, _record(revision=2, route=None)])
+    _patch_db(monkeypatch, conn)
+    _patch_calc(monkeypatch)
+    calls = _patch_analysis(
+        monkeypatch,
+        {"changes": {FORESTED: 10}, "layer_releases": LAYER_RELEASES},
+    )
+    payload = ScenarioUpdate.model_validate(
+        {
+            "revision": 1,
+            "changes": {FORESTED: 99},
+            "route": None,
+            "row_width_ft": 100,
+        }
+    )
+    assert "route" in payload.model_fields_set
+    assert payload.route is None
+
+    response = asyncio.run(
+        scenarios_module.update_scenario(USER_ID, str(SCENARIO_ID), payload)
+    )
+
+    assert response.status_code == 422
+    assert json.loads(response.body) == {"detail": ROUTE_REQUIRED}
+    assert calls == []
+    assert len(conn.calls) == 1
+    assert "update public.scenario" not in conn.calls[0][0]
+
+
+def test_update_recalculate_rejects_non_positive_width(monkeypatch):
+    existing = _record(route=json.dumps(AUSTIN_DALLAS_ROUTE))
+    conn = _Capture([existing, _record(revision=2, route=AUSTIN_DALLAS_ROUTE)])
+    _patch_db(monkeypatch, conn)
+    _patch_calc(monkeypatch)
+    calls = _patch_analysis(monkeypatch, {"changes": {}, "layer_releases": {}})
+
+    response = asyncio.run(
+        scenarios_module.update_scenario(
+            USER_ID,
+            str(SCENARIO_ID),
+            ScenarioUpdate(revision=1, changes={FORESTED: 99}, row_width_ft=0),
+        )
+    )
+
+    assert response.status_code == 422
+    assert json.loads(response.body) == {"detail": "row_width_ft must be positive"}
+    assert calls == []
+    assert len(conn.calls) == 1
+    assert "update public.scenario" not in conn.calls[0][0]
+
+
 def test_update_sets_route_and_segments_when_present(monkeypatch):
     conn = _Capture([_record(), _record(revision=2, route=ROUTE, segments=SEGMENTS)])
     _patch_db(monkeypatch, conn)

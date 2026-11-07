@@ -268,8 +268,12 @@ def _prepare_route(
 def _route_to_measure(
     payload_route: dict | None, route_was_sent: bool, stored: Any
 ) -> dict | None:
-    """Payload route when one was sent; otherwise the stored GeoJSON object."""
-    if route_was_sent and payload_route is not None:
+    """Sent route, including an explicit null; otherwise the stored GeoJSON.
+
+    Used only while recalculating. An explicit null stays None so
+    ``_checked_route`` rejects it instead of measuring the stored line.
+    """
+    if route_was_sent:
         return payload_route
     stored_route = _decode_jsonb(stored)
     if isinstance(stored_route, dict):
@@ -362,9 +366,11 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
     -> not_found -> not_owner -> route and row width when the caller sent
     changes or defaults_id -> rate limit -> route analysis -> calculate ->
     save. A name-only PATCH does not analyze the route or assign
-    layer_releases. A request that was always going to be rejected (unknown
-    defaults, missing row, wrong owner, missing route, non-positive width)
-    never burns a rate-limit slot.
+    layer_releases. A recalculating save with the route key omitted measures
+    the stored line and does not assign ``route``. A recalculating save that
+    sends ``route: null`` returns 422 and leaves the row unchanged. A request
+    that was always going to be rejected (unknown defaults, missing row, wrong
+    owner, missing route, non-positive width) never burns a rate-limit slot.
 
     The SELECT is its own transaction. It ends once not_found and not_owner
     have been applied and the fields the rest of this function needs are
