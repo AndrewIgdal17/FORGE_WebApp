@@ -715,8 +715,11 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
         ? geometry.route
         : routePayload(current?.route ?? null, current?.segments ?? null);
     if (route == null || !positiveWidth(rowWidthFt)) {
-      if (!current) throw new Error('Scenario not found');
-      return current;
+      throw new Error(
+        route == null
+          ? 'A drawn route inside the lower 48 is required.'
+          : 'row_width_ft must be a positive number',
+      );
     }
     const row = await updateScenarioApi(id, {
       revision,

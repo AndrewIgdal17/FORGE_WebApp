@@ -164,8 +164,10 @@ function ZoneRow({
 
 export function RightsOfWay({
   milesFromRoute = false,
+  routeDrawn = false,
 }: {
   milesFromRoute?: boolean;
+  routeDrawn?: boolean;
 }): ReactElement {
   const data = useFormStore((state) => state.data);
   const setFieldValue = useFormStore((state) => state.setFieldValue);
@@ -257,6 +259,9 @@ export function RightsOfWay({
       </div>
       <div>
         <h2 className="text-base font-semibold text-slate-900">Right-of-way zones</h2>
+        {milesFromRoute && !routeDrawn ? (
+          <p className="text-sm text-slate-600">Drawing a route fills these miles.</p>
+        ) : null}
         <p className="text-sm text-slate-600">
           Per-zone land costs. Zone miles should sum to terrain miles.
         </p>

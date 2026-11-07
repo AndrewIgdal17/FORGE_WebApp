@@ -42,6 +42,8 @@ const PROJECT = '01_project_technical_details.project';
 const ROW_ROOT = '11_project_row_details.right_of_way';
 const MILES_TOLERANCE = 0.5;
 const ZONE_COUNT = 15;
+const ROUTE_REQUIRED = 'A drawn route inside the lower 48 is required.';
+const WIDTH_REQUIRED = 'row_width_ft must be a positive number';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -271,6 +273,7 @@ function WorkspaceBody(): ReactElement {
     activeScenario?.route != null ||
     (Array.isArray(activeScenario?.segments) && activeScenario.segments.length > 0);
   const milesFromRoute = drawn !== undefined ? drawn.route != null : savedRoutePresent;
+  const routeDrawn = drawn?.route != null || activeScenario?.route != null;
   const validation = useMemo(
     () => validationBadges(data, milesFromRoute),
     [data, milesFromRoute],
@@ -303,7 +306,14 @@ function WorkspaceBody(): ReactElement {
     if (!active || !form.defaultsId || !form.data || !hasRequiredFields(form.data)) return;
     const route = calculationRoute(drawn, active);
     const rowWidthFt = currentRowWidthFt();
-    if (route == null || rowWidthFt == null) return;
+    if (route == null) {
+      setCalculationStatus(ROUTE_REQUIRED);
+      return;
+    }
+    if (rowWidthFt == null) {
+      setCalculationStatus(WIDTH_REQUIRED);
+      return;
+    }
     if (inFlightRef.current) {
       queuedRef.current = true;
       return;
@@ -421,8 +431,16 @@ function WorkspaceBody(): ReactElement {
     const active = useScenarioStore.getState().getActiveScenario();
     if (!active || savingRef.current) return;
     if (!useScenarioStore.getState().unsavedChanges && drawn === undefined) return;
+    const route = calculationRoute(drawn, active);
     const rowWidthFt = currentRowWidthFt();
-    if (calculationRoute(drawn, active) == null || rowWidthFt == null) return;
+    if (route == null) {
+      toast.error(ROUTE_REQUIRED);
+      return;
+    }
+    if (rowWidthFt == null) {
+      toast.error(WIDTH_REQUIRED);
+      return;
+    }
     savingRef.current = true;
     try {
       const changes = useFormStore.getState().getChanges();
@@ -524,10 +542,17 @@ function WorkspaceBody(): ReactElement {
   async function handleCreate(): Promise<void> {
     if (!draft || savingRef.current) return;
     const form = useFormStore.getState();
-    if (!form.data || terrainMilesTotal(form.data) <= 0) return;
     const route = calculationRoute(drawn, null);
     const rowWidthFt = currentRowWidthFt();
-    if (route == null || rowWidthFt == null) return;
+    if (route == null) {
+      toast.error(ROUTE_REQUIRED);
+      return;
+    }
+    if (rowWidthFt == null) {
+      toast.error(WIDTH_REQUIRED);
+      return;
+    }
+    if (!form.data || terrainMilesTotal(form.data) <= 0) return;
     savingRef.current = true;
     try {
       const scenario = await createScenario(
@@ -628,7 +653,11 @@ function WorkspaceBody(): ReactElement {
                       onNavigateResults={handleStripNavigate}
                     />
                     {subItemId ? (
-                      <SectionDispatcher subItemId={subItemId} milesFromRoute={milesFromRoute} />
+                      <SectionDispatcher
+                        subItemId={subItemId}
+                        milesFromRoute={milesFromRoute}
+                        routeDrawn={routeDrawn}
+                      />
                     ) : null}
                   </>
                 )

@@ -113,7 +113,13 @@ function TerrainRow({ terrain, readOnly = false }: TerrainRowProps): ReactElemen
   );
 }
 
-export function TerrainMix({ milesFromRoute = false }: { milesFromRoute?: boolean }): ReactElement {
+export function TerrainMix({
+  milesFromRoute = false,
+  routeDrawn = false,
+}: {
+  milesFromRoute?: boolean;
+  routeDrawn?: boolean;
+}): ReactElement {
   const constructionType = useFormStore((state) =>
     state.getFieldValue(CONSTRUCTION_TYPE_PATH),
   );
@@ -136,6 +142,9 @@ export function TerrainMix({ milesFromRoute = false }: { milesFromRoute?: boolea
     <section id="terrain-mix" className="grid max-w-4xl gap-3">
       <div>
         <h2 className="text-base font-semibold text-slate-900">Terrain miles</h2>
+        {milesFromRoute && !routeDrawn ? (
+          <p className="text-sm text-slate-600">Drawing a route fills these miles.</p>
+        ) : null}
         <p className="text-sm text-slate-600">
           Route miles by terrain. Miles should sum to the project length.
         </p>

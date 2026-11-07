@@ -147,7 +147,7 @@ export function EnvCredits(): ReactElement {
       <div>
         <h2 className="text-base font-semibold text-slate-900">Environmental credits</h2>
         <p className="text-sm text-slate-600">
-          Off-site wetland and habitat credit purchases. Acres follow route miles, ROW width, and the mitigation uplift factor.
+          Off-site wetland and habitat credit purchases. The wetland row's acres follow miles, width, and uplift. The five habitat rows show the measured protected-area acres.
         </p>
       </div>
       <p className="text-sm text-slate-600">

@@ -26,6 +26,7 @@ import { WildfireRisk } from '@/components/sections/wildfire-risk';
 export interface SectionDispatcherProps {
   subItemId: string;
   milesFromRoute?: boolean;
+  routeDrawn?: boolean;
 }
 
 /**
@@ -37,6 +38,7 @@ export interface SectionDispatcherProps {
 export function SectionDispatcher({
   subItemId,
   milesFromRoute = false,
+  routeDrawn = false,
 }: SectionDispatcherProps): ReactElement {
   switch (subItemId) {
     case 'technology':
@@ -48,9 +50,9 @@ export function SectionDispatcher({
     case 'converter-details':
       return <ConverterDetails />;
     case 'terrain-mix':
-      return <TerrainMix milesFromRoute={milesFromRoute} />;
+      return <TerrainMix milesFromRoute={milesFromRoute} routeDrawn={routeDrawn} />;
     case 'rights-of-way':
-      return <RightsOfWay milesFromRoute={milesFromRoute} />;
+      return <RightsOfWay milesFromRoute={milesFromRoute} routeDrawn={routeDrawn} />;
     case 'economic-details':
       return <EconomicDetails />;
     case 'system-constraints':
