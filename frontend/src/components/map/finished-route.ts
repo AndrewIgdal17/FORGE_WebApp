@@ -13,7 +13,7 @@ export type FinishedRouteStep =
       kind: 'pending';
       route: MultiLineString;
       segments: unknown[] | null;
-      message: typeof ROW_WIDTH_REQUIRED;
+      message: string;
     }
   | { kind: 'analyze'; route: MultiLineString; rowWidthFt: number };
 
@@ -22,6 +22,7 @@ export function finishedRouteStep(
   finishedRoute: MultiLineString | null,
   rowWidthFt: number | null,
   held: HeldRouteSegments | null,
+  widthMessage: string = ROW_WIDTH_REQUIRED,
 ): FinishedRouteStep {
   if (finishedRoute == null) return { kind: 'none' };
   if (typeof rowWidthFt === 'number' && rowWidthFt > 0) {
@@ -32,6 +33,6 @@ export function finishedRouteStep(
     kind: 'pending',
     route: finishedRoute,
     segments,
-    message: ROW_WIDTH_REQUIRED,
+    message: widthMessage,
   };
 }

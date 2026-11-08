@@ -29,7 +29,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator
 
 from . import db as db_module
-from .corridor import fetch_protected_areas_m2, fetch_wetland_areas_m2
+from .corridor import MissingLayerTable, fetch_slice_overlaps_m2
 from .layer_releases import layer_releases
 from .models import sanitize_for_json
 from .states import FIPS_TO_STATE, fips_to_abbrev
@@ -185,9 +185,12 @@ WITH route AS (
   SELECT ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326), 5070) AS geom
 ),
 inside AS (
+  -- Only counties the route crosses can hold any of its length, so the union
+  -- is limited to them and uses the spatial index.
   SELECT ST_UnaryUnion(ST_Collect(c.geom)) AS geom
-  FROM ref.counties_tiger c
+  FROM ref.counties_tiger c, route r
   WHERE c.statefp = ANY($2::text[])
+    AND ST_Intersects(c.geom, r.geom)
 )
 SELECT
   ST_Length(r.geom) AS route_m,
@@ -591,7 +594,6 @@ async def run_route_analysis(
             try:
                 if await _route_missing_nwi_state(conn, statefps):
                     return _unavailable(_NWI_UNAVAILABLE)
-                areas = await fetch_wetland_areas_m2(conn, geojson, row_width_ft)
                 label_rows = await conn.fetch(
                     """
                     SELECT DISTINCT release_label
@@ -603,9 +605,15 @@ async def run_route_analysis(
             except asyncpg.UndefinedTableError:
                 return _unavailable(_NWI_UNAVAILABLE)
             try:
-                overlap = await fetch_protected_areas_m2(conn, geojson, row_width_ft)
-            except asyncpg.UndefinedTableError:
-                return _unavailable(_PADUS_UNAVAILABLE)
+                areas, overlap = await fetch_slice_overlaps_m2(
+                    conn, geojson, row_width_ft
+                )
+            except MissingLayerTable as missing:
+                return _unavailable(
+                    _PADUS_UNAVAILABLE
+                    if missing.layer == "protected_areas"
+                    else _NWI_UNAVAILABLE
+                )
     except asyncpg.PostgresError as exc:
         sqlstate = getattr(exc, "sqlstate", "") or ""
         message = str(exc).lower()

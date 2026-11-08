@@ -402,18 +402,15 @@ def analyze_client(monkeypatch):
     from app import route as route_module
     from app.main import app
 
-    async def _zero_wetland_areas(conn, geojson: str, row_width_ft: float) -> list[float]:
+    async def _zero_overlaps(
+        conn, geojson: str, row_width_ft: float
+    ) -> tuple[list[float], list[float]]:
         rows = await conn.fetch(route_module._SAMPLE_POINTS_SQL, geojson)
-        return [0.0 for _ in rows]
-
-    async def _zero_protected_areas(conn, geojson: str, row_width_ft: float) -> list[float]:
-        rows = await conn.fetch(route_module._SAMPLE_POINTS_SQL, geojson)
-        return [0.0 for _ in rows]
+        return [0.0 for _ in rows], [0.0 for _ in rows]
 
     monkeypatch.setattr(main_module, "_FORGE_DATABASE_URL", dsn)
     monkeypatch.setattr(route_module, "sample_terrain", _scrubbed_samples)
-    monkeypatch.setattr(route_module, "fetch_wetland_areas_m2", _zero_wetland_areas)
-    monkeypatch.setattr(route_module, "fetch_protected_areas_m2", _zero_protected_areas)
+    monkeypatch.setattr(route_module, "fetch_slice_overlaps_m2", _zero_overlaps)
     with TestClient(app) as client:
         yield client
 
@@ -540,18 +537,16 @@ def test_analyze_returns_protected_acres_for_one_forested_mile(monkeypatch):
     from app.main import app
     from app.terrain_rules import SampleHit
 
-    async def _no_wetland(conn, geojson: str, row_width_ft: float) -> list[float]:
-        return [0.0]
-
-    async def _one_acre(conn, geojson: str, row_width_ft: float) -> list[float]:
-        return [4046.8564224]
+    async def _one_acre_no_wetland(
+        conn, geojson: str, row_width_ft: float
+    ) -> tuple[list[float], list[float]]:
+        return [0.0], [4046.8564224]
 
     def _forested_mile(points):
         return [SampleHit("forested", points[0][2], 41)]
 
     monkeypatch.setattr(route_module.db_module, "get_db_pool", lambda: _FakePadusPool())
-    monkeypatch.setattr(route_module, "fetch_wetland_areas_m2", _no_wetland)
-    monkeypatch.setattr(route_module, "fetch_protected_areas_m2", _one_acre)
+    monkeypatch.setattr(route_module, "fetch_slice_overlaps_m2", _one_acre_no_wetland)
     monkeypatch.setattr(route_module, "sample_terrain", _forested_mile)
     client = TestClient(app, raise_server_exceptions=False)
     response = client.post("/api/route/analyze", json=AUSTIN_DALLAS)
@@ -618,20 +613,17 @@ def test_washington_to_british_columbia_is_rejected(monkeypatch):
 
 
 def test_analyze_returns_503_when_protected_areas_are_not_loaded(monkeypatch):
-    import asyncpg
-
     from app import route as route_module
+    from app.corridor import MissingLayerTable
     from app.main import app
 
-    async def _no_wetland(conn, geojson: str, row_width_ft: float) -> list[float]:
-        return [0.0]
-
-    async def _missing_table(conn, geojson: str, row_width_ft: float) -> list[float]:
-        raise asyncpg.UndefinedTableError("habitat.padus_gap123")
+    async def _missing_table(
+        conn, geojson: str, row_width_ft: float
+    ) -> tuple[list[float], list[float]]:
+        raise MissingLayerTable("protected_areas")
 
     monkeypatch.setattr(route_module.db_module, "get_db_pool", lambda: _FakePadusPool())
-    monkeypatch.setattr(route_module, "fetch_wetland_areas_m2", _no_wetland)
-    monkeypatch.setattr(route_module, "fetch_protected_areas_m2", _missing_table)
+    monkeypatch.setattr(route_module, "fetch_slice_overlaps_m2", _missing_table)
     client = TestClient(app, raise_server_exceptions=False)
     response = client.post("/api/route/analyze", json=AUSTIN_DALLAS)
     assert response.status_code == 503

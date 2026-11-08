@@ -21,6 +21,7 @@ import { useNavigation } from '@/hooks/use-navigation';
 import {
   calculateRequestBody,
   resolvedRowWidthFt,
+  rowWidthProblem,
   terrainMatchesRouteLength,
 } from '@/lib/analyze-request';
 import { ApiError, calculate } from '@/lib/api';
@@ -186,6 +187,13 @@ function currentRowWidthFt(): number | null {
   return resolvedRowWidthFt(form.getProjectFields(), form.lookups);
 }
 
+/** The specific reason the width is missing, naming the field to set. */
+function currentWidthMessage(): string {
+  const form = useFormStore.getState();
+  if (!form.lookups) return WIDTH_REQUIRED;
+  return rowWidthProblem(form.getProjectFields(), form.lookups) ?? WIDTH_REQUIRED;
+}
+
 let formLoad: Promise<void> | null = null;
 
 /** Share one in-flight defaults load so a second boot cannot reset the form after a draft is applied. */
@@ -323,7 +331,7 @@ function WorkspaceBody(): ReactElement {
       return;
     }
     if (rowWidthFt == null) {
-      setCalculationStatus(WIDTH_REQUIRED);
+      setCalculationStatus(currentWidthMessage());
       return;
     }
     if (inFlightRef.current) {
@@ -480,7 +488,7 @@ function WorkspaceBody(): ReactElement {
       return;
     }
     if (rowWidthFt == null) {
-      toast.error(WIDTH_REQUIRED);
+      toast.error(currentWidthMessage());
       return;
     }
     savingRef.current = true;
@@ -591,7 +599,7 @@ function WorkspaceBody(): ReactElement {
       return;
     }
     if (rowWidthFt == null) {
-      toast.error(WIDTH_REQUIRED);
+      toast.error(currentWidthMessage());
       return;
     }
     if (!form.data || terrainMilesTotal(form.data) <= 0) return;

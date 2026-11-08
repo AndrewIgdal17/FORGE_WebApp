@@ -38,6 +38,16 @@ describe('finishedRouteStep', () => {
     });
   });
 
+  it('carries the specific reason the width is missing', () => {
+    const reason = "Construction type 'Subsea' has no right-of-way width.";
+    expect(finishedRouteStep(route, null, null, reason)).toEqual({
+      kind: 'pending',
+      route,
+      segments: null,
+      message: reason,
+    });
+  });
+
   it('analyzes only when the width is positive', () => {
     expect(finishedRouteStep(route, 100, null)).toEqual({
       kind: 'analyze',

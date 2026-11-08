@@ -131,13 +131,28 @@ pieces AS (
     END
   ) AS dumped
 ),
-assigned AS (
-  SELECT DISTINCT ON (piece_id)
-         s.slice_id,
-         p.geom
+piece_parts AS (
+  -- Nearest route part for each piece. Parts are few, so this stays linear.
+  SELECT DISTINCT ON (p.piece_id)
+         p.piece_id,
+         p.geom,
+         st.part_id,
+         st.n,
+         ST_LineLocatePoint(st.line, ST_PointOnSurface(p.geom)) AS frac
   FROM pieces p
-  JOIN segs s ON true
-  ORDER BY piece_id, ST_Distance(ST_PointOnSurface(p.geom), s.seg)
+  JOIN steps st ON true
+  ORDER BY p.piece_id, ST_Distance(ST_PointOnSurface(p.geom), st.line)
+),
+assigned AS (
+  -- The 30 m segment holding the piece's nearest point on its part is the
+  -- nearest segment, so this matches nearest-segment assignment without
+  -- comparing every piece with every segment.
+  SELECT s.slice_id,
+         pp.geom
+  FROM piece_parts pp
+  JOIN segs s
+    ON s.part_id = pp.part_id
+   AND s.i = LEAST(pp.n - 1, FLOOR(pp.frac * pp.n)::int)
 )
 """
 
@@ -161,60 +176,85 @@ async def fetch_slice_areas_m2(
     return [float(value) for value in row[0]], float(row[1])
 
 
-async def fetch_wetland_areas_m2(
-    conn: asyncpg.Connection, geojson: str, row_width_ft: float
-) -> list[float]:
-    """Retained inventory area, square meters, one value per 30 m sample."""
-    half_m = row_width_ft * 0.3048 / 2.0
-    where = wetland_filter_sql(load_classification().wetland)
-    sql = f"""
-    {SLICE_FROM}
-    SELECT s.slice_id,
-           COALESCE(SUM(ST_Area(ST_Intersection(a.geom, w.geom))), 0) AS area_m2
-    FROM segs s
-    LEFT JOIN assigned a ON a.slice_id = s.slice_id
-    LEFT JOIN ref.nwi_wetlands w
-      ON a.geom IS NOT NULL
-     AND ST_Intersects(a.geom, w.geom)
-     AND {where}
-    GROUP BY s.part_id, s.i, s.slice_id
-    ORDER BY s.part_id, s.i
-    """
-    rows = await conn.fetch(sql, geojson, half_m)
-    return [float(row["area_m2"]) for row in rows]
+class MissingLayerTable(Exception):
+    """A GIS layer table the slice overlap needs is absent. ``layer`` is
+    ``"wetlands"`` or ``"protected_areas"``."""
+
+    def __init__(self, layer: str) -> None:
+        super().__init__(layer)
+        self.layer = layer
 
 
-PROTECTED_AREA_SQL = """
-SELECT s.slice_id,
-       COALESCE(
-         ST_Area(
-           ST_UnaryUnion(
-             ST_Collect(
-               ST_CollectionExtract(ST_Intersection(a.geom, p.geom), 3)
-             )
-           )
-         ),
-         0
-       ) AS area_m2
-FROM segs s
-LEFT JOIN assigned a ON a.slice_id = s.slice_id
-LEFT JOIN habitat.padus_gap123 p
-  ON a.geom IS NOT NULL
- AND p.gap_sts IN (1, 2, 3)
- AND ST_Intersects(a.geom, p.geom)
-GROUP BY s.part_id, s.i, s.slice_id
-ORDER BY s.part_id, s.i
+_LAYER_TABLES = (
+    ("wetlands", "ref.nwi_wetlands"),
+    ("protected_areas", "habitat.padus_gap123"),
+)
+
+
+def wetland_area_sql(where: str) -> str:
+    """Retained inventory area per slice that has any, as a CTE body over
+    ``assigned``. Slices with none are absent and read as 0 by the caller."""
+    return f"""
+SELECT a.slice_id,
+       SUM(ST_Area(ST_Intersection(a.geom, w.geom))) AS area_m2
+FROM assigned a
+JOIN ref.nwi_wetlands w
+  ON ST_Intersects(a.geom, w.geom)
+ AND {where}
+GROUP BY a.slice_id
 """
 
 
-async def fetch_protected_areas_m2(
+PROTECTED_AREA_SQL = """
+SELECT a.slice_id,
+       ST_Area(
+         ST_UnaryUnion(
+           ST_Collect(
+             ST_CollectionExtract(ST_Intersection(a.geom, p.geom), 3)
+           )
+         )
+       ) AS area_m2
+FROM assigned a
+JOIN habitat.padus_gap123 p
+  ON p.gap_sts IN (1, 2, 3)
+ AND ST_Intersects(a.geom, p.geom)
+GROUP BY a.slice_id
+"""
+
+
+async def fetch_slice_overlaps_m2(
     conn: asyncpg.Connection, geojson: str, row_width_ft: float
-) -> list[float]:
-    """GAP 1–3 overlap, square meters, one value per 30 m sample."""
-    half_m = row_width_ft * 0.3048 / 2.0
-    sql = f"""
-    {SLICE_FROM}
-    {PROTECTED_AREA_SQL}
+) -> tuple[list[float], list[float]]:
+    """Retained wetland area and GAP 1–3 overlap, square meters, one value per
+    30 m sample, from one build of the corridor slices.
+
+    Raises ``MissingLayerTable`` naming the first absent layer table. A missing
+    table is never read as zero.
     """
-    rows = await conn.fetch(sql, geojson, half_m)
-    return [float(row["area_m2"]) for row in rows]
+    for layer, table in _LAYER_TABLES:
+        if await conn.fetchval("SELECT to_regclass($1) IS NOT NULL", table) is not True:
+            raise MissingLayerTable(layer)
+    half_m = row_width_ft * 0.3048 / 2.0
+    where = wetland_filter_sql(load_classification().wetland)
+    sql = f"""
+    {SLICE_FROM},
+    wetland AS ({wetland_area_sql(where)}),
+    protected AS ({PROTECTED_AREA_SQL})
+    SELECT COALESCE(w.area_m2, 0) AS wetland_m2,
+           COALESCE(p.area_m2, 0) AS protected_m2
+    FROM segs s
+    LEFT JOIN wetland w ON w.slice_id = s.slice_id
+    LEFT JOIN protected p ON p.slice_id = s.slice_id
+    ORDER BY s.part_id, s.i
+    """
+    try:
+        rows = await conn.fetch(sql, geojson, half_m)
+    except asyncpg.UndefinedTableError as exc:
+        message = str(exc)
+        raise MissingLayerTable(
+            "protected_areas" if "padus" in message else "wetlands"
+        ) from exc
+    return (
+        [float(row["wetland_m2"]) for row in rows],
+        [float(row["protected_m2"]) for row in rows],
+    )

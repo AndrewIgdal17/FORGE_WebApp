@@ -17,7 +17,11 @@ import { RouteStats } from '@/components/map/RouteStats';
 import { useRouteAnalyze } from '@/hooks/use-route-analyze';
 import { useRouteDraw, type EndpointSubstations } from '@/hooks/use-route-draw';
 import type { AnalyzeResponse } from '@/lib/api';
-import { changesAfterAnalyze, resolvedRowWidthFt } from '@/lib/analyze-request';
+import {
+  changesAfterAnalyze,
+  resolvedRowWidthFt,
+  rowWidthProblem,
+} from '@/lib/analyze-request';
 import { useFormStore } from '@/stores/form-store';
 import { useMapStore } from '@/stores/map-store';
 
@@ -81,10 +85,14 @@ export function MapPanel({
     if (!lookups || !data) return null;
     return resolvedRowWidthFt(useFormStore.getState().getProjectFields(), lookups);
   }, [lookups, data]);
+  const widthMessage = useMemo(() => {
+    if (!lookups || !data) return undefined;
+    return rowWidthProblem(useFormStore.getState().getProjectFields(), lookups) ?? undefined;
+  }, [lookups, data]);
   const widthError = useMemo(() => {
-    const step = finishedRouteStep(finishedRoute, rowWidthFt, null);
+    const step = finishedRouteStep(finishedRoute, rowWidthFt, null, widthMessage);
     return step.kind === 'pending' ? new Error(step.message) : null;
-  }, [finishedRoute, rowWidthFt]);
+  }, [finishedRoute, rowWidthFt, widthMessage]);
 
   useLayoutEffect(() => {
     if (!map) return;
@@ -132,7 +140,12 @@ export function MapPanel({
   // line so a drag does not re-analyze the pre-drag geometry. A missing width
   // still publishes that line and does not call analyze.
   useEffect(() => {
-    const step = finishedRouteStep(finishedRoute, rowWidthFt, heldSegmentsRef.current);
+    const step = finishedRouteStep(
+      finishedRoute,
+      rowWidthFt,
+      heldSegmentsRef.current,
+      widthMessage,
+    );
     if (step.kind === 'none') {
       heldSegmentsRef.current = null;
       return;
@@ -160,7 +173,7 @@ export function MapPanel({
     return () => {
       cancelled = true;
     };
-  }, [analyze, finishedRoute, rowWidthFt]);
+  }, [analyze, finishedRoute, rowWidthFt, widthMessage]);
 
   const showExisting = !clearedExisting && existingRoute && !routeGeoJSON ? existingRoute : null;
   const statsRoute = routeGeoJSON ?? showExisting;

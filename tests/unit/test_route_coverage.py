@@ -49,3 +49,11 @@ def test_coverage_sql_compares_lengths_inside_lower_48_counties():
     assert "ST_UnaryUnion" in _COVERAGE_SQL
     assert "ref.counties_tiger" in _COVERAGE_SQL
     assert "$2" in _COVERAGE_SQL
+
+
+def test_coverage_unions_only_counties_the_route_crosses():
+    """The union is limited to counties the route intersects, so it uses the
+    spatial index instead of merging every lower-48 county on each request."""
+    sql = " ".join(_COVERAGE_SQL.split())
+    assert "ST_Intersects(c.geom, r.geom)" in sql
+    assert "FROM ref.counties_tiger c, route r" in sql or "JOIN route r" in sql

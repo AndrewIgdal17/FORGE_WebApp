@@ -122,3 +122,52 @@ def test_two_copies_of_one_square_count_once():
     row = asyncio.run(run())
     assert float(row["union_area"]) == pytest.approx(100.0)
     assert float(row["summed_area"]) == pytest.approx(200.0)
+
+
+def test_slice_assignment_is_not_a_piece_by_segment_cross_join():
+    """Each piece is assigned by where its interior point falls along its part,
+    not by comparing it with every 30 m segment (quadratic in route length)."""
+    sql = " ".join(SLICE_FROM.split())
+    assert "JOIN segs s ON true" not in sql
+    assert "ST_Distance(ST_PointOnSurface(p.geom), s.seg)" not in sql
+    assert "ST_LineLocatePoint" in sql
+
+
+class _RegclassConn:
+    """Answers the to_regclass check; fails the test if the overlap query runs."""
+
+    def __init__(self, present: set[str]):
+        self.present = present
+
+    async def fetchval(self, sql: str, table: str):
+        assert "to_regclass" in sql
+        return table in self.present
+
+    async def fetch(self, *args, **kwargs):
+        raise AssertionError("overlap query must not run when a table is missing")
+
+
+@pytest.mark.parametrize(
+    ("present", "layer"),
+    [
+        ({"habitat.padus_gap123"}, "wetlands"),
+        ({"ref.nwi_wetlands"}, "protected_areas"),
+        (set(), "wetlands"),
+    ],
+)
+def test_missing_layer_table_is_named_never_zero(present, layer):
+    import asyncio
+
+    from app.corridor import MissingLayerTable, fetch_slice_overlaps_m2
+
+    with pytest.raises(MissingLayerTable) as missing:
+        asyncio.run(fetch_slice_overlaps_m2(_RegclassConn(present), "{}", 215.0))
+    assert missing.value.layer == layer
+
+
+def test_overlap_query_builds_slices_once():
+    """Both overlaps read the same `assigned` CTE in one statement."""
+    from app.corridor import PROTECTED_AREA_SQL, wetland_area_sql
+
+    assert "ref.nwi_wetlands" in wetland_area_sql("TRUE")
+    assert "GROUP BY a.slice_id" in PROTECTED_AREA_SQL

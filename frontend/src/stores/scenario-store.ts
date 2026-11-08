@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { resolvedRowWidthFt } from '@/lib/analyze-request';
+import { resolvedRowWidthFt, rowWidthProblem } from '@/lib/analyze-request';
 import {
   createScenario as createScenarioApi,
   getDefaults,
@@ -206,12 +206,17 @@ function projectFieldsFromDocument(data: Record<string, unknown>): ProjectFields
 function rowWidthForDocument(
   defaults: Record<string, unknown>,
   changes: Record<string, unknown>,
-): number | null {
+): { width: number | null; problem: string | null } {
   const data = structuredClone(defaults);
   for (const [path, value] of Object.entries(changes)) {
     setValueAtPath(data, path, value);
   }
-  return resolvedRowWidthFt(projectFieldsFromDocument(data), loadLookups(defaults));
+  const fields = projectFieldsFromDocument(data);
+  const lookups = loadLookups(defaults);
+  return {
+    width: resolvedRowWidthFt(fields, lookups),
+    problem: rowWidthProblem(fields, lookups),
+  };
 }
 
 function deepClone<T>(value: T): T {
@@ -761,7 +766,11 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
       get().scenarios.map((scenario) => scenario.name),
     );
     const defaults = await getDefaults();
-    const rowWidthFt = rowWidthForDocument(defaults.defaults, source.changes);
+    const { width: rowWidthFt, problem } = rowWidthForDocument(
+      defaults.defaults,
+      source.changes,
+    );
+    if (rowWidthFt == null && problem) throw new Error(problem);
     return get().createScenario(
       name,
       'manual',
