@@ -17,6 +17,7 @@ import type { SubItemValidation } from '@/components/sidebar/sidebar-item';
 import { ContributionStrip } from '@/components/workspace/contribution-strip';
 import { WorkspaceHeader } from '@/components/workspace/workspace-header';
 import { SIDEBAR_SECTIONS } from '@/data/sidebar-sections';
+import { useAuth } from '@/hooks/use-auth';
 import { useNavigation } from '@/hooks/use-navigation';
 import {
   calculateRequestBody,
@@ -30,7 +31,12 @@ import { debounce } from '@/lib/debounce';
 import { getValueAtPath } from '@/lib/path';
 import { isMultiLineString, scenarioMapRoute } from '@/lib/route-geometry';
 import { useFormStore } from '@/stores/form-store';
-import { exportAsCsv, exportAsForge, useScenarioStore } from '@/stores/scenario-store';
+import {
+  exportAsCsv,
+  exportAsForge,
+  saveCreatesCopy,
+  useScenarioStore,
+} from '@/stores/scenario-store';
 import type { Scenario, ScenarioDraft, ScenarioGeometry } from '@/stores/scenario-store';
 
 interface WizardDraft {
@@ -269,6 +275,9 @@ function WorkspaceBody(): ReactElement {
   const setActiveScenario = useScenarioStore((state) => state.setActiveScenario);
   const createScenario = useScenarioStore((state) => state.createScenario);
   const saveScenario = useScenarioStore((state) => state.saveScenario);
+  const saveScenarioAsCopy = useScenarioStore((state) => state.saveScenarioAsCopy);
+  const { session } = useAuth();
+  const currentUserId = session?.user?.id ?? null;
   const renameScenario = useScenarioStore((state) => state.renameScenario);
   const setUnsavedChanges = useScenarioStore((state) => state.setUnsavedChanges);
   const savedResults = useScenarioStore((state) => state.savedResults);
@@ -494,6 +503,21 @@ function WorkspaceBody(): ReactElement {
     savingRef.current = true;
     try {
       const changes = useFormStore.getState().getChanges();
+      if (saveCreatesCopy(active, currentUserId)) {
+        // Examples and other users' scenarios are never edited in place.
+        const copy = await saveScenarioAsCopy(active.id, changes, drawn, rowWidthFt);
+        window.history.replaceState(
+          null,
+          '',
+          `/app/workspace?scenario=${encodeURIComponent(copy.id)}`,
+        );
+        setDrawn(undefined);
+        baselineRef.current = JSON.stringify(changes);
+        const latest = JSON.stringify(useFormStore.getState().getChanges());
+        setUnsavedChanges(latest !== baselineRef.current);
+        toast.success(`Saved as your copy: ${copy.name}`);
+        return;
+      }
       await saveScenario(active.id, changes, active.revision, drawn, rowWidthFt);
       setDrawn(undefined);
       baselineRef.current = JSON.stringify(changes);

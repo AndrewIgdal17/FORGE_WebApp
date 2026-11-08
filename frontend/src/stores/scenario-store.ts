@@ -77,6 +77,16 @@ interface ScenarioStore {
     revision: number,
   ) => Promise<Scenario>;
   duplicateScenario: (id: string) => Promise<Scenario>;
+  /**
+   * Save edits to `id` as a new scenario you own and make it active. The
+   * source row is not written. Used for examples and other users' scenarios.
+   */
+  saveScenarioAsCopy: (
+    id: string,
+    changes: Record<string, unknown>,
+    geometry?: ScenarioGeometry,
+    rowWidthFt?: number,
+  ) => Promise<Scenario>;
   deleteScenario: (id: string) => Promise<void>;
   setUnsavedChanges: (value: boolean) => void;
   setPendingDraft: (draft: ScenarioDraft) => void;
@@ -513,6 +523,15 @@ export function generateScenarioName(
   return `${baseName} (${counter})`;
 }
 
+/**
+ * True when saving edits to `scenario` must create a copy: examples from the
+ * papers are never edited in place, even by their owner, and another user's
+ * scenario cannot be written.
+ */
+export function saveCreatesCopy(scenario: Scenario, userId: string | null): boolean {
+  return scenario.source === 'paper' || scenario.user_id !== userId;
+}
+
 export function getActiveScenario(state: {
   scenarios: Scenario[];
   activeScenarioId: string | null;
@@ -779,6 +798,35 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
       source.segments == null ? null : deepClone(source.segments),
       rowWidthFt ?? undefined,
     );
+  },
+
+  saveScenarioAsCopy: async (id, changes, geometry, rowWidthFt) => {
+    const source = get().scenarios.find((scenario) => scenario.id === id);
+    if (!source) throw new Error('Scenario not found');
+    const name = generateScenarioName(
+      `${source.name} (copy)`,
+      get().scenarios.map((scenario) => scenario.name),
+    );
+    const copy = await get().createScenario(
+      name,
+      'manual',
+      deepClone(changes),
+      geometry !== undefined
+        ? geometry.route
+        : routePayload(source.route, source.segments),
+      geometry !== undefined
+        ? geometry.segments
+        : source.segments == null
+          ? undefined
+          : deepClone(source.segments),
+      rowWidthFt,
+    );
+    set({
+      activeScenarioId: copy.id,
+      unsavedChanges: false,
+      savedResults: copy.results,
+    });
+    return copy;
   },
 
   deleteScenario: async (id) => {

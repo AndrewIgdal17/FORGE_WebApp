@@ -23,7 +23,6 @@ export default function HomePage(): ReactElement {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scenarios = useScenarioStore((state) => state.scenarios);
   const loadScenarios = useScenarioStore((state) => state.loadScenarios);
-  const duplicateScenario = useScenarioStore((state) => state.duplicateScenario);
   const setActiveScenario = useScenarioStore((state) => state.setActiveScenario);
   const setPendingDraft = useScenarioStore((state) => state.setPendingDraft);
 
@@ -81,17 +80,10 @@ export default function HomePage(): ReactElement {
     }
   }
 
-  async function handleDuplicate(scenario: Scenario): Promise<void> {
-    setBusy(true);
-    try {
-      const copy = await duplicateScenario(scenario.id);
-      setActiveScenario(copy.id);
-      navigate('/app/workspace');
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setBusy(false);
-    }
+  // Open the example itself. Saving edits there makes your own copy.
+  function openExample(scenario: Scenario): void {
+    setActiveScenario(scenario.id);
+    navigate(`/app/workspace?scenario=${encodeURIComponent(scenario.id)}`);
   }
 
   const examples = scenarios.filter((s) => s.source === 'paper');
@@ -149,7 +141,7 @@ export default function HomePage(): ReactElement {
             <section className="mt-16 w-full max-w-2xl text-left">
               <h2 className="text-lg font-semibold text-slate-900">Examples</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Case studies from the research papers. Click to duplicate and explore.
+                Case studies from the research papers. Click to open. Saving changes makes your own copy.
               </p>
               <div className="mt-4 grid gap-2">
                 {examples.map((scenario) => (
@@ -157,13 +149,13 @@ export default function HomePage(): ReactElement {
                     key={scenario.id}
                     type="button"
                     disabled={busy}
-                    onClick={() => void handleDuplicate(scenario)}
+                    onClick={() => openExample(scenario)}
                     className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition-colors hover:border-forge-primary hover:bg-forge-primary-light"
                   >
                     <span className="text-sm font-medium text-slate-900">
                       {scenario.name}
                     </span>
-                    <span className="text-xs text-slate-500">Duplicate &amp; Edit →</span>
+                    <span className="text-xs text-slate-500">Open →</span>
                   </button>
                 ))}
               </div>
