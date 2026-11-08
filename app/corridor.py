@@ -205,20 +205,31 @@ GROUP BY a.slice_id
 """
 
 
+# CTE list (not a single body): `padus_local` clips the GAP 1-3 polygons the
+# corridor touches to the corridor once and subdivides them, so each slice
+# intersects small pieces. A single designation can be an 18,000 km2
+# multipolygon with 20,000 vertices; intersecting every slice with the whole
+# polygon took two minutes on a 552-mile route. The result is the same area.
 PROTECTED_AREA_SQL = """
-SELECT a.slice_id,
-       ST_Area(
-         ST_UnaryUnion(
-           ST_Collect(
-             ST_CollectionExtract(ST_Intersection(a.geom, p.geom), 3)
+padus_local AS MATERIALIZED (
+  SELECT ST_Subdivide(ST_Intersection(p.geom, c.geom), 128) AS geom
+  FROM habitat.padus_gap123 p, corridor c
+  WHERE p.gap_sts IN (1, 2, 3)
+    AND ST_Intersects(p.geom, c.geom)
+),
+protected AS (
+  SELECT a.slice_id,
+         ST_Area(
+           ST_UnaryUnion(
+             ST_Collect(
+               ST_CollectionExtract(ST_Intersection(a.geom, l.geom), 3)
+             )
            )
-         )
-       ) AS area_m2
-FROM assigned a
-JOIN habitat.padus_gap123 p
-  ON p.gap_sts IN (1, 2, 3)
- AND ST_Intersects(a.geom, p.geom)
-GROUP BY a.slice_id
+         ) AS area_m2
+  FROM assigned a
+  JOIN padus_local l ON ST_Intersects(a.geom, l.geom)
+  GROUP BY a.slice_id
+)
 """
 
 
@@ -239,7 +250,7 @@ async def fetch_slice_overlaps_m2(
     sql = f"""
     {SLICE_FROM},
     wetland AS ({wetland_area_sql(where)}),
-    protected AS ({PROTECTED_AREA_SQL})
+    {PROTECTED_AREA_SQL}
     SELECT COALESCE(w.area_m2, 0) AS wetland_m2,
            COALESCE(p.area_m2, 0) AS protected_m2
     FROM segs s

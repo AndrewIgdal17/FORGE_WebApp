@@ -171,3 +171,14 @@ def test_overlap_query_builds_slices_once():
 
     assert "ref.nwi_wetlands" in wetland_area_sql("TRUE")
     assert "GROUP BY a.slice_id" in PROTECTED_AREA_SQL
+
+
+def test_protected_areas_are_clipped_to_the_corridor_once():
+    """Large GAP polygons are clipped to the corridor and subdivided once per
+    request, so each slice intersects small pieces instead of a whole polygon."""
+    from app.corridor import PROTECTED_AREA_SQL
+
+    sql = " ".join(PROTECTED_AREA_SQL.split())
+    assert "padus_local AS MATERIALIZED" in sql
+    assert "ST_Subdivide(ST_Intersection(p.geom, c.geom)" in sql
+    assert "JOIN padus_local l ON ST_Intersects(a.geom, l.geom)" in sql

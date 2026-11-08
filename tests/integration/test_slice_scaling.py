@@ -145,3 +145,77 @@ def test_one_slice_build_gives_both_overlaps():
     areas, wetland, protected = _run(run())
     assert len(wetland) == len(protected) == len(areas)
     assert all(value >= 0 for value in wetland + protected)
+
+
+# The protected-area overlap before clipping, used as the reference.
+_UNCLIPPED_PROTECTED_SQL = """
+SELECT a.slice_id,
+       ST_Area(ST_UnaryUnion(ST_Collect(
+         ST_CollectionExtract(ST_Intersection(a.geom, p.geom), 3)))) AS area_m2
+FROM assigned a
+JOIN habitat.padus_gap123 p
+  ON p.gap_sts IN (1, 2, 3) AND ST_Intersects(a.geom, p.geom)
+GROUP BY a.slice_id
+"""
+
+
+def test_clipped_protected_areas_match_the_unclipped_overlap():
+    """A large many-vertex polygon and an overlapping second designation give
+    the same per-slice protected area clipped or not. Rows are inserted inside
+    a transaction that is always rolled back."""
+    from app.corridor import fetch_slice_overlaps_m2
+
+    geojson = _curvy(20.0, 120)
+
+    async def run():
+        conn = await _connect()
+        try:
+            present = await conn.fetchval(
+                "SELECT to_regclass('ref.nwi_wetlands') IS NOT NULL"
+                " AND to_regclass('habitat.padus_gap123') IS NOT NULL"
+            )
+            if not present:
+                pytest.skip("wetland or protected-area table is not loaded")
+            tx = conn.transaction()
+            await tx.start()
+            try:
+                # A ragged 2,000-vertex polygon across the route, and a GAP 2
+                # rectangle overlapping it, so the union matters.
+                await conn.execute(
+                    """
+                    INSERT INTO habitat.padus_gap123 (gap_sts, geom)
+                    SELECT 3, ST_Multi(ST_Transform(ST_SetSRID(ST_MakePolygon(ST_AddPoint(line, ST_StartPoint(line))), 4326), 5070))
+                    FROM (
+                      SELECT ST_MakeLine(ST_MakePoint(
+                               -102.95 + 0.2 * cos(2 * pi() * k / 2000) * (1 + 0.05 * sin(37 * k)),
+                               31.0 + 0.2 * sin(2 * pi() * k / 2000) * (1 + 0.05 * sin(37 * k))
+                             ) ORDER BY k) AS line
+                      FROM generate_series(0, 1999) k
+                    ) ring
+                    """
+                )
+                await conn.execute(
+                    "INSERT INTO habitat.padus_gap123 (gap_sts, geom) SELECT 2,"
+                    " ST_Multi(ST_Transform(ST_MakeEnvelope(-102.9, 30.9, -102.7, 31.1, 4326), 5070))"
+                )
+                _, protected = await fetch_slice_overlaps_m2(conn, geojson, 215.0)
+                from app.corridor import SLICE_FROM
+
+                reference = await conn.fetch(
+                    f"{SLICE_FROM}, ref AS ({_UNCLIPPED_PROTECTED_SQL})"
+                    " SELECT COALESCE(r.area_m2, 0) AS a FROM segs s"
+                    " LEFT JOIN ref r ON r.slice_id = s.slice_id ORDER BY s.part_id, s.i",
+                    geojson,
+                    215 * 0.3048 / 2,
+                )
+            finally:
+                await tx.rollback()
+            return protected, [row["a"] for row in reference]
+        finally:
+            await conn.close()
+
+    protected, reference = _run(run())
+    assert len(protected) == len(reference)
+    assert sum(1 for value in reference if value > 0) > 100
+    for got, want in zip(protected, reference):
+        assert got == pytest.approx(want, abs=0.01)
