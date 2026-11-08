@@ -61,6 +61,17 @@ describe('legacy scenarios', () => {
   });
 });
 
+describe('legacy Subsea after the form clears its conductor', () => {
+  it('still names the construction type, not the blank conductor', () => {
+    // TechnologySection blanks a conductor the construction type does not offer.
+    expect(rowWidthProblem({ ...LEGACY_SUBSEA, conductorType: '' }, lookups())).toBe(
+      "Construction type 'Subsea' has no right-of-way width. Choose Overhead, " +
+        'Underground Direct-Buried, or Underground Tunnel in Project Identity → ' +
+        'Technology before drawing a route.',
+    );
+  });
+});
+
 describe('rowWidthProblem', () => {
   const base: ProjectFields = {
     constructionType: 'Overhead',

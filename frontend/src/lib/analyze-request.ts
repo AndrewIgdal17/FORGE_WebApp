@@ -4,6 +4,7 @@ import type { CalculateRequest } from './api';
 import {
   buildCategoryKey,
   getRowWidthFeet,
+  normalizeCT,
   type LookupTables,
   type ProjectFields,
 } from './lookups';
@@ -59,18 +60,21 @@ export function rowWidthProblem(
   if (resolvedRowWidthFt(fields, lookups) !== null) return null;
 
   const isDc = fields.acDc === 'DC';
-  const blank: string[] = [];
-  if (!fields.constructionType) blank.push('Construction type');
-  if (!fields.acDc) blank.push('AC / DC');
-  if (!fields.capacityMw) blank.push('Capacity (MW)');
-  if (!fields.conductorType) blank.push('Conductor type');
-  if (isDc && !fields.converterType) blank.push('Converter type');
-  if (blank.length > 0) return `Set ${englishAnd(blank)} ${TECHNOLOGY_HINT}`;
-
-  const key = buildCategoryKey(fields);
-  if (!key) return `Set Construction type ${TECHNOLOGY_HINT}`;
-  const wanted = key.split('/');
   const labels = ['Construction type', 'AC / DC', 'Capacity (MW)', 'Conductor type', 'Converter type'];
+  const raw = [
+    fields.constructionType,
+    fields.acDc,
+    fields.capacityMw ? String(fields.capacityMw) : '',
+    fields.conductorType,
+    isDc ? (fields.converterType ?? '') : 'NA',
+  ];
+  const wanted = [
+    fields.constructionType ? normalizeCT(fields.constructionType) : '',
+    fields.acDc,
+    fields.capacityMw ? `${String(fields.capacityMw).replace(/\s*MW\s*/i, '')}MW` : '',
+    fields.conductorType,
+    raw[4],
+  ];
   const shown = (index: number, segment: string): string => {
     if (index === 0) return CONSTRUCTION_LABEL[segment] ?? segment;
     if (index === 2) return segment.replace(/MW$/, '');
@@ -78,19 +82,20 @@ export function rowWidthProblem(
   };
   const described = (index: number, segment: string): string =>
     index === 2 ? `${shown(index, segment)} MW` : shown(index, segment);
-  const raw = [
-    fields.constructionType,
-    fields.acDc,
-    String(fields.capacityMw),
-    fields.conductorType,
-    fields.converterType ?? '',
-  ];
 
-  const rows = Object.entries(lookups.rowWidthLookup)
+  // Check the filled-in fields against the table in key order before naming
+  // blanks: the form blanks a conductor its construction type does not offer,
+  // and the construction type is then the field to fix.
+  let matching = Object.entries(lookups.rowWidthLookup)
     .filter(([, width]) => typeof width === 'number' && width > 0)
     .map(([category]) => category.split('/'));
-  let matching = rows;
+  const blank: string[] = [];
   for (let index = 0; index < wanted.length; index += 1) {
+    if (!wanted[index]) {
+      blank.push(labels[index]);
+      continue;
+    }
+    if (blank.length > 0) continue;
     const next = matching.filter((parts) => parts[index] === wanted[index]);
     if (next.length > 0) {
       matching = next;
@@ -110,7 +115,8 @@ export function rowWidthProblem(
     const choose = choices.length > 0 ? ` Choose ${englishList(choices)}` : ' Change it';
     return `${labels[index]} '${raw[index]}' has no right-of-way width${forWhat}.${choose} ${TECHNOLOGY_HINT}`;
   }
-  return `The right-of-way width for category '${key}' is not positive. Change the Technology fields ${TECHNOLOGY_HINT}`;
+  if (blank.length > 0) return `Set ${englishAnd(blank)} ${TECHNOLOGY_HINT}`;
+  return `The right-of-way width for category '${wanted.join('/')}' is not positive. Change the Technology fields ${TECHNOLOGY_HINT}`;
 }
 
 export function calculateRequestBody(
