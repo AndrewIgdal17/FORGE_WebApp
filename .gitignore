@@ -32,6 +32,7 @@ node_modules/
 
 # Agent / SDD artifacts
 .superpowers/
+.worktrees/
 
 # macOS
 .DS_Store
