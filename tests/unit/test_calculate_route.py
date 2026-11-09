@@ -28,6 +28,13 @@ ACRE_ZEROS = {
     "02_project_physical_details.terrain.protected_area_acres.rolling_hills": 0.0,
     "02_project_physical_details.terrain.protected_area_acres.mountain": 0.0,
 }
+# v3.0.0 requires these before resolve_inputs will return a document.
+REQUIRED_TO_CALCULATE = {
+    "01_project_technical_details.project.capacity_mw": 500,
+    "01_project_technical_details.project.value_of_load_per_mwh": 40,
+    "17_congestion_reductions.greenfield_congestion_reductions.constraints.flow_factor": 0.5,
+    "17_congestion_reductions.greenfield_congestion_reductions.prices.average_congestion_price": 10,
+}
 
 
 def _live(**extra) -> dict:
@@ -112,7 +119,7 @@ def test_measured_miles_overwrite_typed_changes(monkeypatch):
     response = client.post(
         "/api/forge/calculate",
         json=_live(
-            changes={FORESTED: 99},
+            changes={FORESTED: 99, **REQUIRED_TO_CALCULATE},
             route=AUSTIN_DALLAS_ROUTE,
             row_width_ft=100,
         ),

@@ -96,10 +96,21 @@ async def test_concurrent_calculations():
             assert resp.headers["x-request-id"]
 
 
+# v3.0.0 requires these before resolve_inputs will return a document.
+REQUIRED_TO_CALCULATE = {
+    "01_project_technical_details.project.capacity_mw": 500,
+    "01_project_technical_details.project.value_of_load_per_mwh": 40,
+    "17_congestion_reductions.greenfield_congestion_reductions.constraints.flow_factor": 0.5,
+    "17_congestion_reductions.greenfield_congestion_reductions.prices.average_congestion_price": 10,
+}
+
+
 def _payload(scenario_id: str) -> dict:
+    changes = {path: 0.0 for path in ACRE_PATHS}
+    changes.update(REQUIRED_TO_CALCULATE)
     return {
         "defaults_id": forge.get_defaults_id(),
-        "changes": {path: 0.0 for path in ACRE_PATHS},
+        "changes": changes,
         "scenario_id": scenario_id,
         "route": COVERED_ROUTE,
         "row_width_ft": 100,

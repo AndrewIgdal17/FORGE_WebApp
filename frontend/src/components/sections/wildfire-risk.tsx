@@ -7,7 +7,8 @@ const WILDFIRE = '06_wildfire_costs.wildfire';
 
 const CONSTRUCTION_TYPES = [
   { key: 'overhead', label: 'Overhead' },
-  { key: 'underground', label: 'Underground' },
+  { key: 'underground_direct_buried', label: 'Underground direct-buried' },
+  { key: 'underground_tunnel', label: 'Underground tunnel' },
 ] as const;
 
 export function WildfireRisk(): ReactElement {
