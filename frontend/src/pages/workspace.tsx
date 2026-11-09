@@ -128,6 +128,7 @@ function hasRequiredFields(data: Record<string, unknown> | null): boolean {
       return false;
     }
   }
+  if (getValueAtPath(data, `${PROJECT}.row_agreement_type`) === 'fee_simple') return false;
   return terrainMilesTotal(data) > 0;
 }
 
@@ -169,7 +170,14 @@ function validationBadges(
       hasMismatch: mismatch,
     };
   }
-  if (mismatch) badges['rights-of-way'] = { hasMismatch: true };
+  const rowAgreementInvalid =
+    getValueAtPath(data, `${PROJECT}.row_agreement_type`) === 'fee_simple';
+  if (mismatch || rowAgreementInvalid) {
+    badges['rights-of-way'] = {
+      ...(mismatch ? { hasMismatch: true } : {}),
+      ...(rowAgreementInvalid ? { invalidCount: 1 } : {}),
+    };
+  }
   return badges;
 }
 

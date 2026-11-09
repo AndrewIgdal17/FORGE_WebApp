@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import type { ReactElement } from 'react';
-import { CheckboxField } from '@/components/form/checkbox-field';
 import { CurrencyField } from '@/components/form/currency-field';
 import { NumberField } from '@/components/form/number-field';
 import { PercentageField } from '@/components/form/percentage-field';
@@ -30,7 +29,6 @@ const VALUE_OF_LOAD_PATH = `${PROJECT}.value_of_load_per_mwh`;
 const CONVERTER_COUNT_PATH = `${PROJECT}.number_of_converters`;
 const CONVERTER_TYPE_PATH = `${PROJECT}.converter_type`;
 const PROJECT_TYPE_PATH = `${PROJECT}.project_type`;
-const USES_EXISTING_ROW_PATH = `${PROJECT}.uses_existing_row`;
 const OLD_AC_DC_PATH = `${PROJECT}.old_ac_dc`;
 const OLD_CAPACITY_PATH = `${PROJECT}.old_capacity_mw`;
 const OLD_CONDUCTOR_PATH = `${PROJECT}.old_conductor_type`;
@@ -119,8 +117,6 @@ export function TechnologySection(): ReactElement {
   const isDc = acDc === 'DC';
   const showCorona = constructionType === 'Overhead' && acDc === 'AC';
   const isReconductoring = projectType === 'reconductoring';
-  const showExistingRow =
-    projectType === 'reconductoring' || projectType === 'rebuild';
 
   useEffect(() => {
     syncCapacity(acDc, capacity, CAPACITY_PATH, setFieldValue);
@@ -199,13 +195,6 @@ export function TechnologySection(): ReactElement {
         helpText="Greenfield is a new line. Reconductoring replaces the conductor. Rebuild replaces the structures."
         options={PROJECT_TYPE_OPTIONS}
       />
-      {showExistingRow ? (
-        <CheckboxField
-          path={USES_EXISTING_ROW_PATH}
-          label="Uses existing ROW"
-          helpText="The project uses an existing right of way."
-        />
-      ) : null}
       {isReconductoring ? (
         <>
           <h3 className="text-sm font-medium text-slate-900 sm:col-span-2">

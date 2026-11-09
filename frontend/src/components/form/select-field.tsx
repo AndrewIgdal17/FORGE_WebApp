@@ -18,6 +18,7 @@ export interface SelectFieldProps {
   path: string;
   label: string;
   helpText?: string;
+  error?: string;
   options: SelectOption[];
 }
 
@@ -31,6 +32,7 @@ export function SelectField({
   path,
   label,
   helpText,
+  error,
   options,
 }: SelectFieldProps): ReactElement {
   const value = useFormStore((state) => state.getFieldValue(path));
@@ -38,7 +40,7 @@ export function SelectField({
   const selected = readSelectValue(value);
 
   return (
-    <FormField label={label} htmlFor={path} helpText={helpText}>
+    <FormField label={label} htmlFor={path} helpText={helpText} error={error}>
       <Select
         value={selected}
         items={options}

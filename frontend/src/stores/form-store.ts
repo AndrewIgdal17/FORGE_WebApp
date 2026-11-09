@@ -242,7 +242,6 @@ export const useFormStore = create<FormState & FormActions>((set, get) => ({
     const { data } = get();
     if (!data) return false;
     const projectType = getValueAtPath(data, `${PROJECT_PATH}.project_type`);
-    const usesExistingRow = getValueAtPath(data, `${PROJECT_PATH}.uses_existing_row`);
-    return projectType === 'reconductoring' || usesExistingRow === true;
+    return projectType === 'reconductoring';
   },
 }));

@@ -18,16 +18,15 @@ import { useFormStore } from '@/stores/form-store';
 
 const PROJECT = '01_project_technical_details.project';
 const CONSTRUCTION_TYPE_PATH = `${PROJECT}.construction_type`;
-const USES_EXISTING_ROW_PATH = `${PROJECT}.uses_existing_row`;
 const ROW_AGREEMENT_PATH = `${PROJECT}.row_agreement_type`;
+const FEE_SIMPLE_LEGACY = 'fee_simple is no longer an agreement type. Choose another agreement.';
 const ROW_AGREEMENT_OPTIONS: SelectOption[] = [
   { value: 'permanent_easement_new', label: 'Permanent easement' },
-  { value: 'fee_simple', label: 'Fee simple' },
   { value: 'federal_hybrid', label: 'Federal hybrid' },
   { value: 'lease_license_existing', label: 'Lease or license (existing)' },
 ];
 const ROW_AGREEMENT_HELP =
-  'Lease drops acquisition and holding, keeps rent from year 1. Permanent easement and fee simple keep acquisition and holding, drop rent. Federal hybrid keeps all three. If unset, reconductoring/rebuild/existing-ROW infers lease; otherwise permanent easement.';
+  'Default is new permanent easement (acquisition and holding, no rent). Lease is rent from year 1 with no acquisition/holding. Federal hybrid is all three, rent from start of construction. Lease and federal hybrid apply only when selected.';
 const ROW_ROOT = '11_project_row_details.right_of_way';
 const ROW_RENT_ESCALATION_PATH = '11_project_row_details.row_rent_escalation_real';
 const MAX_ZONES = 15;
@@ -172,11 +171,11 @@ export function RightsOfWay({
   const data = useFormStore((state) => state.data);
   const setFieldValue = useFormStore((state) => state.setFieldValue);
   const lookups = useFormStore((state) => state.lookups);
-  const reconductoring = useFormStore((state) => state.isReconductoring());
-  const usesExistingRow = useFormStore(
-    (state) => state.getFieldValue(USES_EXISTING_ROW_PATH) === true,
+  const rowAgreement = useFormStore((state) =>
+    readString(state.getFieldValue(ROW_AGREEMENT_PATH)),
   );
-  const showAcquisition = !reconductoring && !usesExistingRow;
+  const feeSimpleLegacy = rowAgreement === 'fee_simple';
+  const showAcquisition = rowAgreement !== 'lease_license_existing';
 
   const categoryKey = useFormStore((state) => {
     const fields: ProjectFields = {
@@ -254,6 +253,7 @@ export function RightsOfWay({
           path={ROW_AGREEMENT_PATH}
           label="ROW agreement"
           helpText={ROW_AGREEMENT_HELP}
+          error={feeSimpleLegacy ? FEE_SIMPLE_LEGACY : undefined}
           options={ROW_AGREEMENT_OPTIONS}
         />
       </div>
