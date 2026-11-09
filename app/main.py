@@ -32,7 +32,7 @@ from . import route as route_module
 from . import scenarios as scenarios_module
 from .audit import router as audit_router
 from .audit import warm_ensemble
-from .models import CalculateRequest, sanitize_for_json
+from .models import CalculateRequest, RequiredRequest, sanitize_for_json
 
 logger = logging.getLogger(__name__)
 
@@ -374,6 +374,25 @@ async def get_input_metadata() -> JSONResponse:
     """Return input field metadata for taxonomy-driven form generation."""
     from forge.scripts.io.input_metadata import input_metadata_to_dict
     return JSONResponse(sanitize_for_json(input_metadata_to_dict()))
+
+
+@app.post("/api/forge/required", response_class=JSONResponse)
+async def required_inputs(
+    payload: RequiredRequest,
+    _user: dict = Depends(require_auth),
+) -> JSONResponse:
+    """Return the calculator's missing required inputs, split by stage.
+
+    Each item is the calculator's own record: path, label, stage, and message.
+    An invalid body keeps FastAPI's validation response.
+    """
+    missing = forge.missing_required_inputs(payload.changes)
+    return JSONResponse(
+        {
+            "before_route": [item for item in missing if item["stage"] == "before_route"],
+            "after_route": [item for item in missing if item["stage"] == "after_route"],
+        }
+    )
 
 
 @app.post("/api/forge/calculate", response_class=JSONResponse)

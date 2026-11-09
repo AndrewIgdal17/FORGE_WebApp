@@ -35,6 +35,10 @@ class CalculateRequest(BaseModel):
     scenario_id: str | None = None
 
 
+class RequiredRequest(BaseModel):
+    changes: dict[str, Any]
+
+
 class ScenarioCreate(BaseModel):
     name: str
     source: str

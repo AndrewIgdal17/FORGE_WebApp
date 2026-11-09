@@ -105,6 +105,18 @@ export interface CalculateResponse {
   error: null;
 }
 
+export type RequiredField = {
+  path: string;
+  label: string;
+  stage: 'before_route' | 'after_route';
+  message: string;
+};
+
+export type RequiredResponse = {
+  before_route: RequiredField[];
+  after_route: RequiredField[];
+};
+
 export interface AnalyzeResponse {
   total_miles: number;
   intersections: Record<string, Record<string, unknown>>;
@@ -256,6 +268,15 @@ export async function calculate(
   return apiFetch<CalculateResponse>('/api/forge/calculate', {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+export async function requiredInputs(
+  changes: Record<string, unknown>,
+): Promise<RequiredResponse> {
+  return apiFetch<RequiredResponse>('/api/forge/required', {
+    method: 'POST',
+    body: JSON.stringify({ changes }),
   });
 }
 
