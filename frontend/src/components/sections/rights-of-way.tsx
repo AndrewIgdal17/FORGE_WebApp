@@ -11,6 +11,7 @@ import { terrainMilesPath, terrainsForConstruction } from '@/components/sections
 import type { TerrainId } from '@/components/sections/terrain-mix';
 import { terrainMatchesRouteLength } from '@/lib/analyze-request';
 import { milesToAcres } from '@/lib/geometry';
+import { effectiveRowAgreement } from '@/lib/row-agreement';
 import { buildCategoryKey, getRowWidthFeet } from '@/lib/lookups';
 import type { ProjectFields } from '@/lib/lookups';
 import { getValueAtPath } from '@/lib/path';
@@ -26,7 +27,7 @@ const ROW_AGREEMENT_OPTIONS: SelectOption[] = [
   { value: 'lease_license_existing', label: 'Lease or license (existing)' },
 ];
 const ROW_AGREEMENT_HELP =
-  'Default is new permanent easement (acquisition and holding, no rent). Lease is rent from year 1 with no acquisition/holding. Federal hybrid is all three, rent from start of construction. Lease and federal hybrid apply only when selected.';
+  'New permanent easement: acquisition and holding, no rent. Lease or license of an existing corridor: rent from year 1, no acquisition or holding. Federal hybrid: acquisition, holding, and rent from the start of construction. If none is chosen, greenfield takes a new easement and reconductoring or rebuild takes a lease.';
 const ROW_ROOT = '11_project_row_details.right_of_way';
 const ROW_RENT_ESCALATION_PATH = '11_project_row_details.row_rent_escalation_real';
 const MAX_ZONES = 15;
@@ -174,8 +175,12 @@ export function RightsOfWay({
   const rowAgreement = useFormStore((state) =>
     readString(state.getFieldValue(ROW_AGREEMENT_PATH)),
   );
+  const projectType = useFormStore((state) =>
+    readString(state.getFieldValue(`${PROJECT}.project_type`)),
+  );
   const feeSimpleLegacy = rowAgreement === 'fee_simple';
-  const showAcquisition = rowAgreement !== 'lease_license_existing';
+  const showAcquisition =
+    effectiveRowAgreement(rowAgreement, projectType) !== 'lease_license_existing';
 
   const categoryKey = useFormStore((state) => {
     const fields: ProjectFields = {

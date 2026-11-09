@@ -349,15 +349,6 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         zeroIfMissing: true,
       },
       {
-        key: 'fac_emissions_pv',
-        label: 'Facilitated Emissions (intermediate)',
-        path: 'bcr.fac_emissions_project_pv',
-        format: 'currency',
-        zeroIfMissing: true,
-        description:
-          'Intermediate quantity. Social cost of generation emissions for energy delivered by this project path. Not a BCR cost or benefit.',
-      },
-      {
         key: 'line_loss_pv',
         label: 'Line Loss Cost',
         path: 'costs.line_loss.total_pv',

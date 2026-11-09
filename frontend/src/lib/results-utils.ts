@@ -77,7 +77,7 @@ export function deriveTaxonomyResults(
   const wf = asRecord(costs.wildfire);
   const out = asRecord(costs.outage);
   const em = asRecord(costs.emissions);
-  const fac = asRecord(benefits.facilitated_emissions);
+  const avoided = asRecord(benefits.avoided_emissions);
   const ll = asRecord(costs.line_loss);
   const build = asRecord(costs.build);
   const row = asRecord(costs.row);
@@ -85,7 +85,6 @@ export function deriveTaxonomyResults(
   const om = asRecord(costs.oandm);
   const ins = asRecord(costs.insurance);
   const delay = asRecord(costs.delay);
-  const dispDelay = asRecord(costs.displacement_delay);
   const totalBuildNom = orZero(build.total_nominal);
 
   return [
@@ -186,18 +185,6 @@ export function deriveTaxonomyResults(
       detail: [],
     },
     {
-      taxonomy_id: 'congestion_delay',
-      value_pv: orZero(cc.congestion_delay_cost_pv),
-      value_nominal: orZero(cc.congestion_delay_cost_nominal),
-      detail: [],
-    },
-    {
-      taxonomy_id: 'emissions_displacement_delay',
-      value_pv: orZero(dispDelay.displacement_delay_cost_pv),
-      value_nominal: orZero(dispDelay.displacement_delay_cost_nominal),
-      detail: [],
-    },
-    {
       taxonomy_id: 'wildfire_eac',
       value_pv: orZero(wf.pv_cost),
       value_nominal: orZero(wf.nominal_total),
@@ -232,12 +219,6 @@ export function deriveTaxonomyResults(
       detail: [],
     },
     {
-      taxonomy_id: 'emissions_fac',
-      value_pv: orZero(fac.fac_emissions_project_pv),
-      value_nominal: orZero(fac.fac_emissions_project_nominal),
-      detail: [],
-    },
-    {
       taxonomy_id: 'congestion_benefit',
       value_pv: orZero(cc.congestion_benefit_pv),
       value_nominal: orZero(cc.congestion_benefit_nominal),
@@ -267,8 +248,8 @@ export function deriveTaxonomyResults(
     },
     {
       taxonomy_id: 'avoided_emissions_benefit',
-      value_pv: orZero(fac.displacement_avoided_benefit_pv),
-      value_nominal: orZero(fac.displacement_avoided_benefit_nominal),
+      value_pv: orZero(avoided.avoided_emissions_pv),
+      value_nominal: orZero(avoided.avoided_emissions_nominal),
       detail: [],
     },
   ];

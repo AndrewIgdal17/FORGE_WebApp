@@ -22,6 +22,7 @@ import {
 } from '@/components/results/taxonomy-view';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import { getValueAtPath } from '@/lib/path';
+import { waccValueSum } from '@/lib/perspective-values';
 import { cn } from '@/lib/utils';
 
 export interface ResultsOverviewProps {
@@ -34,6 +35,8 @@ export interface PerspectiveCategoryItem {
   key: string;
   label: string;
   path: string;
+  /** Utility and ratepayer items: the taxonomy items whose WACC present values sum to this row. */
+  waccIds?: readonly string[];
 }
 
 export const PERSPECTIVE_CATEGORIES: Record<
@@ -58,31 +61,31 @@ export const PERSPECTIVE_CATEGORIES: Record<
   },
   ratepayer: {
     costs: [
-      { key: 'capital_recovery', label: 'Capital Recovery', path: 'bcr.capital_recovery_pv' },
-      { key: 'oandm', label: 'O&M', path: 'bcr.oandm_pv' },
-      { key: 'insurance', label: 'Insurance', path: 'bcr.insurance_pv' },
-      { key: 'row_rent', label: 'ROW Rent', path: 'bcr.row_rent_pv' },
-      { key: 'conductor_loss', label: 'Conductor Losses', path: 'bcr.conductor_loss_pv' },
-      { key: 'converter_loss', label: 'Converter Losses', path: 'bcr.converter_loss_pv' },
+      { key: 'capital_recovery', label: 'Capital Recovery', path: 'bcr.capital_recovery_pv', waccIds: ['capital_recovery'] },
+      { key: 'oandm', label: 'O&M', path: 'bcr.oandm_pv', waccIds: ['oandm'] },
+      { key: 'insurance', label: 'Insurance', path: 'bcr.insurance_pv', waccIds: ['insurance'] },
+      { key: 'row_rent', label: 'ROW Rent', path: 'bcr.row_rent_pv', waccIds: ['row_rent'] },
+      { key: 'conductor_loss', label: 'Conductor Losses', path: 'bcr.conductor_loss_pv', waccIds: ['line_loss_conductor'] },
+      { key: 'converter_loss', label: 'Converter Losses', path: 'bcr.converter_loss_pv', waccIds: ['line_loss_converter'] },
     ],
     benefits: [
-      { key: 'enabling', label: 'Enabling', path: 'bcr.benefits_enabling_pv' },
-      { key: 'remedial', label: 'Remedial', path: 'bcr.benefits_remedial_pv' },
+      { key: 'enabling', label: 'Enabling', path: 'bcr.benefits_enabling_pv', waccIds: ['delivered_energy_benefit', 'capacity_value_benefit'] },
+      { key: 'remedial', label: 'Remedial', path: 'bcr.benefits_remedial_pv', waccIds: ['congestion_benefit'] },
     ],
   },
   utility: {
     costs: [
-      { key: 'capital_recovery', label: 'Capital Recovery', path: 'bcr.capital_recovery_pv' },
-      { key: 'oandm', label: 'O&M', path: 'bcr.oandm_pv' },
-      { key: 'insurance', label: 'Insurance', path: 'bcr.insurance_pv' },
-      { key: 'row_rent', label: 'ROW Rent', path: 'bcr.row_rent_pv' },
-      { key: 'delay', label: 'Base Delay', path: 'bcr.delay_cost_pv' },
+      { key: 'capital_recovery', label: 'Capital Recovery', path: 'bcr.capital_recovery_pv', waccIds: ['capital_recovery'] },
+      { key: 'oandm', label: 'O&M', path: 'bcr.oandm_pv', waccIds: ['oandm'] },
+      { key: 'insurance', label: 'Insurance', path: 'bcr.insurance_pv', waccIds: ['insurance'] },
+      { key: 'row_rent', label: 'ROW Rent', path: 'bcr.row_rent_pv', waccIds: ['row_rent'] },
+      { key: 'delay', label: 'Base Delay', path: 'bcr.delay_cost_pv', waccIds: ['base_delay'] },
     ],
     benefits: [
-      { key: 'capital_recovery', label: 'Capital Recovery', path: 'bcr.capital_recovery_pv' },
-      { key: 'oandm', label: 'O&M', path: 'bcr.oandm_pv' },
-      { key: 'insurance', label: 'Insurance', path: 'bcr.insurance_pv' },
-      { key: 'row_rent', label: 'ROW Rent', path: 'bcr.row_rent_pv' },
+      { key: 'capital_recovery', label: 'Capital Recovery', path: 'bcr.capital_recovery_pv', waccIds: ['capital_recovery'] },
+      { key: 'oandm', label: 'O&M', path: 'bcr.oandm_pv', waccIds: ['oandm'] },
+      { key: 'insurance', label: 'Insurance', path: 'bcr.insurance_pv', waccIds: ['insurance'] },
+      { key: 'row_rent', label: 'ROW Rent', path: 'bcr.row_rent_pv', waccIds: ['row_rent'] },
     ],
   },
 };
@@ -175,7 +178,8 @@ function loadCategories(
     .map((item) => ({
       key: item.key,
       label: item.label,
-      value: readNumber(results, item.path) ?? 0,
+      value:
+        (item.waccIds ? waccValueSum(results, item.waccIds) : readNumber(results, item.path)) ?? 0,
     }))
     .sort((left, right) => Math.abs(right.value) - Math.abs(left.value));
 }

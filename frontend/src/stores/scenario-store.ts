@@ -133,7 +133,6 @@ const RESULTS_EXPORT_FIELDS: Array<{ key: string; path: string }> = [
   { key: 'delay_pv', path: 'costs.delay.total_pv' },
   { key: 'line_loss_pv', path: 'costs.line_loss.total_pv' },
   { key: 'emissions_pv', path: 'costs.emissions.total_pv' },
-  { key: 'fac_emissions_project_pv', path: 'bcr.fac_emissions_project_pv' },
   { key: 'displacement_avoided_benefit_pv', path: 'bcr.displacement_avoided_benefit_pv' },
   { key: 'total_energy_emissions_pv', path: 'summary.total_energy_emissions_pv' },
   { key: 'grand_total_cost_pv', path: 'summary.total_costs_pv' },
