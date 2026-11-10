@@ -39,6 +39,7 @@ function scenario(overrides: Partial<Scenario> = {}): Scenario {
     updated_at: '2026-10-10T00:00:00Z',
     user_id: 'andy',
     route: ROUTE,
+    route_geojson: ROUTE,
     segments: null,
     ...overrides,
   } as Scenario;

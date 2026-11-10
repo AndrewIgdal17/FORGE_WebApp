@@ -12,8 +12,10 @@ import { acceptedForge, diffChanges, forgeDocument } from '@/lib/changes';
 import { csvEscape, parseCsvLine } from '@/lib/csv';
 import { loadLookups, type ProjectFields } from '@/lib/lookups';
 import { flattenObject, getValueAtPath, setValueAtPath } from '@/lib/path';
-import { routeFromSegments } from '@/lib/route-geometry';
+import { asRoute, routeFromSegments } from '@/lib/route-geometry';
 import { supabase } from '@/lib/supabase';
+
+export { asRoute };
 
 export interface Scenario {
   id: string;
@@ -32,6 +34,8 @@ export interface Scenario {
   user_id: string;
   ownerUsername?: string;
   route: Record<string, unknown> | null;
+  /** Stored GeoJSON from `scenario_read.route_geojson`. Null when the row has no route. */
+  route_geojson: unknown;
   segments: unknown[] | null;
 }
 
@@ -159,12 +163,6 @@ function asRecordOrNull(value: unknown): Record<string, unknown> | null {
   return isRecord(value) ? value : null;
 }
 
-/** PostGIS `select('*')` returns geometry as a hex EWKB string, not GeoJSON. */
-function asRoute(value: unknown): Record<string, unknown> | null {
-  if (typeof value === 'string' || !isRecord(value)) return null;
-  return value;
-}
-
 function asSegments(value: unknown): unknown[] | null {
   if (Array.isArray(value)) return value;
   if (typeof value !== 'string' || value.length === 0) return null;
@@ -176,11 +174,19 @@ function asSegments(value: unknown): unknown[] | null {
   }
 }
 
-function routePayload(
-  route: Record<string, unknown> | null,
+export function routePayload(
+  routeGeojson: unknown,
   segments: unknown[] | null,
 ): Record<string, unknown> | null {
-  if (route) return deepClone(route);
+  if (routeGeojson != null) {
+    const line = asRoute(routeGeojson);
+    if (!line) return null;
+    const payload: Record<string, unknown> = {
+      type: line.type,
+      coordinates: line.coordinates,
+    };
+    return deepClone(payload);
+  }
   const rebuilt = routeFromSegments(segments);
   if (!rebuilt) return null;
   return { type: rebuilt.type, coordinates: rebuilt.coordinates };
@@ -248,7 +254,8 @@ function fromResponse(row: ScenarioResponse, ownerUsername?: string): Scenario {
     updated_at: row.updated_at,
     user_id: row.user_id,
     ownerUsername,
-    route: asRoute(row.route),
+    route_geojson: row.route,
+    route: asRoute(row.route) as Record<string, unknown> | null,
     segments: asSegments(row.segments),
   };
 }
@@ -274,7 +281,8 @@ function rowToScenario(
     updated_at: typeof row.updated_at === 'string' ? row.updated_at : '',
     user_id: userId,
     ownerUsername: usernames.get(userId),
-    route: asRoute(row.route),
+    route_geojson: row.route_geojson ?? null,
+    route: asRoute(row.route_geojson) as Record<string, unknown> | null,
     segments: asSegments(row.segments),
   };
 }
@@ -671,7 +679,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
     try {
       const [scenarioRes, profileRes] = await Promise.all([
         supabase
-          .from('scenario')
+          .from('scenario_read')
           .select('*')
           .order('updated_at', { ascending: false }),
         supabase.from('profiles').select('id, username, org'),
@@ -739,7 +747,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
     const route =
       geometry !== undefined
         ? geometry.route
-        : routePayload(current?.route ?? null, current?.segments ?? null);
+        : routePayload(current?.route_geojson ?? null, current?.segments ?? null);
     if (route == null || !positiveWidth(rowWidthFt)) {
       throw new Error(
         route == null
@@ -792,7 +800,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
       name,
       'manual',
       deepClone(source.changes),
-      routePayload(source.route, source.segments),
+      routePayload(source.route_geojson, source.segments),
       source.segments == null ? null : deepClone(source.segments),
       rowWidthFt ?? undefined,
     );
@@ -811,7 +819,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
       deepClone(changes),
       geometry !== undefined
         ? geometry.route
-        : routePayload(source.route, source.segments),
+        : routePayload(source.route_geojson, source.segments),
       geometry !== undefined
         ? geometry.segments
         : source.segments == null

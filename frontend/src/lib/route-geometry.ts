@@ -4,6 +4,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isStoredRoute(value: unknown): value is MultiLineString {
+  return typeof value !== 'string' && isRecord(value) && value.type === 'MultiLineString';
+}
+
+/** A GeoJSON MultiLineString object. Strings are never parsed. */
+export function asRoute(value: unknown): MultiLineString | null {
+  return isStoredRoute(value) ? value : null;
+}
+
 export function isMultiLineString(value: unknown): value is MultiLineString {
   if (!isRecord(value) || value.type !== 'MultiLineString' || !Array.isArray(value.coordinates)) {
     return false;
@@ -40,11 +49,15 @@ export function routeFromSegments(segments: unknown[] | null): MultiLineString |
 
 export function scenarioMapRoute(
   scenario: {
-    route: Record<string, unknown> | null;
-    segments: unknown[] | null;
+    route?: unknown;
+    route_geojson?: unknown;
+    segments?: unknown[] | null;
   } | null,
 ): MultiLineString | null {
   if (!scenario) return null;
-  if (isMultiLineString(scenario.route)) return scenario.route;
-  return routeFromSegments(scenario.segments);
+  if (scenario.route_geojson != null) return asRoute(scenario.route_geojson);
+  if (scenario.route_geojson === undefined && isMultiLineString(scenario.route)) {
+    return scenario.route;
+  }
+  return routeFromSegments(scenario.segments ?? null);
 }
