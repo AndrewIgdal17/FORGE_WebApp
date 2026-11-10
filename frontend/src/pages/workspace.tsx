@@ -112,6 +112,10 @@ function rowMilesTotal(data: Record<string, unknown>): number {
   return total;
 }
 
+function replacesExistingLine(projectType: unknown): boolean {
+  return projectType === 'reconductoring' || projectType === 'rebuild';
+}
+
 function hasRequiredFields(data: Record<string, unknown> | null): boolean {
   if (!data) return false;
   const construction = getValueAtPath(data, `${PROJECT}.construction_type`);
@@ -121,7 +125,7 @@ function hasRequiredFields(data: Record<string, unknown> | null): boolean {
   if (isBlank(construction) || isBlank(acDc) || isBlank(conductor)) return false;
   if (!positiveNumber(capacity)) return false;
   if (acDc === 'DC' && isBlank(getValueAtPath(data, `${PROJECT}.converter_type`))) return false;
-  if (getValueAtPath(data, `${PROJECT}.project_type`) === 'reconductoring') {
+  if (replacesExistingLine(getValueAtPath(data, `${PROJECT}.project_type`))) {
     const oldAcDc = getValueAtPath(data, `${PROJECT}.old_ac_dc`);
     if (isBlank(oldAcDc)) return false;
     if (!positiveNumber(getValueAtPath(data, `${PROJECT}.old_capacity_mw`))) return false;
@@ -149,7 +153,7 @@ function validationBadges(
   if (acDc === 'DC' && isBlank(getValueAtPath(data, `${PROJECT}.converter_type`))) {
     technologyMissing += 1;
   }
-  if (getValueAtPath(data, `${PROJECT}.project_type`) === 'reconductoring') {
+  if (replacesExistingLine(getValueAtPath(data, `${PROJECT}.project_type`))) {
     const oldAcDc = getValueAtPath(data, `${PROJECT}.old_ac_dc`);
     if (isBlank(oldAcDc)) technologyMissing += 1;
     if (!positiveNumber(getValueAtPath(data, `${PROJECT}.old_capacity_mw`))) technologyMissing += 1;

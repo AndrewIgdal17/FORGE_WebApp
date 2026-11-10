@@ -126,7 +126,8 @@ export function TechnologySection(): ReactElement {
 
   const isDc = acDc === 'DC';
   const showCorona = constructionType === 'Overhead' && acDc === 'AC';
-  const isReconductoring = projectType === 'reconductoring';
+  const replacesExistingLine =
+    projectType === 'reconductoring' || projectType === 'rebuild';
   const showDedicated = sendingSource === 'dedicated';
 
   useEffect(() => {
@@ -138,14 +139,14 @@ export function TechnologySection(): ReactElement {
   }, [constructionType, conductor, setFieldValue]);
 
   useEffect(() => {
-    if (!isReconductoring) return;
+    if (!replacesExistingLine) return;
     syncCapacity(oldAcDc, oldCapacity, OLD_CAPACITY_PATH, setFieldValue);
-  }, [isReconductoring, oldAcDc, oldCapacity, setFieldValue]);
+  }, [replacesExistingLine, oldAcDc, oldCapacity, setFieldValue]);
 
   useEffect(() => {
-    if (!isReconductoring) return;
+    if (!replacesExistingLine) return;
     syncConductor(constructionType, oldConductor, OLD_CONDUCTOR_PATH, setFieldValue);
-  }, [isReconductoring, constructionType, oldConductor, setFieldValue]);
+  }, [replacesExistingLine, constructionType, oldConductor, setFieldValue]);
 
   return (
     <section id="technology" className="grid max-w-3xl gap-4 sm:grid-cols-2">
@@ -238,7 +239,7 @@ export function TechnologySection(): ReactElement {
           />
         </>
       ) : null}
-      {isReconductoring ? (
+      {replacesExistingLine ? (
         <>
           <h3 className="text-sm font-medium text-slate-900 sm:col-span-2">
             Existing line
