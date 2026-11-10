@@ -8,7 +8,7 @@ LAND_COVER_RELEASE = (
 SLOPE_RELEASE = "USGS 3DEP 1-arc-second percent slope, CONUS COG built 2026-10-13"
 PROTECTED_AREAS_RELEASE = "PAD-US 4.1 GAP 1-3 (DOI 10.5066/P96WBCHS)"
 COUNTIES_RELEASE = "Census TIGER/Line 2024 counties (ref.counties_tiger)"
-BLM_ZONES_RELEASE = "BLM linear right-of-way rent schedule 2022 (blm_zone_2022)"
+BLM_ZONES_RELEASE = "BLM Per-Acre Linear Rent Schedule 2026–2035 (county zones from the 2022 Census of Agriculture)"
 
 
 def wetland_release_label(labels: list[str]) -> str:

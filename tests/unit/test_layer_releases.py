@@ -21,7 +21,7 @@ def test_constants_name_the_edition():
     assert PROTECTED_AREAS_RELEASE == "PAD-US 4.1 GAP 1-3 (DOI 10.5066/P96WBCHS)"
     assert COUNTIES_RELEASE == "Census TIGER/Line 2024 counties (ref.counties_tiger)"
     assert BLM_ZONES_RELEASE == (
-        "BLM linear right-of-way rent schedule 2022 (blm_zone_2022)"
+        "BLM Per-Acre Linear Rent Schedule 2026–2035 (county zones from the 2022 Census of Agriculture)"
     )
 
 
