@@ -101,6 +101,7 @@ const SCENARIO_SPECIFIC_SECTIONS = new Set([
   '17_congestion_reductions',
 ]);
 
+// Timeline fields are absent so they stay empty. Do not write construction_years: 0.
 const NEW_SCENARIO_BLANK_FIELDS: Array<{ path: string; value: unknown }> = [
   { path: '01_project_technical_details.project.construction_type', value: null },
   { path: '01_project_technical_details.project.ac_dc', value: null },
@@ -110,8 +111,6 @@ const NEW_SCENARIO_BLANK_FIELDS: Array<{ path: string; value: unknown }> = [
   { path: '01_project_technical_details.project.old_capacity_mw', value: null },
   { path: '01_project_technical_details.project.old_conductor_type', value: null },
   { path: '01_project_technical_details.project.old_converter_type', value: null },
-  { path: '01_project_technical_details.timeline.construction_years', value: 0 },
-  { path: '01_project_technical_details.timeline.delay_years', value: 0 },
 ];
 
 const RESULTS_EXPORT_FIELDS: Array<{ key: string; path: string }> = [
