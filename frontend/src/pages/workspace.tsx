@@ -25,9 +25,11 @@ import {
   rowWidthProblem,
   terrainMatchesRouteLength,
 } from '@/lib/analyze-request';
-import { ApiError, calculate } from '@/lib/api';
+import { ApiError, calculate, requiredInputs } from '@/lib/api';
+import type { RequiredField, RequiredResponse } from '@/lib/api';
 import { diffChanges } from '@/lib/changes';
 import { debounce } from '@/lib/debounce';
+import { canCalculate, canDraw, panelFields } from '@/lib/required-gates';
 import { getValueAtPath } from '@/lib/path';
 import { isMultiLineString, scenarioMapRoute } from '@/lib/route-geometry';
 import { useFormStore } from '@/stores/form-store';
@@ -230,6 +232,74 @@ function storeResults(scenarioId: string, results: Record<string, unknown>): voi
   }));
 }
 
+function isMetadataRow(value: unknown): value is {
+  yaml_section: string;
+  field_path: string;
+  input_tab: string;
+  sub_tab: string | null;
+} {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.yaml_section === 'string' &&
+    typeof value.field_path === 'string' &&
+    typeof value.input_tab === 'string' &&
+    (typeof value.sub_tab === 'string' || value.sub_tab === null)
+  );
+}
+
+/** Sidebar target for a calculator path, from input metadata when it is loaded. */
+function sectionForRequiredPath(
+  path: string,
+  metadata: unknown[] | null,
+): { sectionId: string; subItemId: string } | null {
+  if (metadata) {
+    for (const item of metadata) {
+      if (!isMetadataRow(item)) continue;
+      if (`${item.yaml_section}.${item.field_path}` !== path) continue;
+      if (!item.sub_tab) return null;
+      return { sectionId: item.input_tab, subItemId: item.sub_tab };
+    }
+  }
+  if (path.endsWith('.value_of_load_per_mwh')) {
+    return { sectionId: 'benefits', subItemId: 'economic-details' };
+  }
+  if (path.includes('congestion_reductions')) {
+    return { sectionId: 'benefits', subItemId: 'system-constraints' };
+  }
+  return null;
+}
+
+function BeforeCalculationPanel({
+  fields,
+  onOpen,
+}: {
+  fields: RequiredField[];
+  onOpen: (path: string) => void;
+}): ReactElement | null {
+  if (fields.length === 0) return null;
+  return (
+    <section
+      aria-label="Before the first calculation"
+      className="border-b border-amber-200 bg-amber-50 px-4 py-3"
+    >
+      <h2 className="text-sm font-semibold text-slate-900">Before the first calculation</h2>
+      <ul className="mt-2 grid gap-1">
+        {fields.map((field) => (
+          <li key={field.path}>
+            <button
+              type="button"
+              className="text-left text-sm text-sky-800 underline decoration-sky-800/40 underline-offset-2 hover:decoration-sky-800"
+              onClick={() => onOpen(field.path)}
+            >
+              {field.message}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default function WorkspacePage(): ReactElement {
   return (
     <AuthGuard>
@@ -275,6 +345,7 @@ function WorkspaceBody(): ReactElement {
   const defaultsId = useFormStore((state) => state.defaultsId);
   const calculatorInfo = useFormStore((state) => state.calculatorInfo);
   const taxonomyState = useFormStore((state) => state.taxonomy);
+  const inputMetadata = useFormStore((state) => state.inputMetadata);
   const loadScenarioChanges = useFormStore((state) => state.loadScenarioChanges);
 
   const scenarios = useScenarioStore((state) => state.scenarios);
@@ -296,6 +367,7 @@ function WorkspaceBody(): ReactElement {
   const [calculationStatus, setCalculationStatus] = useState('Not calculated');
   const [perspective, setPerspective] = useState<PerspectiveKey>('societal');
   const [drawn, setDrawn] = useState<ScenarioGeometry | undefined>(undefined);
+  const [required, setRequired] = useState<RequiredResponse | null>(null);
 
   const baselineRef = useRef<string | null>(null);
   const lastStatusRef = useRef('Not calculated');
@@ -303,6 +375,17 @@ function WorkspaceBody(): ReactElement {
   const queuedRef = useRef(false);
   const savingRef = useRef(false);
   const scheduleRef = useRef<() => void>(() => {});
+  const requiredSeq = useRef(0);
+  const requiredRef = useRef<RequiredResponse | null>(null);
+  const drawnRef = useRef(drawn);
+  const runCalculationRef = useRef<() => Promise<void>>(async () => {});
+  requiredRef.current = required;
+  drawnRef.current = drawn;
+
+  function updateDrawn(next: ScenarioGeometry | undefined): void {
+    drawnRef.current = next;
+    setDrawn(next);
+  }
 
   const activeScenario = scenarios.find((scenario) => scenario.id === activeScenarioId) ?? null;
   const savedRoutePresent =
@@ -340,8 +423,10 @@ function WorkspaceBody(): ReactElement {
   const runCalculation = useCallback(async (): Promise<void> => {
     const form = useFormStore.getState();
     const active = useScenarioStore.getState().getActiveScenario();
-    if (!active || !form.defaultsId || !form.data || !hasRequiredFields(form.data)) return;
     const route = calculationRoute(drawn, active);
+    const requiredNow = requiredRef.current;
+    if (!requiredNow || !canCalculate(requiredNow, route != null)) return;
+    if (!active || !form.defaultsId || !form.data || !hasRequiredFields(form.data)) return;
     const rowWidthFt = currentRowWidthFt();
     if (route == null) {
       setCalculationStatus(ROUTE_REQUIRED);
@@ -381,12 +466,45 @@ function WorkspaceBody(): ReactElement {
       }
     }
   }, [drawn]);
+  runCalculationRef.current = runCalculation;
 
   const scheduleCalculation = useMemo(
     () => debounce(() => { void runCalculation(); }, 300),
     [runCalculation],
   );
   scheduleRef.current = scheduleCalculation;
+
+  const refreshRequired = useCallback(async (): Promise<void> => {
+    const form = useFormStore.getState();
+    if (!form.data || !form.defaults) return;
+    const changes = form.getChanges();
+    const snapshot = JSON.stringify(changes);
+    const seq = requiredSeq.current + 1;
+    requiredSeq.current = seq;
+    try {
+      const next = await requiredInputs(changes);
+      if (seq !== requiredSeq.current) return;
+      if (JSON.stringify(useFormStore.getState().getChanges()) !== snapshot) return;
+      requiredRef.current = next;
+      setRequired((current) => {
+        if (current && JSON.stringify(current) === JSON.stringify(next)) return current;
+        return next;
+      });
+      const active = useScenarioStore.getState().getActiveScenario();
+      const route = calculationRoute(drawnRef.current, active);
+      if (active && canCalculate(next, route != null)) {
+        void runCalculationRef.current();
+      }
+    } catch (error) {
+      if (seq !== requiredSeq.current) return;
+      toast.error(errorMessage(error));
+    }
+  }, []);
+
+  const scheduleRequired = useMemo(
+    () => debounce(() => { void refreshRequired(); }, 300),
+    [refreshRequired],
+  );
 
   useEffect(() => {
     document.title = 'FORGE — Workspace';
@@ -398,7 +516,7 @@ function WorkspaceBody(): ReactElement {
   const beginImportedDraft = useCallback((imported: ScenarioDraft): void => {
     const snapshot = useFormStore.getState().defaults;
     if (!snapshot) return;
-    setDrawn(undefined);
+    updateDrawn(undefined);
     useScenarioStore.setState({
       activeScenarioId: null,
       unsavedChanges: false,
@@ -410,7 +528,8 @@ function WorkspaceBody(): ReactElement {
     lastStatusRef.current = 'Not calculated';
     setCalculationStatus('Not calculated');
     openInputsSubItem('routing', 'route');
-  }, [loadScenarioChanges, openInputsSubItem]);
+    void refreshRequired();
+  }, [loadScenarioChanges, openInputsSubItem, refreshRequired]);
 
   const beginImportedDraftRef = useRef(beginImportedDraft);
   useEffect(() => {
@@ -463,9 +582,14 @@ function WorkspaceBody(): ReactElement {
   }, []);
 
   useEffect(() => {
+    if (!ready) return;
+    void refreshRequired();
+  }, [activeScenarioId, ready, refreshRequired]);
+
+  useEffect(() => {
     if (!ready || !data) return;
-    scheduleCalculation();
-  }, [data, ready, scheduleCalculation]);
+    scheduleRequired();
+  }, [data, ready, scheduleRequired]);
 
   useEffect(() => {
     if (!ready || !data || !activeScenarioId) return;
@@ -497,8 +621,10 @@ function WorkspaceBody(): ReactElement {
   async function handleSave(): Promise<void> {
     const active = useScenarioStore.getState().getActiveScenario();
     if (!active || savingRef.current) return;
-    if (!useScenarioStore.getState().unsavedChanges && drawn === undefined) return;
+    const requiredNow = requiredRef.current;
     const route = calculationRoute(drawn, active);
+    if (!requiredNow || !canCalculate(requiredNow, route != null)) return;
+    if (!useScenarioStore.getState().unsavedChanges && drawn === undefined) return;
     const rowWidthFt = currentRowWidthFt();
     if (route == null) {
       toast.error(ROUTE_REQUIRED);
@@ -519,7 +645,7 @@ function WorkspaceBody(): ReactElement {
           '',
           `/app/workspace?scenario=${encodeURIComponent(copy.id)}`,
         );
-        setDrawn(undefined);
+        updateDrawn(undefined);
         baselineRef.current = JSON.stringify(changes);
         const latest = JSON.stringify(useFormStore.getState().getChanges());
         setUnsavedChanges(latest !== baselineRef.current);
@@ -527,7 +653,7 @@ function WorkspaceBody(): ReactElement {
         return;
       }
       await saveScenario(active.id, changes, active.revision, drawn, rowWidthFt);
-      setDrawn(undefined);
+      updateDrawn(undefined);
       baselineRef.current = JSON.stringify(changes);
       const latest = JSON.stringify(useFormStore.getState().getChanges());
       setUnsavedChanges(latest !== baselineRef.current);
@@ -579,7 +705,7 @@ function WorkspaceBody(): ReactElement {
 
   const handleRouteChange = useCallback(
     (route: MultiLineString | null, segments: unknown[] | null): void => {
-      setDrawn({
+      updateDrawn({
         route: route ? { type: route.type, coordinates: route.coordinates } : null,
         segments,
       });
@@ -600,7 +726,7 @@ function WorkspaceBody(): ReactElement {
       toast.error('Reference data is not loaded yet.');
       return;
     }
-    setDrawn(undefined);
+    updateDrawn(undefined);
     useScenarioStore.setState({
       activeScenarioId: null,
       unsavedChanges: false,
@@ -611,6 +737,7 @@ function WorkspaceBody(): ReactElement {
     lastStatusRef.current = 'Not calculated';
     setCalculationStatus('Not calculated');
     openInputsSubItem('routing', 'route');
+    void refreshRequired();
   }
 
   function handleWizardComplete(
@@ -625,6 +752,8 @@ function WorkspaceBody(): ReactElement {
     if (!draft || savingRef.current) return;
     const form = useFormStore.getState();
     const route = calculationRoute(drawn, null);
+    const requiredNow = requiredRef.current;
+    if (!requiredNow || !canCalculate(requiredNow, route != null)) return;
     const rowWidthFt = currentRowWidthFt();
     if (route == null) {
       toast.error(ROUTE_REQUIRED);
@@ -646,7 +775,7 @@ function WorkspaceBody(): ReactElement {
         rowWidthFt,
       );
       setDraft(null);
-      setDrawn(undefined);
+      updateDrawn(undefined);
       applyScenario(scenario);
       toast.success('Scenario created');
     } catch (error) {
@@ -685,6 +814,16 @@ function WorkspaceBody(): ReactElement {
     terrainMilesTotal(data ?? {}) > 0 &&
     calculationRoute(drawn, null) != null &&
     currentRowWidthFt() != null;
+  const calculationAllowed =
+    required !== null && canCalculate(required, routeDrawn);
+  const drawingEnabled = required !== null && canDraw(required);
+  const missingForCalculation = required === null ? [] : panelFields(required, routeDrawn);
+
+  function openRequiredField(path: string): void {
+    const target = sectionForRequiredPath(path, inputMetadata);
+    if (!target) return;
+    openInputsSubItem(target.sectionId, target.subItemId);
+  }
 
   return (
     <div className="flex h-screen flex-col bg-slate-50">
@@ -703,9 +842,12 @@ function WorkspaceBody(): ReactElement {
             onExportForge={handleExportForge}
             onExportCsv={handleExportCsv}
             createMode={createMode}
-            canCreate={canCreate}
+            canCreate={canCreate && calculationAllowed}
+            canCalculate={calculationAllowed}
+            onCalculate={() => { void runCalculation(); }}
             onCreate={() => { void handleCreate(); }}
           />
+          <BeforeCalculationPanel fields={missingForCalculation} onOpen={openRequiredField} />
           <div className="flex min-h-0 flex-1">
             <Sidebar validation={validation} collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
             <main
@@ -721,10 +863,12 @@ function WorkspaceBody(): ReactElement {
                   <div className="relative flex-1 min-h-0 overflow-hidden">
                     <MapPanel
                       createMode={draft !== null}
+                      drawingEnabled={drawingEnabled}
                       existingRoute={
                         draft ? scenarioMapRoute(drawn ?? null) : scenarioMapRoute(activeScenario)
                       }
                       onRouteChange={handleRouteChange}
+                      onAnalyzed={() => { void refreshRequired(); }}
                     />
                   </div>
                 ) : (

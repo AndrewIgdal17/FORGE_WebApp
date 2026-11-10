@@ -25,7 +25,11 @@ const AC_DC_PATH = `${PROJECT}.ac_dc`;
 const CAPACITY_PATH = `${PROJECT}.capacity_mw`;
 const CONDUCTOR_PATH = `${PROJECT}.conductor_type`;
 const UTILIZATION_PATH = `${PROJECT}.line_utilization`;
-const VALUE_OF_LOAD_PATH = `${PROJECT}.value_of_load_per_mwh`;
+const SENDING_SOURCE_PATH = `${PROJECT}.sending_source`;
+const CONTRACT_PRICE_PATH = `${PROJECT}.dedicated_resource.contract_price_per_mwh`;
+const EMISSION_CO2E_PATH = `${PROJECT}.dedicated_resource.emission_rate_kg_per_mwh.co2e`;
+const EMISSION_SO2_PATH = `${PROJECT}.dedicated_resource.emission_rate_kg_per_mwh.so2`;
+const EMISSION_NOX_PATH = `${PROJECT}.dedicated_resource.emission_rate_kg_per_mwh.nox`;
 const CONVERTER_COUNT_PATH = `${PROJECT}.number_of_converters`;
 const CONVERTER_TYPE_PATH = `${PROJECT}.converter_type`;
 const PROJECT_TYPE_PATH = `${PROJECT}.project_type`;
@@ -54,6 +58,11 @@ const PROJECT_TYPE_OPTIONS: SelectOption[] = [
   { value: 'greenfield', label: 'Greenfield' },
   { value: 'reconductoring', label: 'Reconductoring' },
   { value: 'rebuild', label: 'Rebuild' },
+];
+
+const SENDING_SOURCE_OPTIONS: SelectOption[] = [
+  { value: 'margin', label: 'Regional margin' },
+  { value: 'dedicated', label: 'Dedicated' },
 ];
 
 function readCapacity(value: unknown): number | null {
@@ -107,6 +116,7 @@ export function TechnologySection(): ReactElement {
   const capacity = useFormStore((state) => state.getFieldValue(CAPACITY_PATH));
   const conductor = useFormStore((state) => state.getFieldValue(CONDUCTOR_PATH));
   const projectType = useFormStore((state) => state.getFieldValue(PROJECT_TYPE_PATH));
+  const sendingSource = useFormStore((state) => state.getFieldValue(SENDING_SOURCE_PATH));
   const oldAcDc = useFormStore((state) => state.getFieldValue(OLD_AC_DC_PATH));
   const oldCapacity = useFormStore((state) => state.getFieldValue(OLD_CAPACITY_PATH));
   const oldConductor = useFormStore((state) =>
@@ -117,6 +127,7 @@ export function TechnologySection(): ReactElement {
   const isDc = acDc === 'DC';
   const showCorona = constructionType === 'Overhead' && acDc === 'AC';
   const isReconductoring = projectType === 'reconductoring';
+  const showDedicated = sendingSource === 'dedicated';
 
   useEffect(() => {
     syncCapacity(acDc, capacity, CAPACITY_PATH, setFieldValue);
@@ -167,11 +178,6 @@ export function TechnologySection(): ReactElement {
         label="Line utilization (%)"
         helpText="Percent of nameplate capacity used on average."
       />
-      <CurrencyField
-        path={VALUE_OF_LOAD_PATH}
-        label="Value of load ($/MWh)"
-        helpText="Demand-side marginal value of delivered energy."
-      />
       {isDc ? (
         <>
           <NumberField
@@ -195,6 +201,43 @@ export function TechnologySection(): ReactElement {
         helpText="Greenfield is a new line. Reconductoring replaces the conductor. Rebuild replaces the structures."
         options={PROJECT_TYPE_OPTIONS}
       />
+      <SelectField
+        path={SENDING_SOURCE_PATH}
+        label="Sending-end source"
+        helpText="Regional margin is the default. Dedicated uses a contract price and three emission rates."
+        options={SENDING_SOURCE_OPTIONS}
+      />
+      {showDedicated ? (
+        <>
+          <CurrencyField
+            path={CONTRACT_PRICE_PATH}
+            label="Contract price ($/MWh)"
+            helpText="All-in contract price for energy and capacity."
+            nullable
+          />
+          <NumberField
+            path={EMISSION_CO2E_PATH}
+            label="CO2e emission rate (kg/MWh)"
+            helpText="Dedicated resource CO2e rate. A wind or solar resource enters 0."
+            min={0}
+            nullable
+          />
+          <NumberField
+            path={EMISSION_SO2_PATH}
+            label="SO2 emission rate (kg/MWh)"
+            helpText="Dedicated resource SO2 rate. A wind or solar resource enters 0."
+            min={0}
+            nullable
+          />
+          <NumberField
+            path={EMISSION_NOX_PATH}
+            label="NOx emission rate (kg/MWh)"
+            helpText="Dedicated resource NOx rate. A wind or solar resource enters 0."
+            min={0}
+            nullable
+          />
+        </>
+      ) : null}
       {isReconductoring ? (
         <>
           <h3 className="text-sm font-medium text-slate-900 sm:col-span-2">

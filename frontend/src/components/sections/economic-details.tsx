@@ -39,8 +39,9 @@ export function EconomicDetails(): ReactElement {
       </div>
       <CurrencyField
         path={VALUE_OF_LOAD_PATH}
-        label="Value of load ($/MWh)"
-        helpText="Demand-side marginal value of delivered energy."
+        label="Receiving-end energy value ($/MWh)"
+        helpText="Prices losses, and delivered energy for a dedicated resource. Zero or greater."
+        nullable
       />
       <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
         <table className="w-full min-w-[32rem] border-collapse">

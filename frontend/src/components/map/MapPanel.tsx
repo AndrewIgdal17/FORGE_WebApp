@@ -27,8 +27,10 @@ import { useMapStore } from '@/stores/map-store';
 
 export interface MapPanelProps {
   createMode?: boolean;
+  drawingEnabled?: boolean;
   existingRoute?: MultiLineString | null;
   onRouteChange?: (route: MultiLineString | null, segments: unknown[] | null) => void;
+  onAnalyzed?: () => void;
 }
 
 function segmentsFor(
@@ -50,8 +52,10 @@ function segmentsFor(
 
 export function MapPanel({
   createMode = true,
+  drawingEnabled = true,
   existingRoute = null,
   onRouteChange,
+  onAnalyzed,
 }: MapPanelProps): ReactElement {
   const [map, setMap] = useState<MapLibreMap | null>(null);
   const [clearedExisting, setClearedExisting] = useState(false);
@@ -62,6 +66,8 @@ export function MapPanel({
   const heldSegmentsRef = useRef<HeldRouteSegments | null>(null);
   const onRouteChangeRef = useRef(onRouteChange);
   onRouteChangeRef.current = onRouteChange;
+  const onAnalyzedRef = useRef(onAnalyzed);
+  onAnalyzedRef.current = onAnalyzed;
 
   const [zoom, setZoom] = useState<number | null>(null);
   const onZoom = useCallback(() => {
@@ -96,8 +102,12 @@ export function MapPanel({
 
   useLayoutEffect(() => {
     if (!map) return;
+    if (!drawingEnabled) {
+      setMode('select');
+      return;
+    }
     setMode(createMode ? 'linestring' : 'select');
-  }, [map, createMode, setMode]);
+  }, [map, createMode, drawingEnabled, setMode]);
 
   useEffect(() => {
     if (!createMode && mode !== 'linestring') return;
@@ -169,6 +179,7 @@ export function MapPanel({
       useFormStore
         .getState()
         .applyChanges(changesAfterAnalyze(response.changes));
+      onAnalyzedRef.current?.();
     });
     return () => {
       cancelled = true;
@@ -185,6 +196,7 @@ export function MapPanel({
     setClearedExisting(true);
     onRouteChangeRef.current?.(null, null);
     reset();
+    if (!drawingEnabled) setMode('select');
     const zeroChanges: Record<string, unknown> = {};
     const terrainCategories = [
       'forested',
@@ -220,7 +232,13 @@ export function MapPanel({
       <LayerPanel />
       <MapLegend />
       <ResetButton visible={statsRoute !== null} onReset={handleReset} />
-      <DrawingToolbar mode={mode} onMode={setMode} onUndo={undo} onRedo={redo} />
+      <DrawingToolbar
+        mode={mode}
+        drawingEnabled={drawingEnabled}
+        onMode={setMode}
+        onUndo={undo}
+        onRedo={redo}
+      />
       <SatelliteToggle map={map} />
       {zoom !== null ? (
         <div className="absolute bottom-4 left-4 z-10 rounded-md bg-black/70 px-2 py-1 font-mono text-xs text-white">

@@ -16,6 +16,8 @@ export interface WorkspaceHeaderProps {
   onExportCsv: () => void;
   createMode?: boolean;
   canCreate?: boolean;
+  canCalculate?: boolean;
+  onCalculate?: () => void;
   onCreate?: () => void;
 }
 
@@ -30,6 +32,8 @@ export function WorkspaceHeader({
   onExportCsv,
   createMode = false,
   canCreate = false,
+  canCalculate = false,
+  onCalculate,
   onCreate,
 }: WorkspaceHeaderProps): ReactElement {
   const hasScenario = scenarioName.trim().length > 0;
@@ -62,12 +66,12 @@ export function WorkspaceHeader({
           if (canCreate) onCreate?.();
           return;
         }
-        if (hasScenario) onSave();
+        if (hasScenario && canCalculate) onSave();
       }
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [canCreate, createMode, hasScenario, onCreate, onSave]);
+  }, [canCalculate, canCreate, createMode, hasScenario, onCreate, onSave]);
 
   function commitRename(value: string): void {
     setEditing(false);
@@ -145,6 +149,15 @@ export function WorkspaceHeader({
 
       <BcrScoreboard results={results} />
 
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={!canCalculate}
+        onClick={() => onCalculate?.()}
+      >
+        Calculate
+      </Button>
       <div className="relative flex" ref={menuRoot}>
         {createMode ? (
           <Button type="button" size="sm" disabled={!canCreate} onClick={() => onCreate?.()}>
@@ -156,7 +169,7 @@ export function WorkspaceHeader({
               type="button"
               size="sm"
               className="rounded-r-none"
-              disabled={!hasScenario}
+              disabled={!hasScenario || !canCalculate}
               onClick={onSave}
             >
               {unsavedChanges ? 'Save' : 'Saved'}
@@ -179,7 +192,11 @@ export function WorkspaceHeader({
                 role="menu"
                 className="absolute right-0 top-full z-20 mt-1 w-44 rounded-md border border-slate-200 bg-white py-1 shadow-md"
               >
-                <MenuItem label="Save to Memory" onClick={() => closeAnd(onSave)} />
+                <MenuItem
+                  label="Save to Memory"
+                  disabled={!canCalculate}
+                  onClick={() => closeAnd(onSave)}
+                />
                 <MenuItem label="Export .forge" onClick={() => closeAnd(onExportForge)} />
                 <MenuItem label="Export .csv" onClick={() => closeAnd(onExportCsv)} />
               </div>
@@ -191,12 +208,21 @@ export function WorkspaceHeader({
   );
 }
 
-function MenuItem({ label, onClick }: { label: string; onClick: () => void }): ReactElement {
+function MenuItem({
+  label,
+  onClick,
+  disabled = false,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}): ReactElement {
   return (
     <button
       type="button"
       role="menuitem"
-      className="block w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100"
+      className="block w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+      disabled={disabled}
       onClick={onClick}
     >
       {label}

@@ -8,6 +8,7 @@ const PANEL =
 
 export interface DrawingToolbarProps {
   mode: DrawMode;
+  drawingEnabled: boolean;
   onMode: (mode: DrawMode) => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -17,7 +18,13 @@ function stopMapPointer(event: SyntheticEvent): void {
   event.stopPropagation();
 }
 
-export function DrawingToolbar({ mode, onMode, onUndo, onRedo }: DrawingToolbarProps): ReactElement {
+export function DrawingToolbar({
+  mode,
+  drawingEnabled,
+  onMode,
+  onUndo,
+  onRedo,
+}: DrawingToolbarProps): ReactElement {
   return (
     <div className={PANEL} role="toolbar" aria-label="Route drawing" onPointerDown={stopMapPointer}>
       <Button
@@ -26,8 +33,12 @@ export function DrawingToolbar({ mode, onMode, onUndo, onRedo }: DrawingToolbarP
         variant={mode === 'linestring' ? 'default' : 'outline'}
         aria-pressed={mode === 'linestring'}
         aria-label="Draw"
-        title="Draw"
-        onClick={() => onMode('linestring')}
+        title={drawingEnabled ? 'Draw' : 'Fill the required inputs before drawing'}
+        disabled={!drawingEnabled}
+        onClick={() => {
+          if (!drawingEnabled) return;
+          onMode('linestring');
+        }}
       >
         <Pencil />
       </Button>
