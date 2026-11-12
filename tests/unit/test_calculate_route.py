@@ -28,10 +28,16 @@ ACRE_ZEROS = {
     "02_project_physical_details.terrain.protected_area_acres.rolling_hills": 0.0,
     "02_project_physical_details.terrain.protected_area_acres.mountain": 0.0,
 }
-# v3.0.0 requires these before resolve_inputs will return a document.
+# v4.0.0 requires these before resolve_inputs will return a document.
 REQUIRED_TO_CALCULATE = {
     "01_project_technical_details.project.capacity_mw": 500,
     "01_project_technical_details.project.value_of_load_per_mwh": 40,
+    "01_project_technical_details.terminals.sending.gea": "CAISO",
+    "01_project_technical_details.terminals.sending.egrid_subregion": "AZNM",
+    "01_project_technical_details.terminals.sending.state": "AZ",
+    "01_project_technical_details.terminals.receiving.gea": "CAISO",
+    "01_project_technical_details.terminals.receiving.egrid_subregion": "AZNM",
+    "01_project_technical_details.terminals.receiving.state": "AZ",
     "17_congestion_reductions.greenfield_congestion_reductions.constraints.flow_factor": 0.5,
     "17_congestion_reductions.greenfield_congestion_reductions.prices.average_congestion_price": 10,
 }
