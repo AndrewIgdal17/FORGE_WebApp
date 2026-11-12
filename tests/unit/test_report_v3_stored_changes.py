@@ -38,6 +38,10 @@ COMPARISON_MW = "01_project_technical_details.project.greenfield_comparison_capa
 COMPARISON_CONDUCTOR = (
     "01_project_technical_details.project.greenfield_comparison_conductor_type"
 )
+GRID_COAL = "18_energy_source_mix.grid_mix.initial.coal"
+COMPENSATION = "16_emissions_reductions.emissions_reductions.compensation_percent"
+INTENSITIES = "16_emissions_reductions.emissions_reductions.emission_intensities"
+BASE_YEAR = "03_financing.financial.base_year"
 
 
 def test_old_escalation_key_is_a_rename():
@@ -115,6 +119,29 @@ def test_fee_simple_existing_row_and_greenfield_comparison():
         (AGREEMENT, "rejected"),
         (EXISTING_ROW, "ignored"),
     ]
+
+
+def test_grid_mix_path_is_removed():
+    assert classify_changes({GRID_COAL: 0.2}) == [(GRID_COAL, "removed")]
+
+
+def test_emissions_paths_are_removed_except_compensation_percent():
+    nested = {
+        "16_emissions_reductions": {
+            "emissions_reductions": {
+                "compensation_percent": 1,
+                "emission_intensities": {},
+            }
+        }
+    }
+    assert classify_changes(nested) == [(INTENSITIES, "removed")]
+    assert COMPENSATION not in {path for path, _reason in classify_changes(nested)}
+
+
+def test_base_year_other_than_2025_is_listed():
+    assert classify_changes({BASE_YEAR: 2026}) == [(BASE_YEAR, "base_year is not 2025")]
+    assert classify_changes({BASE_YEAR: 2025}) == []
+    assert classify_changes({BASE_YEAR: "2025"}) == []
 
 
 def test_a_clean_dict_returns_nothing():

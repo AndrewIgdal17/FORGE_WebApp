@@ -9,9 +9,14 @@ is read-only. This script never writes.
 
 - ``rename`` — ``construction_cost_escalation_rate``
 - ``removed`` — cost-timing inputs, ``delay_period_active_work``, the old
-  ``ignition_rate_multiplier.underground`` key, and ``greenfield_comparison_*``
+  ``ignition_rate_multiplier.underground`` key, ``greenfield_comparison_*``,
+  any path under ``18_energy_source_mix.``, and any path under
+  ``16_emissions_reductions.`` except
+  ``16_emissions_reductions.emissions_reductions.compensation_percent``
 - ``non-whole`` — ``timeline.delay_years``, ``construction_years``, or
   ``project_lifetime`` is not a whole number
+- ``base_year is not 2025`` — ``03_financing.financial.base_year`` is neither
+  ``2025`` nor the string ``"2025"``
 - ``constrained_hours with price`` / ``constrained_hours without price``
 - ``flow_factor 0 on greenfield margin`` — confirmed, not rewritten here
 - ``rejected`` — a ``fee_simple`` agreement
@@ -38,6 +43,12 @@ _TIMELINE = (
 _PROJECT_TYPE = "01_project_technical_details.project.project_type"
 _SENDING_SOURCE = "01_project_technical_details.project.sending_source"
 _HOURS_MARKER = ".constraints.constrained_hours"
+_ENERGY_MIX_PREFIX = "18_energy_source_mix."
+_EMISSIONS_PREFIX = "16_emissions_reductions."
+_COMPENSATION_PERCENT = (
+    "16_emissions_reductions.emissions_reductions.compensation_percent"
+)
+_BASE_YEAR = "03_financing.financial.base_year"
 
 _SELECT_CHANGES = """
 SELECT id::text AS id, name, changes
@@ -105,6 +116,20 @@ def _reason(path: str, value: object, leaf_map: dict[str, object]) -> str | None
         return "ignored"
     if last.startswith("greenfield_comparison_"):
         return "removed"
+    # Decide the kept compensation path before the emissions prefix.
+    if (
+        path != _COMPENSATION_PERCENT
+        and not path.endswith("." + _COMPENSATION_PERCENT)
+        and path.startswith(_EMISSIONS_PREFIX)
+    ):
+        return "removed"
+    if path.startswith(_ENERGY_MIX_PREFIX):
+        return "removed"
+    if (path == _BASE_YEAR or path.endswith("." + _BASE_YEAR)) and value not in (
+        2025,
+        "2025",
+    ):
+        return "base_year is not 2025"
     return None
 
 
