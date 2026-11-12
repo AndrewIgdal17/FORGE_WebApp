@@ -19,6 +19,7 @@ import { StructureMaintenance } from '@/components/sections/structure-maintenanc
 import { SystemConstraints } from '@/components/sections/system-constraints';
 import { TechnologySection } from '@/components/sections/technology-section';
 import { TerrainMix } from '@/components/sections/terrain-mix';
+import { TerminalsSection } from '@/components/sections/terminals-section';
 import { TimelineSection } from '@/components/sections/timeline-section';
 import { VegetationMgmt } from '@/components/sections/vegetation-mgmt';
 import { WildfireRisk } from '@/components/sections/wildfire-risk';
@@ -51,6 +52,8 @@ export function SectionDispatcher({
       return <ConverterDetails />;
     case 'terrain-mix':
       return <TerrainMix milesFromRoute={milesFromRoute} routeDrawn={routeDrawn} />;
+    case 'terminals':
+      return <TerminalsSection />;
     case 'rights-of-way':
       return <RightsOfWay milesFromRoute={milesFromRoute} routeDrawn={routeDrawn} />;
     case 'economic-details':
