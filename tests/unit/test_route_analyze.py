@@ -387,7 +387,8 @@ def test_endpoint_sql_uses_covers_and_workbook_gea_names():
     assert "ST_Covers" in _ENDPOINT_SQL
     assert "ST_Contains" not in _ENDPOINT_SQL
     assert "ref.gea_regions" in _ENDPOINT_SQL
-    assert "gea_name" in _ENDPOINT_SQL
+    assert "g.transgrp" in _ENDPOINT_SQL
+    assert "g.gea_name" not in _ENDPOINT_SQL
     assert "ref.subregions_egrid" in _ENDPOINT_SQL
     assert "ref.counties_tiger" in _ENDPOINT_SQL
 
@@ -435,7 +436,7 @@ def test_endpoint_attribution_cross_region(analyze_client):
     body = _analyze(analyze_client, PORTLAND_LOS_ANGELES)
     assert body["sending_subregion"] == "NWPP"
     assert body["receiving_subregion"] == "CAMX"
-    assert body["sending_gea"] == "NorthernGrid West"
+    assert body["sending_gea"] == "NorthernGrid_West"
     assert body["receiving_gea"] == "CAISO"
     assert body["sending_state"] == "OR"
     assert body["receiving_state"] == "CA"

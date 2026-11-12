@@ -149,9 +149,9 @@ SELECT
     WHERE ST_Covers(e.geom, send_pt) LIMIT 1) AS sending_subregion,
   (SELECT e.subregion FROM ref.subregions_egrid e, ends
     WHERE ST_Covers(e.geom, recv_pt) LIMIT 1) AS receiving_subregion,
-  (SELECT g.gea_name FROM ref.gea_regions g, ends
+  (SELECT g.transgrp FROM ref.gea_regions g, ends
     WHERE ST_Covers(g.geom, send_pt) LIMIT 1) AS sending_gea,
-  (SELECT g.gea_name FROM ref.gea_regions g, ends
+  (SELECT g.transgrp FROM ref.gea_regions g, ends
     WHERE ST_Covers(g.geom, recv_pt) LIMIT 1) AS receiving_gea,
   (SELECT c.statefp FROM ref.counties_tiger c, ends
     WHERE ST_Covers(c.geom, send_pt) LIMIT 1) AS sending_statefp,
