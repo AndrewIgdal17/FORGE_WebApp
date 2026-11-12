@@ -3,8 +3,8 @@ import type { ReactElement } from 'react';
 import { CheckboxField } from '@/components/form/checkbox-field';
 import { PercentageField } from '@/components/form/percentage-field';
 import { SelectField } from '@/components/form/select-field';
-import type { SelectOption } from '@/components/form/select-field';
 import { useFormStore } from '@/stores/form-store';
+import { BASE_YEAR_OPTIONS } from './base-year';
 
 const FINANCIAL = '03_financing.financial';
 
@@ -15,11 +15,6 @@ const SOCIAL_PATH = `${FINANCIAL}.social_discount_rate`;
 const ESCALATION_PATH = `${FINANCIAL}.construction_cost_escalation_rate`;
 const BENEFIT_ESCALATION_PATH = '17_congestion_reductions.benefit_price_escalation_real';
 const REVENUE_PATH = `${FINANCIAL}.revenue.rate_based.enabled`;
-
-const BASE_YEAR_OPTIONS: SelectOption[] = Array.from({ length: 31 }, (_, index) => {
-  const year = String(2020 + index);
-  return { value: year, label: year };
-});
 
 function readDecimal(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -73,6 +68,7 @@ export function FinancialRates(): ReactElement {
         label="Base year"
         helpText="Reference year for all present values (base-year dollars)."
         options={BASE_YEAR_OPTIONS}
+        readOnly
       />
       <PercentageField
         path={INFLATION_PATH}

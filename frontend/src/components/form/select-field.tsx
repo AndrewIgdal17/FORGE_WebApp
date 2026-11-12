@@ -20,6 +20,7 @@ export interface SelectFieldProps {
   helpText?: string;
   error?: string;
   options: SelectOption[];
+  readOnly?: boolean;
 }
 
 function readSelectValue(value: unknown): string | null {
@@ -34,6 +35,7 @@ export function SelectField({
   helpText,
   error,
   options,
+  readOnly = false,
 }: SelectFieldProps): ReactElement {
   const value = useFormStore((state) => state.getFieldValue(path));
   const setFieldValue = useFormStore((state) => state.setFieldValue);
@@ -44,12 +46,16 @@ export function SelectField({
       <Select
         value={selected}
         items={options}
-        onValueChange={(next) => {
-          if (next == null) return;
-          setFieldValue(path, next);
-        }}
+        {...(readOnly
+          ? {}
+          : {
+              onValueChange: (next: string | null) => {
+                if (next == null) return;
+                setFieldValue(path, next);
+              },
+            })}
       >
-        <SelectTrigger id={path} className="w-full">
+        <SelectTrigger id={path} className="w-full" disabled={readOnly}>
           <SelectValue placeholder="— Select —">
             {(current) => {
               if (typeof current !== 'string') return null;
