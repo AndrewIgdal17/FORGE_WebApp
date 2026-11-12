@@ -403,7 +403,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
 
   // --- Emissions ---
   'energy-emissions-emissions': {
-    title: 'Emissions intensities affect costs and avoided emissions',
+    title: 'Loss compensation affects emissions costs and avoided emissions',
     figures: [
       {
         label: 'Emissions Cost PV',
@@ -411,20 +411,6 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         path: 'bcr.emissions_comp_cost_pv',
         format: 'currency',
       },
-      {
-        label: 'Avoided Emissions PV',
-        source: 'path',
-        path: 'bcr.displacement_avoided_benefit_pv',
-        format: 'currency',
-      },
-    ],
-    resultsView: 'r-overview',
-  },
-
-  // --- Energy Mix ---
-  'energy-emissions-energy': {
-    title: 'Energy mix drives avoided emissions benefit',
-    figures: [
       {
         label: 'Avoided Emissions PV',
         source: 'path',

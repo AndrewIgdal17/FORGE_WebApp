@@ -21,30 +21,6 @@ export interface DefaultsResponse {
   defaults: Record<string, unknown>;
 }
 
-export interface GridMixShares {
-  coal: number;
-  oil: number;
-  natural_gas: number;
-  solar: number;
-  wind: number;
-  hydro: number;
-  nuclear: number;
-  other: number;
-}
-
-export interface GridMixPreset {
-  id: string;
-  label: string;
-  description: string;
-  grid_mix: {
-    initial: GridMixShares;
-    rate_pre_cod: GridMixShares;
-    rate_post_cod: GridMixShares;
-  };
-}
-
-export type GridMixPresetsResponse = GridMixPreset[];
-
 export interface TaxonomyItem {
   id: string;
   side: string;
@@ -248,10 +224,6 @@ export async function getCalculatorInfo(): Promise<CalculatorInfo> {
 
 export async function getDefaults(): Promise<DefaultsResponse> {
   return apiFetch<DefaultsResponse>('/api/defaults');
-}
-
-export async function getGridMixPresets(): Promise<GridMixPresetsResponse> {
-  return apiFetch<GridMixPresetsResponse>('/api/presets/grid_mix');
 }
 
 export async function getTaxonomy(): Promise<TaxonomyResponse> {

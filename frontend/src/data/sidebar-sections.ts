@@ -97,13 +97,7 @@ export const SIDEBAR_SECTIONS: SidebarSections = {
       id: 'emissions',
       label: 'Emissions',
       color: '#14b8a6',
-      subItems: [{ id: 'energy-emissions-emissions', label: 'Emissions & Intensities' }],
-    },
-    {
-      id: 'energy-mix',
-      label: 'Energy Mix',
-      color: '#06b6d4',
-      subItems: [{ id: 'energy-emissions-energy', label: 'Energy Source Mix' }],
+      subItems: [{ id: 'energy-emissions-emissions', label: 'Loss compensation' }],
     },
   ],
   results: [

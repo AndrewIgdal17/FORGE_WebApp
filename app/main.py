@@ -356,12 +356,6 @@ async def get_defaults() -> JSONResponse:
     }))
 
 
-@app.get("/api/presets/grid_mix", response_class=JSONResponse)
-async def get_grid_mix_presets() -> JSONResponse:
-    """Return the calculator's bundled grid-mix presets."""
-    return JSONResponse(sanitize_for_json(forge.get_grid_mix_presets()))
-
-
 @app.get("/api/taxonomy", response_class=JSONResponse)
 async def get_taxonomy() -> JSONResponse:
     """Return the FORGE cost/benefit taxonomy (reference data, static)."""

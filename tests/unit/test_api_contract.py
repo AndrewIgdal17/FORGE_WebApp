@@ -83,3 +83,10 @@ def test_removed_routes_are_gone():
     assert client.get("/api/final_combined").status_code == 404
     assert client.get("/api/outputs/anything.csv").status_code == 404
     assert client.get("/api/fuel_mix_presets").status_code == 404
+
+
+def test_grid_mix_presets_route_returns_404():
+    """forge-calc v4.0.0 dropped get_grid_mix_presets; a missing route is 404."""
+    quiet = TestClient(app, raise_server_exceptions=False)
+    response = quiet.get("/api/presets/grid_mix")
+    assert response.status_code == 404

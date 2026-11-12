@@ -9,7 +9,6 @@ import { ConverterMaintenance } from '@/components/sections/converter-maintenanc
 import { DelayCosts } from '@/components/sections/delay-costs';
 import { EconomicDetails } from '@/components/sections/economic-details';
 import { EmissionsSection } from '@/components/sections/emissions-section';
-import { EnergyMixSection } from '@/components/sections/energy-mix-section';
 import { EnvCredits } from '@/components/sections/env-credits';
 import { FinancialRates } from '@/components/sections/financial-rates';
 import { InsurancePanel } from '@/components/sections/insurance-panel';
@@ -80,8 +79,6 @@ export function SectionDispatcher({
       return <WildfireRisk />;
     case 'outage-risk':
       return <OutageRisk />;
-    case 'energy-emissions-energy':
-      return <EnergyMixSection />;
     case 'energy-emissions-emissions':
       return <EmissionsSection />;
     case 'conductor-maintenance':
