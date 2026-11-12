@@ -214,6 +214,17 @@ export function MapPanel({
     for (let zone = 1; zone <= 15; zone += 1) {
       zeroChanges[`11_project_row_details.right_of_way.zone_${zone}.miles`] = 0;
     }
+    const terminalPaths = [
+      '01_project_technical_details.terminals.sending.gea',
+      '01_project_technical_details.terminals.sending.egrid_subregion',
+      '01_project_technical_details.terminals.sending.state',
+      '01_project_technical_details.terminals.receiving.gea',
+      '01_project_technical_details.terminals.receiving.egrid_subregion',
+      '01_project_technical_details.terminals.receiving.state',
+    ];
+    for (const path of terminalPaths) {
+      zeroChanges[path] = null;
+    }
     useFormStore.getState().applyChanges(zeroChanges);
   }
 

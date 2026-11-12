@@ -1,4 +1,4 @@
-"""Calculate requires a covered route; measured miles overwrite typed changes."""
+"""Calculate requires a covered route; measured miles and regions overwrite typed changes."""
 
 from __future__ import annotations
 
@@ -19,6 +19,14 @@ AUSTIN_DALLAS_ROUTE = {
 }
 
 FORESTED = "02_project_physical_details.terrain.terrain_miles.forested"
+RECEIVING_GEA = "01_project_technical_details.terminals.receiving.gea"
+OTHER_TERMINALS = (
+    "01_project_technical_details.terminals.sending.gea",
+    "01_project_technical_details.terminals.sending.egrid_subregion",
+    "01_project_technical_details.terminals.sending.state",
+    "01_project_technical_details.terminals.receiving.egrid_subregion",
+    "01_project_technical_details.terminals.receiving.state",
+)
 # The calculator still rejects a document with no protected-area acres.
 # Measured changes include explicit zeros so a successful calculate is reachable.
 ACRE_ZEROS = {
@@ -47,6 +55,15 @@ def _live(**extra) -> dict:
     body = {"defaults_id": forge.get_defaults_id(), "changes": {}}
     body.update(extra)
     return body
+
+
+def _skip_shared_calculation_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Do not record a hit on the process-wide 30-per-minute anonymous bucket."""
+    from app.auth import rate_limiter
+
+    monkeypatch.setattr(
+        rate_limiter, "allow_calculation", lambda user_id, now=None: True
+    )
 
 
 def _forbid_calculation(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -134,6 +151,90 @@ def test_measured_miles_overwrite_typed_changes(monkeypatch):
     assert seen["changes"][FORESTED] == 10
     assert _leaf(recorded["document"], FORESTED) == 10
     assert response.json()["layer_releases"] == releases
+
+
+def test_measured_receiving_gea_overwrites_typed_value(monkeypatch):
+    _skip_shared_calculation_limit(monkeypatch)
+    releases = layer_releases(["file dates 2026-10-09"])
+    seen: dict = {}
+    recorded: dict = {}
+
+    async def fake_analysis(route, row_width_ft):
+        return JSONResponse(
+            content={
+                "changes": {FORESTED: 10, **ACRE_ZEROS, RECEIVING_GEA: "CAISO"},
+                "layer_releases": releases,
+            }
+        )
+
+    def spy_resolve(changes):
+        seen["changes"] = dict(changes)
+        return original_resolve(changes)
+
+    def fake_run(resolved, scenario_id="", **kwargs):
+        recorded["document"] = resolved
+        return {"results": {"ok": True}, "provenance": {}}
+
+    original_resolve = forge.resolve_inputs
+    monkeypatch.setattr("app.route.run_route_analysis", fake_analysis)
+    monkeypatch.setattr(forge, "resolve_inputs", spy_resolve)
+    monkeypatch.setattr(forge, "run_calculation", fake_run)
+
+    response = client.post(
+        "/api/forge/calculate",
+        json=_live(
+            changes={FORESTED: 99, **REQUIRED_TO_CALCULATE, RECEIVING_GEA: "TYPED"},
+            route=AUSTIN_DALLAS_ROUTE,
+            row_width_ft=100,
+        ),
+    )
+    assert response.status_code == 200, response.text
+    assert seen["changes"][RECEIVING_GEA] == "CAISO"
+    for path in OTHER_TERMINALS:
+        assert seen["changes"][path] == REQUIRED_TO_CALCULATE[path]
+    assert _leaf(recorded["document"], RECEIVING_GEA) == "CAISO"
+    assert response.json()["layer_releases"] == releases
+
+
+def test_measured_null_receiving_gea_replaces_typed_value(monkeypatch):
+    _skip_shared_calculation_limit(monkeypatch)
+    seen: dict = {}
+
+    async def fake_analysis(route, row_width_ft):
+        return JSONResponse(
+            content={
+                "changes": {**ACRE_ZEROS, RECEIVING_GEA: None},
+                "layer_releases": layer_releases(["file dates 2026-10-09"]),
+            }
+        )
+
+    def spy_resolve(changes):
+        seen["changes"] = dict(changes)
+        return original_resolve(changes)
+
+    original_resolve = forge.resolve_inputs
+    monkeypatch.setattr("app.route.run_route_analysis", fake_analysis)
+    monkeypatch.setattr(forge, "resolve_inputs", spy_resolve)
+
+    response = client.post(
+        "/api/forge/calculate",
+        json=_live(
+            changes=dict(REQUIRED_TO_CALCULATE),
+            route=AUSTIN_DALLAS_ROUTE,
+            row_width_ft=100,
+        ),
+    )
+    assert seen["changes"][RECEIVING_GEA] is None
+    for path in OTHER_TERMINALS:
+        assert seen["changes"][path] == REQUIRED_TO_CALCULATE[path]
+    assert response.status_code == 422, response.text
+    assert response.json()["error"] == {
+        "code": "invalid_inputs",
+        "message": (
+            "01_project_technical_details.terminals.receiving.gea: "
+            "Receiving terminal GEA region is required."
+        ),
+    }
 
 
 def test_coverage_rejection_is_returned_without_calculating(monkeypatch):

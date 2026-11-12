@@ -570,6 +570,74 @@ def test_analyze_returns_protected_acres_for_one_forested_mile(monkeypatch):
     assert set(body["intersections"]["terrain/nlcd"]) == set(TERRAIN_KEYS)
 
 
+def test_analyze_changes_include_sending_gea_from_transgrp(monkeypatch):
+    """The endpoint row's transgrp is the dotted GEA path, not the short name."""
+    from app import route as route_module
+    from app.main import app
+    from app.terrain_rules import SampleHit
+
+    class _TransgrpConn(_FakePadusConn):
+        async def fetchrow(self, query: str, *args: object):
+            if "route_m" in query:
+                return {"route_m": 1000.0, "inside_m": 1000.0}
+            return {
+                "sending_subregion": "SPSO",
+                "receiving_subregion": None,
+                "sending_gea": "SPP_South",
+                "receiving_gea": None,
+                "sending_statefp": "48",
+                "receiving_statefp": None,
+            }
+
+    class _Acquire:
+        async def __aenter__(self) -> _TransgrpConn:
+            return _TransgrpConn()
+
+        async def __aexit__(self, *exc: object) -> bool:
+            return False
+
+    class _Pool:
+        def acquire(self) -> _Acquire:
+            return _Acquire()
+
+    async def _no_overlap(
+        conn, geojson: str, row_width_ft: float
+    ) -> tuple[list[float], list[float]]:
+        return [0.0], [0.0]
+
+    def _scrubbed(points):
+        return [SampleHit("scrubbed_flat", points[0][2], None)]
+
+    monkeypatch.setattr(route_module.db_module, "get_db_pool", lambda: _Pool())
+    monkeypatch.setattr(route_module, "fetch_slice_overlaps_m2", _no_overlap)
+    monkeypatch.setattr(route_module, "sample_terrain", _scrubbed)
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.post("/api/route/analyze", json=AUSTIN_DALLAS)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    expected_regions = {
+        "01_project_technical_details.terminals.sending.gea": "SPP_South",
+        "01_project_technical_details.terminals.sending.egrid_subregion": "SPSO",
+        "01_project_technical_details.terminals.sending.state": "TX",
+        "01_project_technical_details.terminals.receiving.gea": None,
+        "01_project_technical_details.terminals.receiving.egrid_subregion": None,
+        "01_project_technical_details.terminals.receiving.state": None,
+    }
+    for path, value in expected_regions.items():
+        assert body["changes"][path] == value
+    miles = set(body["changes"]) - set(expected_regions)
+    assert miles
+    assert all(path.startswith(("02_", "11_")) for path in miles)
+    assert "sending_subregion" not in body["changes"]
+    assert "sending_gea" not in body["changes"]
+    assert body["sending_gea"] == "SPP_South"
+    assert body["sending_subregion"] == "SPSO"
+    assert body["sending_state"] == "TX"
+    assert body["receiving_gea"] is None
+    assert body["receiving_subregion"] is None
+    assert body["receiving_state"] is None
+
+
 WA_BC = {
     "route": {
         "type": "MultiLineString",

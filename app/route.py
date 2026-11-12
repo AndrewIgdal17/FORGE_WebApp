@@ -32,6 +32,7 @@ from . import db as db_module
 from .corridor import MissingLayerTable, fetch_slice_overlaps_m2
 from .layer_releases import layer_releases
 from .models import sanitize_for_json
+from .region_changes import region_changes
 from .states import FIPS_TO_STATE, fips_to_abbrev
 from .terrain_rules import (
     TERRAIN_CLASSES,
@@ -655,14 +656,19 @@ async def run_route_analysis(
         ROW_LAYER: zones,
         "habitat/padus": gap,
     }
+    endpoints = endpoint_context(endpoint_row)
+    changes: dict[str, float | str | None] = {
+        **changes_for(intersections),
+        **region_changes(endpoints),
+    }
     body = {
         "total_miles": float(total_miles),
         "intersections": intersections,
-        "changes": changes_for(intersections),
+        "changes": changes,
         "open_water_miles": result.open_water_miles,
         "layer_releases": layer_releases(
             [row["release_label"] for row in label_rows]
         ),
-        **endpoint_context(endpoint_row),
+        **endpoints,
     }
     return JSONResponse(sanitize_for_json(body))
