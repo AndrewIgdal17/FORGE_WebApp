@@ -158,8 +158,31 @@ def load_zones(path: Path | str) -> list[Zone]:
     return zones
 
 
-def gate_hours(rows: Sequence[PriceRow] | Sequence[LoadRow]) -> None:
+def _required_load_keys(zones: Sequence[Zone]) -> tuple[tuple[str, str], ...]:
+    """Non-null load locations on the CAISO, ISONE, NYISO, and MISO rows."""
+
+    allowed = set(_ISO_FROM_DIR.values())
+    keys: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for zone in zones:
+        if zone.iso not in allowed or zone.load_location is None:
+            continue
+        key = (zone.iso, zone.load_location)
+        if key in seen:
+            continue
+        seen.add(key)
+        keys.append(key)
+    return tuple(keys)
+
+
+def gate_hours(
+    rows: Sequence[PriceRow] | Sequence[LoadRow],
+    required: Sequence[tuple[str, str]] = (),
+) -> None:
     grouped: dict[tuple[str, str], list[datetime]] = defaultdict(list)
+    for key in required:
+        if key not in grouped:
+            grouped[key] = []
     for row in rows:
         if isinstance(row, LoadRow):
             key = (row.iso, row.load_location)
@@ -355,9 +378,11 @@ def read_loads(root: Path | str, zones: Sequence[Zone]) -> list[LoadRow]:
 def replace_archive(data_root: Path | str, zones_path: Path | str) -> None:
     """Replace the archive after every gate has passed.
 
-    The database connection is opened only after the gates. One transaction
-    deletes the six tables and inserts the replacement. An exception rolls
-    that transaction back.
+    The database connection is opened only after the gates. Every non-null
+    load location on the CAISO, ISONE, NYISO, and MISO rows must already be
+    a full 8,760-hour set, including a series such as LRZ3_5 that belongs
+    only to unpriced zones. One transaction deletes the six tables and
+    inserts the replacement. An exception rolls that transaction back.
     """
 
     zones = load_zones(zones_path)
@@ -365,7 +390,7 @@ def replace_archive(data_root: Path | str, zones_path: Path | str) -> None:
     prices = read_prices(data_root, zones)
     loads = read_loads(data_root, zones)
     gate_hours(prices)
-    gate_hours(loads)
+    gate_hours(loads, _required_load_keys(zones))
     gate_identity(prices)
     gate_equal_energy(prices)
     pairs = market_pairs(zones, prices)

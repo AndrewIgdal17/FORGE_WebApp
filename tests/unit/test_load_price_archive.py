@@ -48,7 +48,7 @@ def _zero_row(loader, iso: str, location: str, hour: datetime):
     )
 
 
-def test_acceptance_loader_gates_8760_and_iso_counts(monkeypatch):
+def test_acceptance_loader_gates_8760_and_iso_counts():
     loader = _loader()
     caiso_hours = loader.expected_hours("CAISO")
     nyiso_hours = loader.expected_hours("NYISO")
@@ -75,12 +75,12 @@ def test_acceptance_loader_gates_8760_and_iso_counts(monkeypatch):
     hubs = [zone.price_location for zone in zones if zone.iso == "MISO" and zone.price_location]
     assert hubs == HUBS
 
+
+def test_acceptance_real_tree_does_not_open_database(monkeypatch):
     data_root = os.environ.get("FORGE_PRICE_DATA")
     if not data_root:
-        # Real-file half. Calling pytest.skip here would discard the synthetic
-        # result, so this returns. The two file tests call pytest.skip.
-        return
-
+        pytest.skip("FORGE_PRICE_DATA is unset")
+    loader = _loader()
     import asyncpg
 
     def _refuse_connection(*_args, **_kwargs):
@@ -89,6 +89,34 @@ def test_acceptance_loader_gates_8760_and_iso_counts(monkeypatch):
     monkeypatch.setattr(asyncpg, "connect", _refuse_connection)
     # FORGE_PRICE_DATA is a copy of /srv/forge/gis-data, not the live tree.
     loader.check_tree(Path(data_root))
+
+
+def test_missing_load_series_rejects_before_connection(monkeypatch, tmp_path):
+    loader = _loader()
+    zones_path = tmp_path / "zones.csv"
+    zones_path.write_text(
+        "iso,zone,polygon_source,polygon_rto_iso,polygon_loc_type,"
+        "polygon_loc_abbrev,price_location,load_location\n"
+        "MISO,LRZ3,rto_subzones,MISO,REG,LRZ3,,LRZ3_5\n",
+        encoding="utf-8",
+    )
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+    monkeypatch.setattr(loader, "check_tree", lambda _root: {})
+    monkeypatch.setattr(loader, "read_prices", lambda _root, _zones: [])
+    monkeypatch.setattr(loader, "read_loads", lambda _root, _zones: [])
+    monkeypatch.setenv("FORGE_LOADER_DATABASE_URL", "postgresql://refused")
+
+    import asyncpg
+
+    def _refuse_connection(*_args, **_kwargs):
+        raise AssertionError("database opened")
+
+    monkeypatch.setattr(asyncpg, "connect", _refuse_connection)
+    with pytest.raises(loader.ArchiveRejected) as rejected:
+        loader.replace_archive(data_root, zones_path)
+    assert rejected.value.location == "LRZ3_5"
+    assert len(rejected.value.hours) == 8760
 
 
 def _nyiso_rows(loader, hour: datetime, energies: list[Decimal], congestions: list[Decimal]):
