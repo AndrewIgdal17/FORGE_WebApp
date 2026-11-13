@@ -93,6 +93,11 @@ export type RequiredResponse = {
   after_route: RequiredField[];
 };
 
+export interface MarketStatusEntry {
+  status: string;
+  reason: string;
+}
+
 export interface AnalyzeResponse {
   total_miles: number;
   intersections: Record<string, Record<string, unknown>>;
@@ -103,6 +108,14 @@ export interface AnalyzeResponse {
   receiving_gea: string | null;
   sending_state: string | null;
   receiving_state: string | null;
+  sending_iso: string | null;
+  sending_price_zone: string | null;
+  receiving_iso: string | null;
+  receiving_price_zone: string | null;
+  market_status: {
+    spread: MarketStatusEntry;
+    receiving_energy_value: MarketStatusEntry;
+  };
   open_water_miles?: number;
 }
 

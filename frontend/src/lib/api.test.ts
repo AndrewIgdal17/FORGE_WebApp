@@ -63,10 +63,10 @@ describe('requiredInputs', () => {
       before_route: [],
       after_route: [
         {
-          path: '01_project_technical_details.project.value_of_load_per_mwh',
-          label: 'Receiving-end energy value ($/MWh)',
+          path: '17_congestion_reductions.greenfield_congestion_reductions.constraints.average_exceedance',
+          label: 'Average exceedance (MW)',
           stage: 'after_route' as const,
-          message: 'Receiving-end energy value ($/MWh) is required.',
+          message: 'Average exceedance (MW) is required.',
         },
       ],
     };

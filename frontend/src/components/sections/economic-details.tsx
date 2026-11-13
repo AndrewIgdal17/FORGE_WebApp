@@ -2,7 +2,6 @@ import type { ReactElement } from 'react';
 import { CurrencyField } from '@/components/form/currency-field';
 import { NumberField } from '@/components/form/number-field';
 
-const VALUE_OF_LOAD_PATH = '01_project_technical_details.project.value_of_load_per_mwh';
 const VOLL = '07_outage_costs.outage.value_of_lost_load.tiers';
 
 const VOLL_TIERS: Array<{ label: string; index: number; hoursEditable: boolean }> = [
@@ -33,16 +32,8 @@ export function EconomicDetails(): ReactElement {
     <section id="economic-details" className="grid max-w-3xl gap-4">
       <div>
         <h2 className="text-base font-semibold text-slate-900">Economic details</h2>
-        <p className="text-sm text-slate-600">
-          Value of delivered energy and the value of lost load by outage duration.
-        </p>
+        <p className="text-sm text-slate-600">Value of lost load by outage duration.</p>
       </div>
-      <CurrencyField
-        path={VALUE_OF_LOAD_PATH}
-        label="Receiving-end energy value ($/MWh)"
-        helpText="Prices losses, and delivered energy for a dedicated resource. Zero or greater."
-        nullable
-      />
       <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
         <table className="w-full min-w-[32rem] border-collapse">
           <caption className="sr-only">Value of lost load by outage duration tier</caption>

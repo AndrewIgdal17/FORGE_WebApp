@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { RequiredField, RequiredResponse } from './api';
 import { canCalculate, canDraw, panelFields } from './required-gates';
 
-const PROJECT = '01_project_technical_details.project';
 const GREENFIELD = '17_congestion_reductions.greenfield_congestion_reductions';
+const INCREMENTAL = '17_congestion_reductions.incremental_congestion_reductions';
 
 function requiredField(
   path: string,
@@ -19,14 +19,14 @@ const flow = requiredField(
   'Flow Factor',
   'before_route',
 );
-const energy = requiredField(
-  `${PROJECT}.value_of_load_per_mwh`,
-  'Receiving-end energy value ($/MWh)',
+const exceedance = requiredField(
+  `${GREENFIELD}.constraints.average_exceedance`,
+  'Average exceedance (MW)',
   'after_route',
 );
-const spread = requiredField(
-  `${GREENFIELD}.prices.average_congestion_price`,
-  'Congestion spread ($/MWh, mean over all 8,760 hours)',
+const incrementalExceedance = requiredField(
+  `${INCREMENTAL}.constraints.average_exceedance`,
+  'Incremental average exceedance (MW)',
   'after_route',
 );
 
@@ -35,9 +35,11 @@ const empty: RequiredResponse = { before_route: [], after_route: [] };
 describe('canDraw', () => {
   it('is true only when before_route is empty', () => {
     expect(canDraw(empty)).toBe(true);
-    expect(canDraw({ before_route: [], after_route: [energy] })).toBe(true);
+    expect(canDraw({ before_route: [], after_route: [exceedance] })).toBe(true);
     expect(canDraw({ before_route: [flow], after_route: [] })).toBe(false);
-    expect(canDraw({ before_route: [flow], after_route: [energy, spread] })).toBe(false);
+    expect(canDraw({ before_route: [flow], after_route: [exceedance, incrementalExceedance] })).toBe(
+      false,
+    );
   });
 });
 
@@ -46,9 +48,11 @@ describe('canCalculate', () => {
     expect(canCalculate(empty, false)).toBe(false);
     expect(canCalculate(empty, true)).toBe(true);
     expect(canCalculate({ before_route: [flow], after_route: [] }, true)).toBe(false);
-    expect(canCalculate({ before_route: [], after_route: [spread] }, true)).toBe(false);
-    expect(canCalculate({ before_route: [flow], after_route: [energy] }, true)).toBe(false);
-    expect(canCalculate({ before_route: [], after_route: [energy] }, false)).toBe(false);
+    expect(canCalculate({ before_route: [], after_route: [exceedance] }, true)).toBe(false);
+    expect(canCalculate({ before_route: [flow], after_route: [incrementalExceedance] }, true)).toBe(
+      false,
+    );
+    expect(canCalculate({ before_route: [], after_route: [exceedance] }, false)).toBe(false);
   });
 });
 
@@ -56,24 +60,24 @@ describe('panelFields', () => {
   it('returns after_route when a route is present, and nothing otherwise', () => {
     const required: RequiredResponse = {
       before_route: [flow],
-      after_route: [spread, energy],
+      after_route: [exceedance, incrementalExceedance],
     };
     expect(panelFields(required, false)).toEqual([]);
-    expect(panelFields(required, true)).toEqual([spread, energy]);
+    expect(panelFields(required, true)).toEqual([exceedance, incrementalExceedance]);
     expect(panelFields(empty, true)).toEqual([]);
     expect(panelFields(empty, false)).toEqual([]);
   });
 });
 
-describe('existing scenario with a route and a missing energy value', () => {
-  const required: RequiredResponse = { before_route: [], after_route: [energy] };
+describe('existing scenario with a route and a missing exceedance', () => {
+  const required: RequiredResponse = { before_route: [], after_route: [exceedance] };
 
-  it('blocks calculation and lists the energy value', () => {
+  it('blocks calculation and lists the exceedance', () => {
     expect(canDraw(required)).toBe(true);
     expect(canCalculate(required, true)).toBe(false);
-    expect(panelFields(required, true)).toEqual([energy]);
+    expect(panelFields(required, true)).toEqual([exceedance]);
     expect(panelFields(required, true).map((field) => field.message)).toEqual([
-      'Receiving-end energy value ($/MWh) is required.',
+      'Average exceedance (MW) is required.',
     ]);
   });
 });

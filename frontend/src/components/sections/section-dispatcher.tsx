@@ -12,6 +12,7 @@ import { EmissionsSection } from '@/components/sections/emissions-section';
 import { EnvCredits } from '@/components/sections/env-credits';
 import { FinancialRates } from '@/components/sections/financial-rates';
 import { InsurancePanel } from '@/components/sections/insurance-panel';
+import { MarketMeasurementsSection } from '@/components/sections/market-measurements-section';
 import { OutageRisk } from '@/components/sections/outage-risk';
 import { RightsOfWay } from '@/components/sections/rights-of-way';
 import { StructureMaintenance } from '@/components/sections/structure-maintenance';
@@ -53,6 +54,8 @@ export function SectionDispatcher({
       return <TerrainMix milesFromRoute={milesFromRoute} routeDrawn={routeDrawn} />;
     case 'terminals':
       return <TerminalsSection />;
+    case 'market-measurements':
+      return <MarketMeasurementsSection />;
     case 'rights-of-way':
       return <RightsOfWay milesFromRoute={milesFromRoute} routeDrawn={routeDrawn} />;
     case 'economic-details':

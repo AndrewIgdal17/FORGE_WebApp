@@ -94,15 +94,15 @@ describe('stepBlocked', () => {
   const contract = requiredField(CONTRACT, 'Contract price');
   const co2e = requiredField(CO2E, 'CO2e');
   const rating = requiredField(RATING, 'Capacity MW');
-  const energy = requiredField(
-    `${PROJECT}.value_of_load_per_mwh`,
-    'Receiving-end energy value ($/MWh)',
+  const exceedance = requiredField(
+    `${GREENFIELD}.constraints.average_exceedance`,
+    'Average exceedance (MW)',
     'after_route',
   );
 
   const required: RequiredResponse = {
     before_route: [contract, rating, delay, construction, lifetime, flow, co2e],
-    after_route: [energy, { ...flow, stage: 'after_route' }],
+    after_route: [exceedance, { ...flow, stage: 'after_route' }],
   };
 
   it('returns only that step’s before_route entries, in API order', () => {

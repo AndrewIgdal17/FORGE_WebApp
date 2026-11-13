@@ -3,9 +3,10 @@ import type { ReactElement, SyntheticEvent } from 'react';
 import type { Feature, LineString, MultiLineString } from 'geojson';
 import length from '@turf/length';
 import { ChevronDown, ChevronUp, MapPin } from 'lucide-react';
+import { endpointLine } from '@/components/map/endpoint-line';
 import { TERRAIN_IDS } from '@/components/sections/terrain-mix';
 import type { TerrainId } from '@/components/sections/terrain-mix';
-import type { EndpointSubstations, SubstationIdentity } from '@/hooks/use-route-draw';
+import type { EndpointSubstations } from '@/hooks/use-route-draw';
 import type { AnalyzeResponse } from '@/lib/api';
 import { getValueAtPath } from '@/lib/path';
 import { useFormStore } from '@/stores/form-store';
@@ -59,21 +60,6 @@ function formatMiles(miles: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })} mi`;
-}
-
-function endpointLine(
-  label: string,
-  subregion: string | null,
-  gea: string | null,
-  state: string | null,
-  hit: SubstationIdentity | null,
-): string {
-  const parts = [subregion, gea, state].filter((part): part is string => Boolean(part));
-  const region = parts.length > 0 ? parts.join(' / ') : '—';
-  const name = hit?.name && !/^UNKNOWN\d*$/i.test(hit.name) ? hit.name : null;
-  if (!name) return `${label}: ${region}`;
-  const volts = hit?.voltage_kv ? ` (${hit.voltage_kv} kV)` : '';
-  return `${label}: ${name}${volts} — ${region}`;
 }
 
 function routeMiles(route: MultiLineString): number {
@@ -136,6 +122,7 @@ export function RouteStats({
 }: RouteStatsProps): ReactElement {
   const [minimized, setMinimized] = useState(false);
   const formData = useFormStore((state) => state.data);
+  const routeAnalysis = useFormStore((state) => state.routeAnalysis);
   const liveMiles = route ? routeMiles(route) : null;
   const showServerTotal = result !== null && !isDrawing && !loading;
   const total = showServerTotal ? result.total_miles : liveMiles;
@@ -205,6 +192,8 @@ export function RouteStats({
               result.sending_gea,
               result.sending_state,
               endpoints.sending,
+              routeAnalysis?.sendingIso ?? null,
+              routeAnalysis?.sendingPriceZone ?? null,
             )}
           </p>
           <p>
@@ -214,6 +203,8 @@ export function RouteStats({
               result.receiving_gea,
               result.receiving_state,
               endpoints.receiving,
+              routeAnalysis?.receivingIso ?? null,
+              routeAnalysis?.receivingPriceZone ?? null,
             )}
           </p>
         </div>

@@ -43,6 +43,7 @@ export const SIDEBAR_SECTIONS: SidebarSections = {
         { id: 'route', label: 'Route' },
         { id: 'terrain-mix', label: 'Terrain Mix' },
         { id: 'terminals', label: 'Terminals' },
+        { id: 'market-measurements', label: 'Market measurements' },
         { id: 'rights-of-way', label: 'Rights of Way' },
       ],
     },

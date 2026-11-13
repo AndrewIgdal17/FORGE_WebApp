@@ -264,10 +264,7 @@ function sectionForRequiredPath(
       return { sectionId: item.input_tab, subItemId: item.sub_tab };
     }
   }
-  if (path.endsWith('.value_of_load_per_mwh')) {
-    return { sectionId: 'benefits', subItemId: 'economic-details' };
-  }
-  if (path.includes('congestion_reductions')) {
+  if (path.includes('flow_factor') || path.includes('average_exceedance')) {
     return { sectionId: 'benefits', subItemId: 'system-constraints' };
   }
   return null;

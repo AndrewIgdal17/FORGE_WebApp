@@ -17,11 +17,7 @@ import { RouteStats } from '@/components/map/RouteStats';
 import { useRouteAnalyze } from '@/hooks/use-route-analyze';
 import { useRouteDraw, type EndpointSubstations } from '@/hooks/use-route-draw';
 import type { AnalyzeResponse } from '@/lib/api';
-import {
-  changesAfterAnalyze,
-  resolvedRowWidthFt,
-  rowWidthProblem,
-} from '@/lib/analyze-request';
+import { resolvedRowWidthFt, rowWidthProblem } from '@/lib/analyze-request';
 import { useFormStore } from '@/stores/form-store';
 import { useMapStore } from '@/stores/map-store';
 
@@ -176,9 +172,7 @@ export function MapPanel({
       const segments = segmentsFor(step.route, response.intersections, endpoints);
       heldSegmentsRef.current = { route: step.route, segments };
       onRouteChangeRef.current?.(step.route, segments);
-      useFormStore
-        .getState()
-        .applyChanges(changesAfterAnalyze(response.changes));
+      useFormStore.getState().recordAnalysis(response);
       onAnalyzedRef.current?.();
     });
     return () => {

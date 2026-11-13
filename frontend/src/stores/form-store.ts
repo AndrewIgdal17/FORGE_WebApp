@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { getDefaults, getInputMetadata, getTaxonomy } from '@/lib/api';
+import { getDefaults, getInputMetadata, getTaxonomy, type AnalyzeResponse } from '@/lib/api';
 import { diffChanges } from '@/lib/changes';
 import { loadLookups, type LookupTables, type ProjectFields } from '@/lib/lookups';
 import { getValueAtPath, setValueAtPath } from '@/lib/path';
@@ -17,6 +17,7 @@ export interface FormState {
   lookups: LookupTables | null;
   loading: boolean;
   calculatorInfo: Record<string, unknown> | null;
+  routeAnalysis: RouteAnalysisMemory | null;
 }
 
 export interface FormActions {
@@ -30,9 +31,34 @@ export interface FormActions {
   getChanges: () => Record<string, unknown>;
   getProjectFields: () => ProjectFields;
   isReconductoring: () => boolean;
+  recordAnalysis: (body: AnalyzeResponse) => void;
+}
+
+export interface RouteAnalysisMemory {
+  marketStatus: AnalyzeResponse['market_status'];
+  sendingIso: string | null;
+  sendingPriceZone: string | null;
+  receivingIso: string | null;
+  receivingPriceZone: string | null;
 }
 
 const PROJECT_PATH = '01_project_technical_details.project';
+
+const ROUTE_PATHS = new Set([
+  '01_project_technical_details.market_measurements.congestion_spread_per_mwh',
+  '01_project_technical_details.market_measurements.hours_receiving_more_congested',
+  '01_project_technical_details.market_measurements.hours_sending_more_congested',
+  '01_project_technical_details.market_measurements.receiving_energy_value_per_mwh',
+]);
+
+function isRoutePath(path: string, metadata: unknown[]): boolean {
+  if (ROUTE_PATHS.has(path)) return true;
+  return metadata.some((item) => {
+    if (!item || typeof item !== 'object') return false;
+    const row = item as { yaml_section?: string; field_path?: string; source?: string };
+    return row.source === 'route' && `${row.yaml_section}.${row.field_path}` === path;
+  });
+}
 
 interface TaxonomyIndexes {
   taxonomyById: Record<string, unknown>;
@@ -147,6 +173,7 @@ const initialState: FormState = {
   lookups: null,
   loading: false,
   calculatorInfo: null,
+  routeAnalysis: null,
 };
 
 export const useFormStore = create<FormState & FormActions>((set, get) => ({
@@ -183,8 +210,9 @@ export const useFormStore = create<FormState & FormActions>((set, get) => ({
   },
 
   setFieldValue: (path, value) => {
-    const { data } = get();
+    const { data, inputMetadata } = get();
     if (!data) return;
+    if (isRoutePath(path, inputMetadata ?? [])) return;
     set({ data: withPath(data, path, value) });
   },
 
@@ -210,12 +238,15 @@ export const useFormStore = create<FormState & FormActions>((set, get) => ({
 
   loadScenarioChanges: (changes) => {
     const { defaults } = get();
-    if (!defaults) return;
+    if (!defaults) {
+      set({ routeAnalysis: null });
+      return;
+    }
     const data = structuredClone(defaults);
     for (const [path, value] of Object.entries(changes)) {
       setValueAtPath(data, path, cloneValue(value));
     }
-    set({ data });
+    set({ data, routeAnalysis: null });
   },
 
   applyChanges: (changes) => {
@@ -243,5 +274,18 @@ export const useFormStore = create<FormState & FormActions>((set, get) => ({
     if (!data) return false;
     const projectType = getValueAtPath(data, `${PROJECT_PATH}.project_type`);
     return projectType === 'reconductoring';
+  },
+
+  recordAnalysis: (body) => {
+    set({
+      routeAnalysis: {
+        marketStatus: body.market_status,
+        sendingIso: body.sending_iso,
+        sendingPriceZone: body.sending_price_zone,
+        receivingIso: body.receiving_iso,
+        receivingPriceZone: body.receiving_price_zone,
+      },
+    });
+    get().applyChanges(body.changes);
   },
 }));

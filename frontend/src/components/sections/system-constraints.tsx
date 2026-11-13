@@ -45,12 +45,6 @@ export function SystemConstraints(): ReactElement {
         min={0}
         nullable
       />
-      <CurrencyField
-        path={`${base}.prices.average_congestion_price`}
-        label="Congestion spread ($/MWh, mean over all 8,760 hours)"
-        helpText="Mean congestion price over all 8,760 hours. A negative spread is allowed."
-        nullable
-      />
       <div className="grid gap-4 border-t border-slate-200 pt-4">
         <h3 className="text-sm font-semibold text-slate-900">Capacity Value</h3>
         <CheckboxField

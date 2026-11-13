@@ -237,6 +237,49 @@ def test_measured_null_receiving_gea_replaces_typed_value(monkeypatch):
     }
 
 
+SPREAD = "01_project_technical_details.market_measurements.congestion_spread_per_mwh"
+HOURS_RECEIVING = (
+    "01_project_technical_details.market_measurements.hours_receiving_more_congested"
+)
+HOURS_SENDING = (
+    "01_project_technical_details.market_measurements.hours_sending_more_congested"
+)
+ENERGY = "01_project_technical_details.market_measurements.receiving_energy_value_per_mwh"
+MARKET_PATHS = (SPREAD, HOURS_RECEIVING, HOURS_SENDING, ENERGY)
+
+
+def test_acceptance_typed_prices_overwritten_and_unnamed(monkeypatch):
+    _skip_shared_calculation_limit(monkeypatch)
+    seen: dict = {}
+
+    async def fake_analysis(route, row_width_ft):
+        return JSONResponse(
+            content={
+                "changes": {**ACRE_ZEROS, **{path: None for path in MARKET_PATHS}},
+                "layer_releases": layer_releases(["file dates 2026-10-09"]),
+            }
+        )
+
+    def spy_resolve(changes):
+        seen["changes"] = dict(changes)
+        return original_resolve(changes)
+
+    original_resolve = forge.resolve_inputs
+    monkeypatch.setattr("app.route.run_route_analysis", fake_analysis)
+    monkeypatch.setattr(forge, "resolve_inputs", spy_resolve)
+
+    client.post(
+        "/api/forge/calculate",
+        json=_live(
+            changes={**REQUIRED_TO_CALCULATE, SPREAD: 12.5},
+            route=AUSTIN_DALLAS_ROUTE,
+            row_width_ft=100,
+        ),
+    )
+    for path in MARKET_PATHS:
+        assert seen["changes"][path] is None
+
+
 def test_coverage_rejection_is_returned_without_calculating(monkeypatch):
     _forbid_calculation(monkeypatch)
     called = {"n": 0}
