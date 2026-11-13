@@ -223,3 +223,26 @@ def test_endpoint_sql_keeps_spp_and_ercot_out_of_the_partition():
     assert context["receiving_iso"] is None
     assert context["sending_price_zone"] == ".Z.MAINE"
     assert context["receiving_price_zone"] is None
+
+
+def test_endpoint_context_keeps_priced_partition_isone():
+    context = endpoint_context(
+        {
+            "sending_subregion": None,
+            "receiving_subregion": None,
+            "sending_gea": None,
+            "receiving_gea": None,
+            "sending_statefp": None,
+            "receiving_statefp": None,
+            "sending_iso": "ISONE",
+            "receiving_iso": "ISONE",
+            "sending_price_zone": ".Z.MAINE",
+            "receiving_price_zone": ".Z.NEMASSBOST",
+            "sending_priced": True,
+            "receiving_priced": True,
+        }
+    )
+    assert context["sending_iso"] == "ISONE"
+    assert context["receiving_iso"] == "ISONE"
+    assert context["sending_price_zone"] == ".Z.MAINE"
+    assert context["receiving_price_zone"] == ".Z.NEMASSBOST"

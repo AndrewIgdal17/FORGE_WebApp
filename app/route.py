@@ -279,6 +279,12 @@ FOOTPRINT_ISO = {
     "SPP": "SPP",
 }
 
+# A partition hit already returns an archive code. ISONE is not a key in
+# FOOTPRINT_ISO, so reading a partition code through that table would drop it.
+_PARTITION_ISO = frozenset(
+    {"CAISO", "ISONE", "NYISO", "MISO", "PJM", "SPP", "ERCOT"}
+)
+
 # Counties the route crosses. statefp is the TIGER code, not the USPS abbreviation.
 _ROUTE_STATEFP_SQL = """
 WITH route AS (
@@ -367,6 +373,13 @@ def _footprint_iso(code: str | None) -> str | None:
     return FOOTPRINT_ISO.get(code)
 
 
+def _endpoint_iso(code: str | None) -> str | None:
+    """Keep a partition archive code. Map anything else as a footprint code."""
+    if code in _PARTITION_ISO:
+        return code
+    return _footprint_iso(code)
+
+
 def _flag(row: Any | None, column: str) -> bool:
     if row is None:
         return False
@@ -406,9 +419,9 @@ def endpoint_context(row: Any | None) -> dict[str, str | None]:
         "receiving_gea": _text_cell(row, "receiving_gea"),
         "sending_state": fips_to_abbrev(_text_cell(row, "sending_statefp")),
         "receiving_state": fips_to_abbrev(_text_cell(row, "receiving_statefp")),
-        "sending_iso": _footprint_iso(_text_cell(row, "sending_iso")),
+        "sending_iso": _endpoint_iso(_text_cell(row, "sending_iso")),
         "sending_price_zone": _text_cell(row, "sending_price_zone"),
-        "receiving_iso": _footprint_iso(_text_cell(row, "receiving_iso")),
+        "receiving_iso": _endpoint_iso(_text_cell(row, "receiving_iso")),
         "receiving_price_zone": _text_cell(row, "receiving_price_zone"),
     }
 
