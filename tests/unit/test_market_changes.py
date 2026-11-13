@@ -63,6 +63,40 @@ def test_acceptance_measured_west_to_nyc():
     assert measured[ENERGY] == 40.0
     assert isinstance(measured[ENERGY], float)
 
+    import forge
+
+    if forge.calculator_info()["version"] != "5.0.0":
+        pytest.skip("v5.0.0 is not installed; this plan does not push the tag")
+
+    template = forge.get_defaults_template()
+    project = template["01_project_technical_details"]["project"]
+    project["ac_dc"] = "AC"
+    project["project_type"] = "greenfield"
+    project["sending_source"] = "margin"
+    assigned = {
+        SPREAD: 1.25,
+        HOURS_RECEIVING: 100,
+        HOURS_SENDING: 80,
+        ENERGY: 40.0,
+        "02_project_physical_details.terrain.protected_area_acres.forested": 0,
+        "02_project_physical_details.terrain.protected_area_acres.scrubbed_flat": 0,
+        "02_project_physical_details.terrain.protected_area_acres.desert_barren": 0,
+        "02_project_physical_details.terrain.protected_area_acres.rolling_hills": 0,
+        "02_project_physical_details.terrain.protected_area_acres.mountain": 0,
+    }
+    for path, value in assigned.items():
+        node = template
+        parts = path.split(".")
+        for part in parts[:-1]:
+            node = node[part]
+        node[parts[-1]] = value
+    results = forge.run_calculation(template)
+    benefits = {
+        entry["taxonomy_id"]: entry["value_pv"] for entry in results["taxonomy_results"]
+    }
+    assert benefits["congestion_benefit"] is not None
+    assert benefits["avoided_emissions_benefit"] is not None
+
 
 def test_acceptance_reversed_route_swaps_hours():
     measured, status = market_changes(
