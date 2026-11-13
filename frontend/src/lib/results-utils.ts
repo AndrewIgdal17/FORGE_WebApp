@@ -51,20 +51,31 @@ function asRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
-/** Match `value || 0`: missing, zero, and NaN become 0. */
-function orZero(value: unknown): number {
-  if (typeof value === 'number') return value || 0;
-  return 0;
-}
-
-/** Match `value || null`: missing and zero become null. */
-function orNull(value: unknown): number | null {
-  if (typeof value === 'number') return value || null;
+export function readNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
   return null;
 }
 
-function proportional(compNom: number, totalNom: number, totalPV: number): number {
-  return totalNom ? (totalPV * compNom) / totalNom : 0;
+const OMITTED_LABELS: Record<string, string> = {
+  avoided_emissions_benefit: 'Avoided emissions',
+  congestion_benefit: 'Congestion relief',
+  emissions_comp: 'Loss-compensation emissions',
+  line_loss_conductor: 'Conductor losses',
+};
+
+export function excludesNote(ids: string[]): string {
+  const labels = ids.map((id) => OMITTED_LABELS[id] ?? id);
+  return `Excludes: ${labels.join(', ')}.`;
+}
+
+function proportional(
+  compNom: number | null,
+  totalNom: number | null,
+  totalPV: number | null,
+): number | null {
+  if (compNom === null || totalNom === null || totalPV === null) return null;
+  if (totalNom === 0) return 0;
+  return (totalPV * compNom) / totalNom;
 }
 
 export function deriveTaxonomyResults(
@@ -85,171 +96,171 @@ export function deriveTaxonomyResults(
   const om = asRecord(costs.oandm);
   const ins = asRecord(costs.insurance);
   const delay = asRecord(costs.delay);
-  const totalBuildNom = orZero(build.total_nominal);
+  const totalBuildNom = readNumber(build.total_nominal);
 
   return [
     {
       taxonomy_id: 'build_conductor',
       value_pv: proportional(
-        orZero(build.conductor_nominal),
+        readNumber(build.conductor_nominal),
         totalBuildNom,
-        orZero(build.total_pv),
+        readNumber(build.total_pv),
       ),
-      value_nominal: orZero(build.conductor_nominal),
+      value_nominal: readNumber(build.conductor_nominal),
       detail: [],
     },
     {
       taxonomy_id: 'build_structure',
       value_pv: proportional(
-        orZero(build.structure_nominal),
+        readNumber(build.structure_nominal),
         totalBuildNom,
-        orZero(build.total_pv),
+        readNumber(build.total_pv),
       ),
-      value_nominal: orZero(build.structure_nominal),
+      value_nominal: readNumber(build.structure_nominal),
       detail: [],
     },
     {
       taxonomy_id: 'build_converter',
       value_pv: proportional(
-        orZero(build.converter_nominal),
+        readNumber(build.converter_nominal),
         totalBuildNom,
-        orZero(build.total_pv),
+        readNumber(build.total_pv),
       ),
-      value_nominal: orZero(build.converter_nominal),
+      value_nominal: readNumber(build.converter_nominal),
       detail: [],
     },
     {
       taxonomy_id: 'row_acquisition',
       value_pv: proportional(
-        orZero(row.acquisition_nominal),
-        orZero(row.acquisition_nominal_total),
-        orZero(row.acquisition_pv),
+        readNumber(row.acquisition_nominal),
+        readNumber(row.acquisition_nominal_total),
+        readNumber(row.acquisition_pv),
       ),
-      value_nominal: orZero(row.acquisition_nominal),
+      value_nominal: readNumber(row.acquisition_nominal),
       detail: [],
     },
     {
       taxonomy_id: 'row_holding',
       value_pv: proportional(
-        orZero(row.holding_nominal),
-        orZero(row.acquisition_nominal_total),
-        orZero(row.acquisition_pv),
+        readNumber(row.holding_nominal),
+        readNumber(row.acquisition_nominal_total),
+        readNumber(row.acquisition_pv),
       ),
-      value_nominal: orZero(row.holding_nominal),
+      value_nominal: readNumber(row.holding_nominal),
       detail: [],
     },
     {
       taxonomy_id: 'env_mitigation',
-      value_pv: orZero(env.total_pv),
-      value_nominal: orZero(env.total_nominal),
+      value_pv: readNumber(env.total_pv),
+      value_nominal: readNumber(env.total_nominal),
       detail: [],
     },
     {
       taxonomy_id: 'oandm',
-      value_pv: orZero(om.total_pv),
-      value_nominal: orZero(om.total_nominal),
-      value_annual: orNull(om.total_annual),
+      value_pv: readNumber(om.total_pv),
+      value_nominal: readNumber(om.total_nominal),
+      value_annual: readNumber(om.total_annual),
       detail: [],
     },
     {
       taxonomy_id: 'insurance',
-      value_pv: orZero(ins.pv_total),
-      value_nominal: orZero(ins.nominal_lifetime_cost),
-      value_annual: orNull(ins.annual_premium),
+      value_pv: readNumber(ins.pv_total),
+      value_nominal: readNumber(ins.nominal_lifetime_cost),
+      value_annual: readNumber(ins.annual_premium),
       detail: [],
     },
     {
       taxonomy_id: 'row_rent',
-      value_pv: orZero(row.row_rent_pv),
-      value_nominal: orZero(row.row_rent_nominal),
+      value_pv: readNumber(row.row_rent_pv),
+      value_nominal: readNumber(row.row_rent_nominal),
       detail: [],
     },
     {
       taxonomy_id: 'line_loss_conductor',
-      value_pv: orZero(ll.line_cost_pv),
-      value_nominal: orZero(ll.line_nominal_total),
-      value_annual: orNull(ll.line_annual_cost),
+      value_pv: readNumber(ll.line_cost_pv),
+      value_nominal: readNumber(ll.line_nominal_total),
+      value_annual: readNumber(ll.line_annual_cost),
       detail: [],
     },
     {
       taxonomy_id: 'line_loss_converter',
-      value_pv: orZero(ll.converter_cost_pv),
-      value_nominal: orZero(ll.converter_nominal_total),
-      value_annual: orNull(ll.converter_annual_cost),
+      value_pv: readNumber(ll.converter_cost_pv),
+      value_nominal: readNumber(ll.converter_nominal_total),
+      value_annual: readNumber(ll.converter_annual_cost),
       detail: [],
     },
     {
       taxonomy_id: 'base_delay',
-      value_pv: orZero(delay.total_pv),
-      value_nominal: orZero(delay.total_nominal),
+      value_pv: readNumber(delay.total_pv),
+      value_nominal: readNumber(delay.total_nominal),
       detail: [],
     },
     {
       taxonomy_id: 'wildfire_eac',
-      value_pv: orZero(wf.pv_cost),
-      value_nominal: orZero(wf.nominal_total),
-      value_annual: orNull(wf.EAL),
+      value_pv: readNumber(wf.pv_cost),
+      value_nominal: readNumber(wf.nominal_total),
+      value_annual: readNumber(wf.EAL),
       detail: [],
     },
     {
       taxonomy_id: 'outage_eac',
-      value_pv: orZero(out.pv_cost),
-      value_nominal: orZero(out.nominal_total),
-      value_annual: orNull(out.expected_annual_loss),
+      value_pv: readNumber(out.pv_cost),
+      value_nominal: readNumber(out.nominal_total),
+      value_annual: readNumber(out.expected_annual_loss),
       detail: [
         {
           dimension: 'component',
           dimension_key: 'load_shed_per_event',
           value_pv: 0,
-          value_annual: orZero(out.cost_loadshed),
+          value_annual: readNumber(out.cost_loadshed),
         },
         {
           dimension: 'component',
           dimension_key: 'redispatch_per_event',
           value_pv: 0,
-          value_annual: orZero(out.cost_redispatch),
+          value_annual: readNumber(out.cost_redispatch),
         },
       ],
     },
     {
       taxonomy_id: 'emissions_comp',
-      value_pv: orZero(em.total_pv),
-      value_nominal: orZero(em.total_nominal),
-      value_annual: orNull(em.annual_cost),
+      value_pv: readNumber(em.total_pv),
+      value_nominal: readNumber(em.total_nominal),
+      value_annual: readNumber(em.annual_cost),
       detail: [],
     },
     {
       taxonomy_id: 'congestion_benefit',
-      value_pv: orZero(cc.congestion_benefit_pv),
-      value_nominal: orZero(cc.congestion_benefit_nominal),
-      value_annual: orNull(cc.congestion_benefit_annual),
+      value_pv: readNumber(cc.congestion_benefit_pv),
+      value_nominal: readNumber(cc.congestion_benefit_nominal),
+      value_annual: readNumber(cc.congestion_benefit_annual),
       detail: [],
     },
     {
       taxonomy_id: 'delivered_energy_benefit',
-      value_pv: orZero(cc.delivered_benefit_pv),
-      value_nominal: orZero(cc.delivered_benefit_nominal),
-      value_annual: orNull(cc.delivered_benefit_annual),
+      value_pv: readNumber(cc.delivered_benefit_pv),
+      value_nominal: readNumber(cc.delivered_benefit_nominal),
+      value_annual: readNumber(cc.delivered_benefit_annual),
       detail: [],
     },
     {
       taxonomy_id: 'capacity_value_benefit',
-      value_pv: orZero(cc.capacity_value_pv),
-      value_nominal: orZero(cc.capacity_value_nominal),
-      value_annual: orNull(cc.capacity_value_annual),
+      value_pv: readNumber(cc.capacity_value_pv),
+      value_nominal: readNumber(cc.capacity_value_nominal),
+      value_annual: readNumber(cc.capacity_value_annual),
       detail: [],
     },
     {
       taxonomy_id: 'capital_recovery',
-      value_pv: orZero(capRec.capital_recovery_pv),
-      value_nominal: orZero(capRec.capital_recovery_real),
-      value_annual: orNull(capRec.annual_revenue),
+      value_pv: readNumber(capRec.capital_recovery_pv),
+      value_nominal: readNumber(capRec.capital_recovery_real),
+      value_annual: readNumber(capRec.annual_revenue),
       detail: [],
     },
     {
       taxonomy_id: 'avoided_emissions_benefit',
-      value_pv: orZero(avoided.avoided_emissions_pv),
-      value_nominal: orZero(avoided.avoided_emissions_nominal),
+      value_pv: readNumber(avoided.avoided_emissions_pv),
+      value_nominal: readNumber(avoided.avoided_emissions_nominal),
       detail: [],
     },
   ];

@@ -15,12 +15,14 @@ import {
 import { TaxonomyCard } from '@/components/results/taxonomy-card';
 import {
   cardValues,
+  itemPresentValue,
   positiveItems,
   readTaxonomyItems,
   resolveResultById,
   type TaxonomyItemView,
 } from '@/components/results/taxonomy-view';
 import { formatCurrency, formatNumber } from '@/lib/format';
+import { excludesNote } from '@/lib/results-utils';
 import { getValueAtPath } from '@/lib/path';
 import { waccValueSum } from '@/lib/perspective-values';
 import { cn } from '@/lib/utils';
@@ -96,7 +98,7 @@ const BENEFIT_BAR = '#059669';
 export interface CategoryAmount {
   key: string;
   label: string;
-  value: number;
+  value: number | null;
 }
 
 interface WaterfallBar {
@@ -130,7 +132,7 @@ function readNumber(results: Record<string, unknown>, path: string): number | nu
 }
 
 function formatNetBenefit(value: number | null): string {
-  if (value == null) return 'N/A';
+  if (value == null) return 'Not available';
   const sign = value > 0 ? '+' : value < 0 ? '\u2212' : '';
   const abs = Math.abs(value);
   if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
@@ -146,9 +148,8 @@ function formatAxisCurrency(value: number): string {
 }
 
 function formatTooltipCurrency(value: unknown): string {
-  const numeric = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(numeric)) return '';
-  return formatCurrency(numeric, 0);
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'Not available';
+  return formatCurrency(value, 0);
 }
 
 function formatCompactCurrency(value: number): string {
@@ -170,6 +171,10 @@ function netClass(value: number | null): string {
   return value >= 0 ? 'text-green-600' : 'text-red-600';
 }
 
+function magnitude(value: number | null): number {
+  return value === null ? -1 : Math.abs(value);
+}
+
 function loadCategories(
   results: Record<string, unknown>,
   items: PerspectiveCategoryItem[],
@@ -178,14 +183,21 @@ function loadCategories(
     .map((item) => ({
       key: item.key,
       label: item.label,
-      value:
-        (item.waccIds ? waccValueSum(results, item.waccIds) : readNumber(results, item.path)) ?? 0,
+      value: item.waccIds ? waccValueSum(results, item.waccIds) : readNumber(results, item.path),
     }))
-    .sort((left, right) => Math.abs(right.value) - Math.abs(left.value));
+    .sort((left, right) => magnitude(right.value) - magnitude(left.value));
 }
 
 function sortByMagnitude(items: CategoryAmount[]): CategoryAmount[] {
-  return [...items].sort((left, right) => Math.abs(right.value) - Math.abs(left.value));
+  return [...items].sort((left, right) => magnitude(right.value) - magnitude(left.value));
+}
+
+function measuredCategories(
+  items: CategoryAmount[],
+): Array<CategoryAmount & { value: number }> {
+  return sortByMagnitude(items).filter(
+    (item): item is CategoryAmount & { value: number } => item.value !== null,
+  );
 }
 
 function waterfallTypeLabel(type: WaterfallBar['type']): string {
@@ -215,7 +227,7 @@ function buildWaterfallBars(
   const bars: WaterfallBar[] = [];
   let cursor = 0;
 
-  for (const benefit of sortByMagnitude(benefits)) {
+  for (const benefit of measuredCategories(benefits)) {
     const start = cursor;
     const end = cursor + benefit.value;
     bars.push({
@@ -239,7 +251,7 @@ function buildWaterfallBars(
     type: 'subtotal',
   });
 
-  for (const cost of sortByMagnitude(costs)) {
+  for (const cost of measuredCategories(costs)) {
     const delta = -Math.abs(cost.value);
     const start = cursor;
     const end = cursor + delta;
@@ -546,7 +558,18 @@ function itemsForCategory(
 }
 
 function sumValues(rows: CategoryAmount[]): number {
-  return rows.reduce((total, row) => total + row.value, 0);
+  return rows.reduce((total, row) => (row.value === null ? total : total + row.value), 0);
+}
+
+function omittedIds(results: Record<string, unknown>, bcrPath: string): string[] {
+  const key = bcrPath.slice(bcrPath.lastIndexOf('.') + 1);
+  const bcr = results.bcr;
+  if (!bcr || typeof bcr !== 'object' || Array.isArray(bcr)) return [];
+  const omitted = (bcr as Record<string, unknown>).omitted;
+  if (!omitted || typeof omitted !== 'object' || Array.isArray(omitted)) return [];
+  const ids = (omitted as Record<string, unknown>)[key];
+  if (!Array.isArray(ids)) return [];
+  return ids.filter((id): id is string => typeof id === 'string' && id.length > 0);
 }
 
 function joinLabels(labels: string[]): string {
@@ -588,9 +611,13 @@ function CategoryAccordions({
         const excludeKey = `${side}:${row.key}`;
         const isOpen = open.has(openKey);
         const isExcluded = excluded.has(excludeKey);
-        const share = grandTotal !== 0 ? (row.value / grandTotal) * 100 : 0;
+        const share =
+          row.value === null ? null : grandTotal !== 0 ? (row.value / grandTotal) * 100 : 0;
         const matched = itemsForCategory(taxonomyItems, sides, side, row.key);
-        const cards = positiveItems(matched, resultById, true);
+        const cards = [
+          ...positiveItems(matched, resultById, true),
+          ...matched.filter((item) => itemPresentValue(resultById, item.id) === null),
+        ];
         return (
           <div
             key={openKey}
@@ -634,7 +661,7 @@ function CategoryAccordions({
                   {formatCurrency(row.value, 0)}
                 </span>
                 <span className="w-14 shrink-0 text-right text-xs tabular-nums text-slate-500">
-                  {formatNumber(share, 1)}%
+                  {share === null ? '' : `${formatNumber(share, 1)}%`}
                 </span>
               </button>
             </div>
@@ -652,7 +679,8 @@ function CategoryAccordions({
                         pvValue={values.pvValue}
                         detailRows={values.detailRows}
                         colorIndex={index}
-                        parentTotal={row.value}
+                        parentTotal={row.value === null ? undefined : row.value}
+                        title={values.missingHover}
                       />
                     );
                   })
@@ -684,11 +712,7 @@ export function ResultsOverview({
   const sideMap = sideById(taxonomy);
 
   function hasLineItems(side: LedgerSide, key: string): boolean {
-    return positiveItems(
-      itemsForCategory(taxonomyItems, sideMap, side, key),
-      resultById,
-      true,
-    ).length > 0;
+    return itemsForCategory(taxonomyItems, sideMap, side, key).length > 0;
   }
 
   const visibleCosts = costs.filter((row) => hasLineItems('cost', row.key));
@@ -728,6 +752,8 @@ export function ResultsOverview({
   const exclusionNote = hasExclusions
     ? `Excluding ${joinLabels(excludedLabels)}.`
     : null;
+  const omitted = omittedIds(results, definition.bcrPath);
+  const omittedNote = omitted.length > 0 ? excludesNote(omitted) : null;
 
   const waterfallCosts = costs.filter((row) => !excluded.has(`cost:${row.key}`));
   const waterfallBenefits = benefits.filter(
@@ -776,6 +802,11 @@ export function ResultsOverview({
             {exclusionNote ? (
               <p className="max-w-md flex-1 text-sm italic text-slate-600">
                 {exclusionNote}
+              </p>
+            ) : null}
+            {omittedNote ? (
+              <p className="max-w-md flex-1 text-sm italic text-slate-600">
+                {omittedNote}
               </p>
             ) : null}
           </div>

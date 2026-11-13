@@ -27,7 +27,11 @@ function figureDecimals(figure: StripFigure): number {
 }
 
 function formatFigure(value: number | null, figure: StripFigure): string {
-  if (value === null) return '—';
+  if (value === null) {
+    if (figure.format === 'currency') return formatCurrency(value, 0);
+    if (figure.format === 'ratio') return formatNumber(value, 3);
+    return formatNumber(value, figureDecimals(figure));
+  }
   const unit = figureUnit(figure);
   switch (figure.format) {
     case 'currency':

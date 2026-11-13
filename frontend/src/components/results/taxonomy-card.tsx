@@ -4,7 +4,7 @@ import {
   Card,
   CardContent,
 } from '@/components/ui/card';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatResultCurrency } from '@/lib/format';
 import { COMPOSITION_COLORS } from '@/lib/results-utils';
 import { cn } from '@/lib/utils';
 
@@ -18,10 +18,11 @@ export interface TaxonomyCardProps {
   label: string;
   annualValue?: number;
   nominalValue?: number;
-  pvValue?: number;
+  pvValue?: number | null;
   detailRows?: Array<TaxonomyDetailRow>;
   colorIndex?: number;
   parentTotal?: number;
+  title?: string;
 }
 
 function currencyClass(value: number): string | undefined {
@@ -45,6 +46,7 @@ export function TaxonomyCard({
   detailRows,
   colorIndex = 0,
   parentTotal,
+  title,
 }: TaxonomyCardProps): ReactElement {
   const [expanded, setExpanded] = useState(false);
   const rows = detailRows ?? [];
@@ -100,7 +102,11 @@ export function TaxonomyCard({
               <div className={cn('text-lg font-bold tabular-nums', currencyClass(pvValue))}>
                 {formatCurrency(pvValue, 0)}
               </div>
-            ) : null}
+            ) : (
+              <div className="text-lg font-bold tabular-nums" title={title}>
+                {formatResultCurrency(null)}
+              </div>
+            )}
             {expandable ? (
               <ChevronRight
                 className={cn(

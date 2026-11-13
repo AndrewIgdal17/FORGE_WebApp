@@ -50,14 +50,15 @@ function finiteNumber(value: unknown): number | null {
   return null;
 }
 
-function computeCustomMetric(results: Record<string, unknown>, key: string): number {
+function computeCustomMetric(results: Record<string, unknown>, key: string): number | null {
   const bcr = results.bcr;
   const record =
     bcr && typeof bcr === 'object' && !Array.isArray(bcr)
       ? (bcr as Record<string, unknown>)
       : {};
-  const benefits = finiteNumber(record.total_benefits_pv) ?? 0;
-  const costs = finiteNumber(record.total_costs_pv) ?? 0;
+  const benefits = finiteNumber(record.total_benefits_pv);
+  const costs = finiteNumber(record.total_costs_pv);
+  if (benefits === null || costs === null) return null;
   if (key === 'custom_bcr') return costs > 0 ? benefits / costs : 0;
   return benefits - costs;
 }
@@ -67,9 +68,7 @@ function readMetricValue(scenario: Scenario, metric: ComparisonMetric): unknown 
   if (metric.key === 'custom_bcr' || metric.key === 'custom_nb') {
     return computeCustomMetric(scenario.results, metric.key);
   }
-  const raw = getValueAtPath(scenario.results, metric.path);
-  if ((raw === undefined || raw === null) && metric.zeroIfMissing) return 0;
-  return raw;
+  return getValueAtPath(scenario.results, metric.path);
 }
 
 function sortMetricKeys(keys: string[]): string[] {

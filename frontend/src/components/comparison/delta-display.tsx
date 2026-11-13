@@ -22,7 +22,7 @@ export function formatComparisonValue(
   value: unknown,
   format: DeltaDisplayProps['format'],
 ): string {
-  if (value === undefined || value === null) return 'N/A';
+  if (value === undefined || value === null) return 'Not available';
   if (format === 'text') return value === '' ? '—' : String(value);
   const num = Number(value);
   if (Number.isNaN(num)) return String(value);

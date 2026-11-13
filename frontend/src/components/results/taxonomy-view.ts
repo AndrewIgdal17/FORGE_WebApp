@@ -4,6 +4,7 @@ import {
   CATEGORY_LABELS,
   buildResultById,
   deriveTaxonomyResults,
+  readNumber,
 } from '@/lib/results-utils';
 
 export interface TaxonomyItemView {
@@ -17,8 +18,28 @@ export interface TaxonomyItemView {
 export interface TaxonomyCardValues {
   annualValue?: number;
   nominalValue?: number;
-  pvValue: number;
+  pvValue: number | null;
   detailRows: TaxonomyDetailRow[];
+  missingHover: string;
+}
+
+const MISSING_INPUT_LABELS: Record<string, string> = {
+  congestion_spread_per_mwh: 'Congestion spread (route)',
+  hours_receiving_more_congested: 'Hours receiving end is more congested (route)',
+  hours_sending_more_congested: 'Hours sending end is more congested (route)',
+  receiving_energy_value_per_mwh: 'Receiving-end energy value (route)',
+};
+
+export function missingInputsHover(paths: unknown): string {
+  if (!Array.isArray(paths)) return '';
+  const lines: string[] = [];
+  for (const path of paths) {
+    if (typeof path !== 'string' || path.length === 0) continue;
+    const segment = path.split('.').pop() ?? path;
+    const label = MISSING_INPUT_LABELS[segment] ?? path;
+    lines.push(`${label}: not measured`);
+  }
+  return lines.join('\n');
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -33,12 +54,9 @@ function finiteNumber(value: unknown): number | undefined {
   return undefined;
 }
 
-/** Match `value_pv || 0`: missing, zero, and NaN become 0. */
-function presentValue(row: Record<string, unknown> | null): number {
-  if (!row) return 0;
-  const value = row.value_pv;
-  if (typeof value === 'number') return value || 0;
-  return 0;
+function presentValue(row: Record<string, unknown> | null): number | null {
+  if (!row) return null;
+  return readNumber(row.value_pv);
 }
 
 export function resolveResultById(
@@ -73,7 +91,7 @@ export function readTaxonomyItems(
 export function itemPresentValue(
   resultById: Record<string, unknown>,
   id: string,
-): number {
+): number | null {
   return presentValue(asRecord(resultById[id]));
 }
 
@@ -90,7 +108,10 @@ export function sumPresentValue(
   items: TaxonomyItemView[],
   resultById: Record<string, unknown>,
 ): number {
-  return items.reduce((sum, item) => sum + itemPresentValue(resultById, item.id), 0);
+  return items.reduce((sum, item) => {
+    const value = itemPresentValue(resultById, item.id);
+    return value === null ? sum : sum + value;
+  }, 0);
 }
 
 function detailLabel(record: Record<string, unknown>): string {
@@ -130,10 +151,11 @@ export function cardValues(
   const row = asRecord(resultById[id]);
   const annual = finiteNumber(row?.value_annual);
   return {
-    annualValue: annual ? annual : undefined,
+    annualValue: annual,
     nominalValue: finiteNumber(row?.value_nominal),
     pvValue: presentValue(row),
     detailRows: detailRows(row),
+    missingHover: missingInputsHover(row?.missing_inputs),
   };
 }
 
@@ -142,11 +164,14 @@ export function positiveItems(
   resultById: Record<string, unknown>,
   sortByValue: boolean,
 ): TaxonomyItemView[] {
-  const visible = items.filter((item) => itemPresentValue(resultById, item.id) > 0);
+  const visible = items.filter((item) => itemPresentValue(resultById, item.id) !== null);
   if (sortByValue) {
-    visible.sort(
-      (a, b) => itemPresentValue(resultById, b.id) - itemPresentValue(resultById, a.id),
-    );
+    visible.sort((a, b) => {
+      const left = itemPresentValue(resultById, a.id);
+      const right = itemPresentValue(resultById, b.id);
+      if (left === null || right === null) return 0;
+      return right - left;
+    });
   }
   return visible;
 }
@@ -156,12 +181,11 @@ export function compositionSegments(
   resultById: Record<string, unknown>,
   sortByValue: boolean,
 ): Array<{ label: string; value: number }> {
-  const segments = items
-    .map((item) => ({
-      label: item.label,
-      value: itemPresentValue(resultById, item.id),
-    }))
-    .filter((segment) => segment.value > 0);
+  const segments = items.flatMap((item) => {
+    const value = itemPresentValue(resultById, item.id);
+    if (value === null || value <= 0) return [];
+    return [{ label: item.label, value }];
+  });
   if (sortByValue) segments.sort((a, b) => b.value - a.value);
   return segments;
 }

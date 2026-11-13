@@ -151,6 +151,37 @@ const RESULTS_EXPORT_FIELDS: Array<{ key: string; path: string }> = [
   { key: 'net_benefit_ratepayer_pv', path: 'bcr.net_benefit_ratepayer_pv' },
 ];
 
+const OMITTED_KEY_BY_EXPORT: Record<string, string> = {
+  grand_total_cost_pv: 'total_costs_pv',
+  total_operational_pv: 'operational_costs_pv',
+  total_risk_pv: 'risk_costs_pv',
+  total_energy_emissions_pv: 'energy_emissions_costs_pv',
+  line_loss_pv: 'line_loss_benefit_pv',
+};
+
+function omittedKeyFor(exportKey: string): string | null {
+  if (exportKey in OMITTED_KEY_BY_EXPORT) return OMITTED_KEY_BY_EXPORT[exportKey] ?? null;
+  if (exportKey.startsWith('bcr_') || exportKey.startsWith('net_benefit_')) return exportKey;
+  return null;
+}
+
+function resultCell(value: unknown): string {
+  if (value == null) return 'not available';
+  return String(value);
+}
+
+function omittedCell(results: Record<string, unknown>, exportKey: string): string {
+  const omittedKey = omittedKeyFor(exportKey);
+  if (!omittedKey) return '';
+  const bcr = results.bcr;
+  if (!bcr || typeof bcr !== 'object' || Array.isArray(bcr)) return '';
+  const omitted = (bcr as Record<string, unknown>).omitted;
+  if (!omitted || typeof omitted !== 'object' || Array.isArray(omitted)) return '';
+  const ids = (omitted as Record<string, unknown>)[omittedKey];
+  if (!Array.isArray(ids)) return '';
+  return ids.filter((id): id is string => typeof id === 'string').join(';');
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -605,12 +636,16 @@ export function exportAsCsv(
 
   if (scenario.results) {
     csv += '[RESULTS]\n';
-    csv += 'key,value\n';
+    csv += 'key,value,omitted\n';
     for (const field of RESULTS_EXPORT_FIELDS) {
       const value = getValueAtPath(scenario.results, field.path);
-      if (value != null) {
-        csv += csvEscape(field.key) + ',' + csvEscape(String(value)) + '\n';
-      }
+      csv +=
+        csvEscape(field.key) +
+        ',' +
+        csvEscape(resultCell(value)) +
+        ',' +
+        csvEscape(omittedCell(scenario.results, field.key)) +
+        '\n';
     }
   }
 

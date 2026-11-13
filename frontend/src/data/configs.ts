@@ -10,7 +10,6 @@ export interface ComparisonMetric {
   label: string;
   path: string;
   format: ComparisonMetricFormat;
-  zeroIfMissing?: boolean;
   description?: string;
 }
 
@@ -37,9 +36,27 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         format: 'text',
       },
       {
-        key: 'baseline_price_mwh',
-        label: 'Value of load ($/MWh)',
-        path: 'technical_parameters.value_of_load_per_mwh',
+        key: 'congestion_spread_per_mwh',
+        label: 'Congestion spread ($/MWh)',
+        path: 'technical_parameters.market_measurements.congestion_spread_per_mwh',
+        format: 'number2',
+      },
+      {
+        key: 'hours_receiving_more_congested',
+        label: 'Hours receiving end more congested',
+        path: 'technical_parameters.market_measurements.hours_receiving_more_congested',
+        format: 'number',
+      },
+      {
+        key: 'hours_sending_more_congested',
+        label: 'Hours sending end more congested',
+        path: 'technical_parameters.market_measurements.hours_sending_more_congested',
+        format: 'number',
+      },
+      {
+        key: 'receiving_energy_value_per_mwh',
+        label: 'Receiving-end energy value ($/MWh)',
+        path: 'technical_parameters.market_measurements.receiving_energy_value_per_mwh',
         format: 'number2',
       },
       {
@@ -157,7 +174,6 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         label: 'Insurance Cost',
         path: 'costs.insurance.pv_total',
         format: 'currency',
-        zeroIfMissing: true,
       },
       {
         key: 'acquisition_pv',
@@ -211,7 +227,6 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         label: 'Avoided Emissions Benefits',
         path: 'bcr.benefits_avoided_emissions_pv',
         format: 'currency',
-        zeroIfMissing: true,
       },
       {
         key: 'congestion_pv',
@@ -288,28 +303,24 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         label: 'Outage Cost',
         path: 'costs.outage.pv_cost',
         format: 'currency',
-        zeroIfMissing: true,
       },
       {
         key: 'outage_loadshed_per_event',
         label: 'Outage Load-Shed Cost/Event',
         path: 'costs.outage.cost_loadshed',
         format: 'currency',
-        zeroIfMissing: true,
       },
       {
         key: 'outage_redispatch_per_event',
         label: 'Outage Redispatch Cost/Event',
         path: 'costs.outage.cost_redispatch',
         format: 'currency',
-        zeroIfMissing: true,
       },
       {
         key: 'outage_rho',
         label: 'Load-Shed Fraction (\u03C1)',
         path: 'costs.outage.rho',
         format: 'number2',
-        zeroIfMissing: true,
       },
       {
         key: 'total_risk_pv',
@@ -322,7 +333,6 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         label: 'Wildfire Cost',
         path: 'costs.wildfire.pv_cost',
         format: 'currency',
-        zeroIfMissing: true,
       },
     ],
   },
@@ -334,7 +344,6 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         label: 'Base Delay Cost',
         path: 'costs.delay.total_pv',
         format: 'currency',
-        zeroIfMissing: true,
       },
     ],
   },
@@ -346,14 +355,12 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         label: 'Line Loss Compensation Emissions',
         path: 'costs.emissions.total_pv',
         format: 'currency',
-        zeroIfMissing: true,
       },
       {
         key: 'line_loss_pv',
         label: 'Line Loss Cost',
         path: 'costs.line_loss.total_pv',
         format: 'currency',
-        zeroIfMissing: true,
       },
       {
         key: 'total_energy_emissions_pv',

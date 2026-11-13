@@ -7,7 +7,7 @@ import { scaleLinear } from '@visx/scale';
 import { AreaClosed, LinePath } from '@visx/shape';
 import { useTooltip } from '@visx/tooltip';
 import type { PerspectiveKey } from '@/components/results/perspective-toggle';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatNumber } from '@/lib/format';
 
 export interface TimelineChartProps {
   results: Record<string, unknown>;
@@ -226,7 +226,9 @@ function nearestPoint(
 }
 
 function tooltipValue(point: TimelinePoint, mode: ChartMode): string {
-  if (point.npv == null) return 'N/A';
+  if (point.npv == null) {
+    return mode === 'bcr' ? formatNumber(point.npv, 3) : formatCurrency(point.npv, 0);
+  }
   if (mode === 'bcr') return `BCR: ${point.npv.toFixed(3)}`;
   return formatCurrency(point.npv, 0);
 }

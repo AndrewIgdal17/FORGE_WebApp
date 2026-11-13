@@ -1,8 +1,13 @@
+export function formatResultCurrency(value: number | null): string {
+  if (value === null) return 'Not available';
+  return formatCurrency(value, 0);
+}
+
 export function formatNumber(
   value: number | null | undefined,
   decimals = 0,
 ): string {
-  if (value === null || value === undefined) return 'N/A';
+  if (value === null || value === undefined) return 'Not available';
   const num = Number(value);
   if (Number.isNaN(num)) return String(value);
   return num.toLocaleString('en-US', {
@@ -15,7 +20,7 @@ export function formatCurrency(
   value: number | null | undefined,
   decimals = 0,
 ): string {
-  if (value === null || value === undefined) return 'N/A';
+  if (value === null || value === undefined) return 'Not available';
   const num = Number(value);
   if (Number.isNaN(num)) return String(value);
   const sign = num < 0 ? '-' : '';
@@ -34,6 +39,7 @@ export function formatSignedCurrencyValue(
   value: number | null | undefined,
   decimals = 0,
 ): string {
+  if (value === null || value === undefined) return 'Not available';
   const num = Number(value);
   if (Number.isNaN(num)) return String(value);
   const absNum = Math.abs(num);
@@ -52,6 +58,7 @@ export function formatSignedNumberValue(
   value: number | null | undefined,
   decimals = 0,
 ): string {
+  if (value === null || value === undefined) return 'Not available';
   const num = Number(value);
   if (Number.isNaN(num)) return String(value);
   const absStr = Math.abs(num).toLocaleString('en-US', {
