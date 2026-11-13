@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import type { MultiLineString } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { DrawingToolbar } from '@/components/map/DrawingToolbar';
+import { applyDrawnRouteReset } from '@/components/map/drawn-route-reset';
 import {
   finishedRouteStep,
   type HeldRouteSegments,
@@ -191,35 +192,7 @@ export function MapPanel({
     onRouteChangeRef.current?.(null, null);
     reset();
     if (!drawingEnabled) setMode('select');
-    const zeroChanges: Record<string, unknown> = {};
-    const terrainCategories = [
-      'forested',
-      'wetland',
-      'scrubbed_flat',
-      'urban',
-      'farmland',
-      'desert_barren',
-      'mountain',
-      'rolling_hills',
-    ];
-    for (const cat of terrainCategories) {
-      zeroChanges[`02_project_physical_details.terrain.terrain_miles.${cat}`] = 0;
-    }
-    for (let zone = 1; zone <= 15; zone += 1) {
-      zeroChanges[`11_project_row_details.right_of_way.zone_${zone}.miles`] = 0;
-    }
-    const terminalPaths = [
-      '01_project_technical_details.terminals.sending.gea',
-      '01_project_technical_details.terminals.sending.egrid_subregion',
-      '01_project_technical_details.terminals.sending.state',
-      '01_project_technical_details.terminals.receiving.gea',
-      '01_project_technical_details.terminals.receiving.egrid_subregion',
-      '01_project_technical_details.terminals.receiving.state',
-    ];
-    for (const path of terminalPaths) {
-      zeroChanges[path] = null;
-    }
-    useFormStore.getState().applyChanges(zeroChanges);
+    applyDrawnRouteReset();
   }
 
   return (
