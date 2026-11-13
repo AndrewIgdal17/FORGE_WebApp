@@ -78,6 +78,14 @@ def test_acceptance_measured_west_to_nyc():
         HOURS_RECEIVING: 100,
         HOURS_SENDING: 80,
         ENERGY: 40.0,
+        "01_project_technical_details.project.capacity_mw": 1792,
+        "17_congestion_reductions.greenfield_congestion_reductions.constraints.flow_factor": 1.0,
+        "01_project_technical_details.terminals.sending.gea": "MISO_North",
+        "01_project_technical_details.terminals.sending.egrid_subregion": "MROW",
+        "01_project_technical_details.terminals.sending.state": "MN",
+        "01_project_technical_details.terminals.receiving.gea": "MISO_Central",
+        "01_project_technical_details.terminals.receiving.egrid_subregion": "SRMW",
+        "01_project_technical_details.terminals.receiving.state": "MO",
         "02_project_physical_details.terrain.protected_area_acres.forested": 0,
         "02_project_physical_details.terrain.protected_area_acres.scrubbed_flat": 0,
         "02_project_physical_details.terrain.protected_area_acres.desert_barren": 0,
@@ -91,11 +99,9 @@ def test_acceptance_measured_west_to_nyc():
             node = node[part]
         node[parts[-1]] = value
     results = forge.run_calculation(template)
-    benefits = {
-        entry["taxonomy_id"]: entry["value_pv"] for entry in results["taxonomy_results"]
-    }
-    assert benefits["congestion_benefit"] is not None
-    assert benefits["avoided_emissions_benefit"] is not None
+    by_id = {entry["taxonomy_id"]: entry for entry in results["taxonomy_results"]}
+    assert by_id["congestion_benefit"]["available"] is True
+    assert by_id["avoided_emissions_benefit"]["available"] is True
 
 
 def test_acceptance_reversed_route_swaps_hours():
