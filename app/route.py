@@ -11,6 +11,10 @@ enters a lower-48 state or the District of Columbia with no inventory load
 is unavailable, the same as a missing inventory table. A missing
 protected-area table is unavailable with detail ``Protected areas are not
 loaded.`` Alaska, Hawaii, and the territories are not the inventory check.
+Congestion spread and receiving-end energy value come from the price
+archive. A missing zone polygon table is unavailable with detail ``Price
+zones are not loaded.`` A missing or empty price archive is unavailable
+with detail ``Price archive is not loaded.``
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ from pydantic import BaseModel, Field, field_validator
 from . import db as db_module
 from .corridor import MissingLayerTable, fetch_slice_overlaps_m2
 from .layer_releases import layer_releases
+from .market_changes import ArchiveIncomplete, market_changes
 from .models import sanitize_for_json
 from .region_changes import region_changes
 from .states import FIPS_TO_STATE, fips_to_abbrev
@@ -135,6 +140,9 @@ ORDER BY part_id, i
 
 # First vertex is the sending end. Last vertex is the receiving end.
 # ST_Covers counts a point on a polygon boundary as inside that polygon.
+# The partition is the priced polygon. The footprint is used only when that
+# partition subquery returns no row. Price-zone columns come from the join
+# on polygon_rto_iso, polygon_loc_type, and polygon_loc_abbrev.
 _ENDPOINT_SQL = """
 WITH route AS (
   SELECT ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326), 5070) AS geom
@@ -144,6 +152,70 @@ ends AS (
     ST_StartPoint(ST_GeometryN(geom, 1)) AS send_pt,
     ST_EndPoint(ST_GeometryN(geom, ST_NumGeometries(geom))) AS recv_pt
   FROM route
+),
+send_part AS (
+  SELECT z.rto_iso, z.loc_type, z.loc_abbrev
+  FROM ref.rto_subzones z, ends
+  WHERE ST_Covers(z.geom, send_pt)
+    AND (
+      (z.rto_iso = 'CAISO' AND z.loc_type = 'REG')
+      OR (z.rto_iso = 'ISONE' AND z.loc_type = 'REG')
+      OR (z.rto_iso = 'NYISO' AND z.loc_type = 'REG')
+      OR (z.rto_iso = 'MISO' AND z.loc_type = 'REG' AND z.loc_abbrev LIKE 'LRZ%')
+      OR (z.rto_iso = 'PJM' AND z.loc_type = 'ZON')
+    )
+  ORDER BY z.loc_abbrev
+  LIMIT 1
+),
+recv_part AS (
+  SELECT z.rto_iso, z.loc_type, z.loc_abbrev
+  FROM ref.rto_subzones z, ends
+  WHERE ST_Covers(z.geom, recv_pt)
+    AND (
+      (z.rto_iso = 'CAISO' AND z.loc_type = 'REG')
+      OR (z.rto_iso = 'ISONE' AND z.loc_type = 'REG')
+      OR (z.rto_iso = 'NYISO' AND z.loc_type = 'REG')
+      OR (z.rto_iso = 'MISO' AND z.loc_type = 'REG' AND z.loc_abbrev LIKE 'LRZ%')
+      OR (z.rto_iso = 'PJM' AND z.loc_type = 'ZON')
+    )
+  ORDER BY z.loc_abbrev
+  LIMIT 1
+),
+send_foot AS (
+  SELECT b.iso_code
+  FROM ref.iso_rto_boundaries b, ends
+  WHERE ST_Covers(b.geom, send_pt)
+    AND NOT EXISTS (SELECT 1 FROM send_part)
+  ORDER BY b.iso_code
+  LIMIT 1
+),
+recv_foot AS (
+  SELECT b.iso_code
+  FROM ref.iso_rto_boundaries b, ends
+  WHERE ST_Covers(b.geom, recv_pt)
+    AND NOT EXISTS (SELECT 1 FROM recv_part)
+  ORDER BY b.iso_code
+  LIMIT 1
+),
+send_zone AS (
+  SELECT pz.zone,
+         (pz.price_location IS NOT NULL) AS priced
+  FROM ref.price_zone pz
+  JOIN send_part sp
+    ON pz.polygon_rto_iso = sp.rto_iso
+   AND pz.polygon_loc_type = sp.loc_type
+   AND pz.polygon_loc_abbrev = sp.loc_abbrev
+  LIMIT 1
+),
+recv_zone AS (
+  SELECT pz.zone,
+         (pz.price_location IS NOT NULL) AS priced
+  FROM ref.price_zone pz
+  JOIN recv_part sp
+    ON pz.polygon_rto_iso = sp.rto_iso
+   AND pz.polygon_loc_type = sp.loc_type
+   AND pz.polygon_loc_abbrev = sp.loc_abbrev
+  LIMIT 1
 )
 SELECT
   (SELECT e.subregion FROM ref.subregions_egrid e, ends
@@ -157,8 +229,55 @@ SELECT
   (SELECT c.statefp FROM ref.counties_tiger c, ends
     WHERE ST_Covers(c.geom, send_pt) LIMIT 1) AS sending_statefp,
   (SELECT c.statefp FROM ref.counties_tiger c, ends
-    WHERE ST_Covers(c.geom, recv_pt) LIMIT 1) AS receiving_statefp
+    WHERE ST_Covers(c.geom, recv_pt) LIMIT 1) AS receiving_statefp,
+  COALESCE(
+    (SELECT rto_iso FROM send_part),
+    (SELECT iso_code FROM send_foot)
+  ) AS sending_iso,
+  (SELECT zone FROM send_zone) AS sending_price_zone,
+  (SELECT priced FROM send_zone) AS sending_priced,
+  COALESCE(
+    (SELECT rto_iso FROM recv_part),
+    (SELECT iso_code FROM recv_foot)
+  ) AS receiving_iso,
+  (SELECT zone FROM recv_zone) AS receiving_price_zone,
+  (SELECT priced FROM recv_zone) AS receiving_priced
 """
+
+_PRICE_RELEASE_SQL = """
+SELECT label, polygon_source
+FROM ref.price_archive_release
+LIMIT 1
+"""
+
+_MARKET_PAIR_SQL = """
+SELECT spread_per_mwh AS spread, hours_fwd, hours_rev
+FROM ref.market_pair
+WHERE iso = $1
+  AND zone_snd = $2
+  AND zone_rcv = $3
+"""
+
+_ZONE_ENERGY_SQL = """
+SELECT energy_value_per_mwh
+FROM ref.zone_energy_value
+WHERE iso = $1
+  AND zone = $2
+"""
+
+_PRICE_ZONES_UNAVAILABLE = "Price zones are not loaded."
+_PRICE_ARCHIVE_UNAVAILABLE = "Price archive is not loaded."
+
+# EIA footprints use ISO-NE. The archive and the zone partition use ISONE.
+FOOTPRINT_ISO = {
+    "ISO-NE": "ISONE",
+    "CAISO": "CAISO",
+    "ERCOT": "ERCOT",
+    "MISO": "MISO",
+    "NYISO": "NYISO",
+    "PJM": "PJM",
+    "SPP": "SPP",
+}
 
 # Counties the route crosses. statefp is the TIGER code, not the USPS abbreviation.
 _ROUTE_STATEFP_SQL = """
@@ -241,6 +360,43 @@ def _text_cell(row: Any | None, column: str) -> str | None:
     return text or None
 
 
+def _footprint_iso(code: str | None) -> str | None:
+    """Map an EIA footprint code onto the archive code. Unknown codes are null."""
+    if code is None:
+        return None
+    return FOOTPRINT_ISO.get(code)
+
+
+def _flag(row: Any | None, column: str) -> bool:
+    if row is None:
+        return False
+    return bool(row[column])
+
+
+def _missing_price_response(exc: BaseException) -> JSONResponse | None:
+    """503 for a missing zone polygon or a missing archive table."""
+    text = " ".join(
+        str(part)
+        for part in (
+            getattr(exc, "schema_name", None),
+            getattr(exc, "table_name", None),
+            exc,
+        )
+        if part
+    )
+    if "rto_subzones" in text or "iso_rto_boundaries" in text:
+        return _unavailable(_PRICE_ZONES_UNAVAILABLE)
+    archive_tables = (
+        "price_archive_release",
+        "market_pair",
+        "zone_energy_value",
+        "price_zone",
+    )
+    if any(name in text for name in archive_tables):
+        return _unavailable(_PRICE_ARCHIVE_UNAVAILABLE)
+    return None
+
+
 def endpoint_context(row: Any | None) -> dict[str, str | None]:
     """Region codes at each end. A polygon miss stays None."""
     return {
@@ -250,6 +406,10 @@ def endpoint_context(row: Any | None) -> dict[str, str | None]:
         "receiving_gea": _text_cell(row, "receiving_gea"),
         "sending_state": fips_to_abbrev(_text_cell(row, "sending_statefp")),
         "receiving_state": fips_to_abbrev(_text_cell(row, "receiving_statefp")),
+        "sending_iso": _footprint_iso(_text_cell(row, "sending_iso")),
+        "sending_price_zone": _text_cell(row, "sending_price_zone"),
+        "receiving_iso": _footprint_iso(_text_cell(row, "receiving_iso")),
+        "receiving_price_zone": _text_cell(row, "receiving_price_zone"),
     }
 
 
@@ -573,6 +733,10 @@ async def run_route_analysis(
 
     endpoint_row = None
     label_rows: list[Any] = []
+    release: Any = None
+    pair_row: Any = None
+    energy_row: Any = None
+    endpoints: dict[str, str | None] = {}
     try:
         async with pool.acquire() as conn:
             state_rows = await conn.fetch(_ROUTE_STATEFP_SQL, geojson)
@@ -615,6 +779,30 @@ async def run_route_analysis(
                     if missing.layer == "protected_areas"
                     else _NWI_UNAVAILABLE
                 )
+            endpoints = endpoint_context(endpoint_row)
+            release = await conn.fetchrow(_PRICE_RELEASE_SQL)
+            if release is None:
+                return _unavailable(_PRICE_ARCHIVE_UNAVAILABLE)
+            pair_row = await conn.fetchrow(
+                _MARKET_PAIR_SQL,
+                endpoints["sending_iso"],
+                endpoints["sending_price_zone"],
+                endpoints["receiving_price_zone"],
+            )
+            energy_row = await conn.fetchrow(
+                _ZONE_ENERGY_SQL,
+                endpoints["receiving_iso"],
+                endpoints["receiving_price_zone"],
+            )
+    except asyncpg.UndefinedTableError as exc:
+        response = _missing_price_response(exc)
+        if response is not None:
+            return response
+        logger.exception("route analyze database error")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Route analysis failed."},
+        )
     except asyncpg.PostgresError as exc:
         sqlstate = getattr(exc, "sqlstate", "") or ""
         message = str(exc).lower()
@@ -656,18 +844,38 @@ async def run_route_analysis(
         ROW_LAYER: zones,
         "habitat/padus": gap,
     }
-    endpoints = endpoint_context(endpoint_row)
-    changes: dict[str, float | str | None] = {
+    try:
+        measured_paths, market_status = market_changes(
+            {
+                "iso": endpoints["sending_iso"],
+                "zone": endpoints["sending_price_zone"],
+                "priced": _flag(endpoint_row, "sending_priced"),
+            },
+            {
+                "iso": endpoints["receiving_iso"],
+                "zone": endpoints["receiving_price_zone"],
+                "priced": _flag(endpoint_row, "receiving_priced"),
+            },
+            pair_row,
+            energy_row,
+        )
+    except ArchiveIncomplete:
+        return _unavailable(_PRICE_ARCHIVE_UNAVAILABLE)
+    changes: dict[str, float | int | str | None] = {
         **changes_for(intersections),
         **region_changes(endpoints),
+        **measured_paths,
     }
     body = {
         "total_miles": float(total_miles),
         "intersections": intersections,
         "changes": changes,
         "open_water_miles": result.open_water_miles,
+        "market_status": market_status,
         "layer_releases": layer_releases(
-            [row["release_label"] for row in label_rows]
+            [row["release_label"] for row in label_rows],
+            str(release["label"]),
+            str(release["polygon_source"]),
         ),
         **endpoints,
     }

@@ -4,6 +4,8 @@ from app.layer_releases import (
     BLM_ZONES_RELEASE,
     COUNTIES_RELEASE,
     LAND_COVER_RELEASE,
+    MARKET_PRICES,
+    PRICE_ZONES,
     PROTECTED_AREAS_RELEASE,
     SLOPE_RELEASE,
     layer_releases,
@@ -22,6 +24,13 @@ def test_constants_name_the_edition():
     assert COUNTIES_RELEASE == "Census TIGER/Line 2024 counties (ref.counties_tiger)"
     assert BLM_ZONES_RELEASE == (
         "BLM Per-Acre Linear Rent Schedule 2026–2035 (county zones from the 2022 Census of Agriculture)"
+    )
+    assert MARKET_PRICES == (
+        "Day-ahead energy, congestion, and loss, and hourly load, calendar 2025"
+    )
+    assert PRICE_ZONES == (
+        "EIA Atlas RTO Regions via the public ArcGIS replica "
+        "(item 0e6e5e784bc8458c81f2b05d70f5c3ae)"
     )
 
 
@@ -44,4 +53,6 @@ def test_layer_releases_object_uses_the_constants():
         "protected_areas": PROTECTED_AREAS_RELEASE,
         "counties": COUNTIES_RELEASE,
         "blm_zones": BLM_ZONES_RELEASE,
+        "market_prices": MARKET_PRICES,
+        "price_zones": PRICE_ZONES,
     }

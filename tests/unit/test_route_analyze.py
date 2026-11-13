@@ -225,6 +225,40 @@ def test_analyze_returns_503_when_rasterio_is_unavailable(monkeypatch):
     assert response.status_code == 503
 
 
+def _null_endpoint(**overrides: object) -> dict[str, object]:
+    """Endpoint row outside every market. New columns stay null."""
+    row: dict[str, object] = {
+        "sending_subregion": None,
+        "receiving_subregion": None,
+        "sending_gea": None,
+        "receiving_gea": None,
+        "sending_statefp": None,
+        "receiving_statefp": None,
+        "sending_iso": None,
+        "receiving_iso": None,
+        "sending_price_zone": None,
+        "receiving_price_zone": None,
+        "sending_priced": None,
+        "receiving_priced": None,
+    }
+    row.update(overrides)
+    return row
+
+
+def _fetchrow_for_analyze(
+    query: str, endpoint: dict[str, object]
+) -> dict[str, object] | None:
+    if "route_m" in query:
+        return {"route_m": 1000.0, "inside_m": 1000.0}
+    if "price_archive_release" in query:
+        from app.layer_releases import MARKET_PRICES, PRICE_ZONES
+
+        return {"label": MARKET_PRICES, "polygon_source": PRICE_ZONES}
+    if "ref.market_pair" in query or "ref.zone_energy_value" in query:
+        return None
+    return endpoint
+
+
 class _FakeNwiConn:
     """Route enters Texas. Only Oklahoma is recorded as loaded."""
 
@@ -233,17 +267,8 @@ class _FakeNwiConn:
 
     async def fetchrow(
         self, query: str, *args: object
-    ) -> dict[str, float] | dict[str, None]:
-        if "route_m" in query:
-            return {"route_m": 1000.0, "inside_m": 1000.0}
-        return {
-            "sending_subregion": None,
-            "receiving_subregion": None,
-            "sending_gea": None,
-            "receiving_gea": None,
-            "sending_statefp": None,
-            "receiving_statefp": None,
-        }
+    ) -> dict[str, object] | None:
+        return _fetchrow_for_analyze(query, _null_endpoint())
 
     async def fetch(self, query: str, *args: object) -> list[dict[str, str]]:
         if "release_label" in query:
@@ -333,6 +358,10 @@ ENDPOINT_KEYS = (
     "receiving_gea",
     "sending_state",
     "receiving_state",
+    "sending_iso",
+    "sending_price_zone",
+    "receiving_iso",
+    "receiving_price_zone",
 )
 
 
@@ -369,6 +398,10 @@ def test_endpoint_context_maps_fips_and_passes_nulls_through():
             "receiving_gea": None,
             "sending_statefp": "48",
             "receiving_statefp": "02",
+            "sending_iso": None,
+            "receiving_iso": None,
+            "sending_price_zone": None,
+            "receiving_price_zone": None,
         }
     ) == {
         "sending_subregion": "ERCT",
@@ -377,6 +410,10 @@ def test_endpoint_context_maps_fips_and_passes_nulls_through():
         "receiving_gea": None,
         "sending_state": "TX",
         "receiving_state": "AK",
+        "sending_iso": None,
+        "sending_price_zone": None,
+        "receiving_iso": None,
+        "receiving_price_zone": None,
     }
     assert endpoint_context(None) == {key: None for key in ENDPOINT_KEYS}
 
@@ -490,17 +527,8 @@ class _FakePadusConn:
 
     async def fetchrow(
         self, query: str, *args: object
-    ) -> dict[str, float] | dict[str, None]:
-        if "route_m" in query:
-            return {"route_m": 1000.0, "inside_m": 1000.0}
-        return {key: None for key in (
-            "sending_subregion",
-            "receiving_subregion",
-            "sending_gea",
-            "receiving_gea",
-            "sending_statefp",
-            "receiving_statefp",
-        )}
+    ) -> dict[str, object] | None:
+        return _fetchrow_for_analyze(query, _null_endpoint())
 
     async def fetch(self, query: str, *args: object) -> list[dict[str, object]]:
         if "release_label" in query:
@@ -578,16 +606,14 @@ def test_analyze_changes_include_sending_gea_from_transgrp(monkeypatch):
 
     class _TransgrpConn(_FakePadusConn):
         async def fetchrow(self, query: str, *args: object):
-            if "route_m" in query:
-                return {"route_m": 1000.0, "inside_m": 1000.0}
-            return {
-                "sending_subregion": "SPSO",
-                "receiving_subregion": None,
-                "sending_gea": "SPP_South",
-                "receiving_gea": None,
-                "sending_statefp": "48",
-                "receiving_statefp": None,
-            }
+            return _fetchrow_for_analyze(
+                query,
+                _null_endpoint(
+                    sending_subregion="SPSO",
+                    sending_gea="SPP_South",
+                    sending_statefp="48",
+                ),
+            )
 
     class _Acquire:
         async def __aenter__(self) -> _TransgrpConn:
@@ -625,9 +651,20 @@ def test_analyze_changes_include_sending_gea_from_transgrp(monkeypatch):
     }
     for path, value in expected_regions.items():
         assert body["changes"][path] == value
-    miles = set(body["changes"]) - set(expected_regions)
+    market_paths = {
+        "01_project_technical_details.market_measurements.congestion_spread_per_mwh",
+        "01_project_technical_details.market_measurements.hours_receiving_more_congested",
+        "01_project_technical_details.market_measurements.hours_sending_more_congested",
+        "01_project_technical_details.market_measurements.receiving_energy_value_per_mwh",
+    }
+    miles = set(body["changes"]) - set(expected_regions) - market_paths
     assert miles
     assert all(path.startswith(("02_", "11_")) for path in miles)
+    for path in market_paths:
+        assert body["changes"][path] is None
+    assert body["market_status"]["spread"]["status"] == "outside_markets"
+    assert body["sending_iso"] is None
+    assert body["receiving_price_zone"] is None
     assert "sending_subregion" not in body["changes"]
     assert "sending_gea" not in body["changes"]
     assert body["sending_gea"] == "SPP_South"

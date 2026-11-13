@@ -9,6 +9,11 @@ SLOPE_RELEASE = "USGS 3DEP 1-arc-second percent slope, CONUS COG built 2026-10-1
 PROTECTED_AREAS_RELEASE = "PAD-US 4.1 GAP 1-3 (DOI 10.5066/P96WBCHS)"
 COUNTIES_RELEASE = "Census TIGER/Line 2024 counties (ref.counties_tiger)"
 BLM_ZONES_RELEASE = "BLM Per-Acre Linear Rent Schedule 2026–2035 (county zones from the 2022 Census of Agriculture)"
+MARKET_PRICES = "Day-ahead energy, congestion, and loss, and hourly load, calendar 2025"
+PRICE_ZONES = (
+    "EIA Atlas RTO Regions via the public ArcGIS replica "
+    "(item 0e6e5e784bc8458c81f2b05d70f5c3ae)"
+)
 
 
 def wetland_release_label(labels: list[str]) -> str:
@@ -16,7 +21,11 @@ def wetland_release_label(labels: list[str]) -> str:
     return "; ".join(unique)
 
 
-def layer_releases(wetland_labels: list[str]) -> dict[str, str]:
+def layer_releases(
+    wetland_labels: list[str],
+    market_prices: str = MARKET_PRICES,
+    price_zones: str = PRICE_ZONES,
+) -> dict[str, str]:
     return {
         "land_cover": LAND_COVER_RELEASE,
         "slope": SLOPE_RELEASE,
@@ -24,4 +33,6 @@ def layer_releases(wetland_labels: list[str]) -> dict[str, str]:
         "protected_areas": PROTECTED_AREAS_RELEASE,
         "counties": COUNTIES_RELEASE,
         "blm_zones": BLM_ZONES_RELEASE,
+        "market_prices": market_prices,
+        "price_zones": price_zones,
     }
