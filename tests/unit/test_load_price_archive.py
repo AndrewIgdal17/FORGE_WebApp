@@ -497,3 +497,101 @@ def _sheet_target(archive: zipfile.ZipFile, ns: str, sheet_name: str) -> str:
         target = targets[sheet.attrib[f"{office}id"]]
         return target if target.startswith("xl/") else f"xl/{target}"
     raise AssertionError(sheet_name)
+
+
+def test_bare_sha_line_takes_name_from_list_item_above():
+    loader = _loader()
+    csv_hash = "d" * 64
+    zip_hash = "a" * 64
+    text = (
+        "## Files\n"
+        "\n"
+        "- `raw/series_2025.csv`\n"
+        "- bytes: 100\n"
+        "- SHA-256: " + csv_hash + "\n"
+        "\n"
+        "Files, bytes, and SHA-256:\n"
+        "\n"
+        "- `raw/month01.zip` — 10 bytes — `" + zip_hash + "`\n"
+    )
+    found = loader._hash_lines(text, ["month01.zip", "series_2025.csv"])
+    assert found == {"series_2025.csv": csv_hash, "month01.zip": zip_hash}
+
+
+def test_bare_sha_line_after_blank_line_names_nothing():
+    loader = _loader()
+    text = "- `raw/a.csv`\n\n- SHA-256: " + "e" * 64 + "\n"
+    assert loader._hash_lines(text, ["a.csv", "b.zip"]) == {}
+
+
+def test_single_file_bare_sha_list_item():
+    loader = _loader()
+    digest = "2" * 64
+    text = "- Download date: 2026-11-09\n- SHA-256: " + digest + "\n- Account: none\n"
+    assert loader._hash_lines(text, ["2025_smd_hourly.xlsx"]) == {
+        "2025_smd_hourly.xlsx": digest
+    }
+
+
+def test_bold_sha_line_takes_name_from_source_url_above():
+    loader = _loader()
+    first = "5" * 64
+    second = "6" * 64
+    text = (
+        "- **Source URL:** https://example.org/reports/20251231_dfal_HIST.xls\n"
+        "- **SHA-256:** " + first + "\n"
+        "- **Bytes:** 6706688\n"
+        "\n"
+        "Method mentions 202512_dfal_HIST_xls.zip, which is not a raw file.\n"
+        "\n"
+        "- **Source URL:** https://example.org/reports/20260101_df_al.xls\n"
+        "- **SHA-256:** " + second + "\n"
+    )
+    found = loader._hash_lines(text, ["20251231_dfal_HIST.xls", "20260101_df_al.xls"])
+    assert found == {"20251231_dfal_HIST.xls": first, "20260101_df_al.xls": second}
+
+
+def test_xl_date_skips_label_and_disclaimer_text():
+    import xlrd
+
+    loader = _loader()
+
+    class Cell:
+        def __init__(self, ctype, value):
+            self.ctype = ctype
+            self.value = value
+
+    text = xlrd.XL_CELL_TEXT
+    assert loader._xl_date(None, Cell(text, "December 31, 2025")) is None
+    assert loader._xl_date(None, Cell(text, "MISO MAKES NO REPRESENTATIONS")) is None
+    assert loader._xl_date(None, Cell(text, "12/31/2025")) == date(2025, 12, 31)
+    assert loader._xl_date(None, Cell(text, "2025-01-02")) == date(2025, 1, 2)
+    assert loader._xl_date(None, Cell(text, "45658")) == date(2025, 1, 1)
+
+
+def test_miso_wide_csv_takes_day_from_market_day_column():
+    loader = _loader()
+    hours = ",".join(f'"HE{n}"' for n in range(1, 25))
+    values = ",".join(['"1"'] * 24)
+    text = (
+        f'"MARKET_DAY","NODE","TYPE","VALUE",{hours}\n'
+        f'"1/1/2025","MINN.HUB","Hub","LMP",{values.replace("1", "30")}\n'
+        f'"1/1/2025","MINN.HUB","Hub","MCC",{values.replace("1", "2")}\n'
+        f'"1/1/2025","MINN.HUB","Hub","MLC",{values}\n'
+        f'"1/1/2025","OTHER","Hub","LMP",{values}\n'
+    )
+    grouped = defaultdict(dict)
+    loader._consume_miso_price("DA.csv", text, {"MINN.HUB"}, grouped)
+    assert len(grouped) == 24
+    first = grouped[("MINN.HUB", datetime(2025, 1, 1, 5, tzinfo=_UTC))]
+    assert first == {"lmp": Decimal(30), "mcc": Decimal(2), "mlc": Decimal(1)}
+
+
+def test_missing_price_series_is_named_by_hour_gate():
+    loader = _loader()
+    zones = loader.load_zones(CSV_PATH)
+    required = loader._required_price_keys(zones)
+    assert ("MISO", "MINN.HUB") in required
+    with pytest.raises(loader.ArchiveRejected) as caught:
+        loader.gate_hours([], required)
+    assert caught.value.location

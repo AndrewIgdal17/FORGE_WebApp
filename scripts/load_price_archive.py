@@ -46,6 +46,8 @@ _ISO_FROM_DIR = {
     "NYISO": "NYISO",
     "MISO": "MISO",
 }
+_BARE_SHA = r"(?:[-*]\s*)?(?:\*\*)?SHA-256:(?:\*\*)?\s*[0-9A-Fa-f]{64}"
+_DATE_TEXT = re.compile(r"\d{1,2}/\d{1,2}/\d{4}(?:\s.*)?|\d{4}-\d{2}-\d{2}(?:[T\s].*)?|\d+(?:\.0+)?")
 _HEX = re.compile(r"(?<![0-9A-Fa-f])([0-9A-Fa-f]{64})(?![0-9A-Fa-f])")
 _CAISO_COMPONENT = {
     "LMP": "lmp",
@@ -172,6 +174,20 @@ def _required_load_keys(zones: Sequence[Zone]) -> tuple[tuple[str, str], ...]:
             continue
         seen.add(key)
         keys.append(key)
+    return tuple(keys)
+
+
+def _required_price_keys(zones: Sequence[Zone]) -> tuple[tuple[str, str], ...]:
+    """Non-null price locations on the CAISO, ISONE, NYISO, and MISO rows."""
+
+    allowed = set(_ISO_FROM_DIR.values())
+    keys: list[tuple[str, str]] = []
+    for zone in zones:
+        if zone.iso not in allowed or zone.price_location is None:
+            continue
+        key = (zone.iso, zone.price_location)
+        if key not in keys:
+            keys.append(key)
     return tuple(keys)
 
 
@@ -389,7 +405,7 @@ def replace_archive(data_root: Path | str, zones_path: Path | str) -> None:
     digests = check_tree(data_root)
     prices = read_prices(data_root, zones)
     loads = read_loads(data_root, zones)
-    gate_hours(prices)
+    gate_hours(prices, _required_price_keys(zones))
     gate_hours(loads, _required_load_keys(zones))
     gate_identity(prices)
     gate_equal_energy(prices)
@@ -569,9 +585,21 @@ def _sha256(path: Path) -> str:
 def _hash_lines(text: str, raw_names: list[str]) -> dict[str, str]:
     found: dict[str, str] = {}
     raw_set = set(raw_names)
+    # A bare "SHA-256: <hex>" list item names its file on an earlier item of
+    # the same list block. A blank line or heading ends the block.
+    block_name: str | None = None
     for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            block_name = None
         hexes = _HEX.findall(line)
         if not hexes:
+            named = [
+                name
+                for name in raw_set
+                if re.search(rf"(?<![\w.-]){re.escape(name)}(?![\w.-])", line)
+            ]
+            if len(named) == 1:
+                block_name = named[0]
             continue
         digest = hexes[0].lower()
         candidates = [Path(item.strip()).name for item in re.findall(r"`([^`]+)`", line)]
@@ -583,12 +611,18 @@ def _hash_lines(text: str, raw_names: list[str]) -> dict[str, str]:
         chosen = next((name for name in candidates if name in raw_set), None)
         if (
             chosen is None
-            and re.fullmatch(r"SHA-256:\s*[0-9A-Fa-f]{64}", line.strip())
+            and re.fullmatch(_BARE_SHA, line.strip())
             and len(raw_names) == 1
         ):
             chosen = raw_names[0]
         if chosen is None and len(candidates) == 1:
             chosen = candidates[0]
+        if (
+            chosen is None
+            and block_name is not None
+            and re.fullmatch(_BARE_SHA, line.strip())
+        ):
+            chosen = block_name
         if chosen:
             found[chosen] = digest
     return found
@@ -1046,7 +1080,7 @@ def _consume_miso_price(
     lmp_index = _pick(header, ("LMP",))
     mcc_index = _pick(header, ("MCC",))
     mlc_index = _pick(header, ("MLC",))
-    day_index = _pick(header, ("Market Day", "MarketDay", "Date"))
+    day_index = _pick(header, ("Market Day", "MarketDay", "MARKET_DAY", "Date"))
     he_index = _pick(header, ("HourEnding", "Hour Ending", "HE"))
     he_columns = [
         (index, number)
@@ -1062,7 +1096,9 @@ def _consume_miso_price(
             kind = _cell(row, value_index).upper()
             if kind not in {"LMP", "MCC", "MLC"}:
                 continue
-            market_day = file_day
+            market_day = (
+                _parse_day(_cell(row, day_index)) if day_index is not None else file_day
+            )
             if market_day is None or market_day.year != 2025:
                 continue
             for index, number in he_columns:
@@ -1239,6 +1275,10 @@ def _xl_date(book, cell) -> date | None:
         )
         return date(year, month, day)
     if cell.ctype == 1:
+        # Workbooks carry titles, section labels and a disclaimer in the day
+        # column. Those rows are not data; the hour gate catches any real gap.
+        if not _DATE_TEXT.fullmatch(cell.value.strip()):
+            return None
         return _parse_day(cell.value)
     return None
 
