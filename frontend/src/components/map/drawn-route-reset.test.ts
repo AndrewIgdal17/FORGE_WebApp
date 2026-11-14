@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/supabase', () => ({
@@ -7,6 +6,7 @@ vi.mock('@/lib/supabase', () => ({
 
 import { useFormStore } from '@/stores/form-store';
 import { applyDrawnRouteReset } from './drawn-route-reset';
+import mapPanelSource from './MapPanel.tsx?raw';
 
 const SPREAD = '01_project_technical_details.market_measurements.congestion_spread_per_mwh';
 const HOURS_RECEIVING =
@@ -75,7 +75,7 @@ describe('applyDrawnRouteReset', () => {
     expect(after[HOURS_SENDING]).toBeUndefined();
     expect(after[ENERGY]).toBeUndefined();
 
-    const source = readFileSync(new URL('./MapPanel.tsx', import.meta.url), 'utf8');
+    const source = mapPanelSource;
     const start = source.indexOf('function handleReset');
     const reset = source.slice(start, source.indexOf('return (', start));
     expect(reset).toContain('applyDrawnRouteReset()');
