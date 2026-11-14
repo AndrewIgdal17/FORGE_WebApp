@@ -96,10 +96,10 @@ async def test_concurrent_calculations():
             assert resp.headers["x-request-id"]
 
 
-# v4.0.0 requires these before resolve_inputs will return a document.
+# v5.0.0 requires capacity, terminals, and the flow factor before resolve_inputs
+# returns a document. Market measurements come from the route, not this map.
 REQUIRED_TO_CALCULATE = {
     "01_project_technical_details.project.capacity_mw": 500,
-    "01_project_technical_details.project.value_of_load_per_mwh": 40,
     "01_project_technical_details.terminals.sending.gea": "CAISO",
     "01_project_technical_details.terminals.sending.egrid_subregion": "AZNM",
     "01_project_technical_details.terminals.sending.state": "AZ",
@@ -107,7 +107,6 @@ REQUIRED_TO_CALCULATE = {
     "01_project_technical_details.terminals.receiving.egrid_subregion": "AZNM",
     "01_project_technical_details.terminals.receiving.state": "AZ",
     "17_congestion_reductions.greenfield_congestion_reductions.constraints.flow_factor": 0.5,
-    "17_congestion_reductions.greenfield_congestion_reductions.prices.average_congestion_price": 10,
 }
 
 

@@ -36,10 +36,10 @@ ACRE_ZEROS = {
     "02_project_physical_details.terrain.protected_area_acres.rolling_hills": 0.0,
     "02_project_physical_details.terrain.protected_area_acres.mountain": 0.0,
 }
-# v4.0.0 requires these before resolve_inputs will return a document.
+# v5.0.0 requires capacity, terminals, and the flow factor before resolve_inputs
+# returns a document. Market measurements come from the route, not this map.
 REQUIRED_TO_CALCULATE = {
     "01_project_technical_details.project.capacity_mw": 500,
-    "01_project_technical_details.project.value_of_load_per_mwh": 40,
     "01_project_technical_details.terminals.sending.gea": "CAISO",
     "01_project_technical_details.terminals.sending.egrid_subregion": "AZNM",
     "01_project_technical_details.terminals.sending.state": "AZ",
@@ -47,7 +47,6 @@ REQUIRED_TO_CALCULATE = {
     "01_project_technical_details.terminals.receiving.egrid_subregion": "AZNM",
     "01_project_technical_details.terminals.receiving.state": "AZ",
     "17_congestion_reductions.greenfield_congestion_reductions.constraints.flow_factor": 0.5,
-    "17_congestion_reductions.greenfield_congestion_reductions.prices.average_congestion_price": 10,
 }
 
 
@@ -264,9 +263,13 @@ def test_acceptance_typed_prices_overwritten_and_unnamed(monkeypatch):
         seen["changes"] = dict(changes)
         return original_resolve(changes)
 
+    def fake_run(resolved, scenario_id="", **kwargs):
+        return {"results": {"ok": True}, "provenance": {}}
+
     original_resolve = forge.resolve_inputs
     monkeypatch.setattr("app.route.run_route_analysis", fake_analysis)
     monkeypatch.setattr(forge, "resolve_inputs", spy_resolve)
+    monkeypatch.setattr(forge, "run_calculation", fake_run)
 
     client.post(
         "/api/forge/calculate",
