@@ -61,6 +61,8 @@ const OMITTED_LABELS: Record<string, string> = {
   congestion_benefit: 'Congestion relief',
   emissions_comp: 'Loss-compensation emissions',
   line_loss_conductor: 'Conductor losses',
+  delivered_energy_benefit: 'Delivered energy',
+  line_loss_converter: 'Converter losses',
 };
 
 export function excludesNote(ids: string[]): string {
