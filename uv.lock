@@ -359,8 +359,8 @@ wheels = [
 
 [[package]]
 name = "forge-calc"
-version = "5.1.1"
-source = { git = "https://github.com/AndrewIgdal17/FORGE.git?rev=v5.1.1#9ae3c348955b73d523a8d3ad15520d3c31ce6db2" }
+version = "5.2.0"
+source = { git = "https://github.com/AndrewIgdal17/FORGE.git?rev=v5.2.0#9c0ccd7cd0a2e33862f08868c6eea922d25c6feb" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
@@ -399,7 +399,7 @@ dev = [
 requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
-    { name = "forge-calc", git = "https://github.com/AndrewIgdal17/FORGE.git?rev=v5.1.1" },
+    { name = "forge-calc", git = "https://github.com/AndrewIgdal17/FORGE.git?rev=v5.2.0" },
     { name = "httpx", marker = "extra == 'dev'" },
     { name = "jellyfish", specifier = ">=1.0" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8.0" },
