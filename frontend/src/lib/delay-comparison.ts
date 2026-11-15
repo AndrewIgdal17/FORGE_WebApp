@@ -10,7 +10,16 @@ export interface DelayComparisonView {
   total: number | null;
   omittedForgone: string[];
   omittedTotal: string[];
+  /** Rows whose forgone benefit does not apply (Spec 12); empty for stored blocks without states. */
+  notApplying: Set<'cong' | 'avoid' | 'forgone' | 'total'>;
 }
+
+const STATE_KEYS = {
+  cong: 'delay_cost_cong',
+  avoid: 'delay_cost_avoid',
+  forgone: 'delay_cost_forgone',
+  total: 'delta_nb_delay',
+} as const;
 
 export const DELAY_CARD_TITLE = 'Cost of delay';
 
@@ -84,6 +93,11 @@ export function readDelayComparison(
     total: readNumber(block.delta_nb_delay),
     omittedForgone: omitted ? stringIds(omitted.delay_cost_forgone) : [],
     omittedTotal: omitted ? stringIds(omitted.delta_nb_delay) : [],
+    notApplying: new Set(
+      (Object.keys(STATE_KEYS) as Array<keyof typeof STATE_KEYS>).filter(
+        (key) => isPlainObject(block.states) && block.states[STATE_KEYS[key]] === 'does_not_apply',
+      ),
+    ),
   };
 }
 

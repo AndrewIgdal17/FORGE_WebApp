@@ -11,7 +11,7 @@ import {
   type DelayComparisonView,
 } from '@/lib/delay-comparison';
 import { formatResultCurrency } from '@/lib/format';
-import { excludesNote } from '@/lib/results-utils';
+import { DOES_NOT_APPLY, excludesNote } from '@/lib/results-utils';
 
 const NOTE_CLASS = 'text-sm italic text-slate-600';
 
@@ -52,7 +52,7 @@ export function DelayComparisonCard({
         ) : (
           <div className="space-y-2">
             {DELAY_ROWS.map((row) => {
-              const note = rowExcludes(view, row.key);
+              const note = view.notApplying.has(row.key) ? null : rowExcludes(view, row.key);
               return (
                 <div key={row.key}>
                   <div className="flex items-baseline justify-between gap-3">
@@ -63,7 +63,9 @@ export function DelayComparisonCard({
                       {row.label}
                     </span>
                     <span className="shrink-0 text-sm font-semibold tabular-nums">
-                      {formatResultCurrency(view[row.key])}
+                      {view.notApplying.has(row.key)
+                        ? DOES_NOT_APPLY
+                        : formatResultCurrency(view[row.key])}
                     </span>
                   </div>
                   {note ? <p className={NOTE_CLASS}>{note}</p> : null}

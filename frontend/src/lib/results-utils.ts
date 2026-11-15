@@ -53,6 +53,21 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 export const DOES_NOT_APPLY = 'Does not apply';
 
+/** True when the value at a state path (e.g. `delay_comparison.states.delay_cost_cong`) is
+ * "does_not_apply" (Spec 12). */
+export function stateDoesNotApply(
+  results: Record<string, unknown> | null | undefined,
+  statePath: string,
+): boolean {
+  if (!results) return false;
+  let node: unknown = results;
+  for (const part of statePath.split('.')) {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return false;
+    node = (node as Record<string, unknown>)[part];
+  }
+  return node === 'does_not_apply';
+}
+
 /** A taxonomy result's state is "does not apply" (Spec 11): `state` when present,
  * else `applies: false` (Spec 10 rows), else it applies. */
 export function rowDoesNotApply(row: unknown): boolean {

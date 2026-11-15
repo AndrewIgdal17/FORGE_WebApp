@@ -14,7 +14,7 @@ describe('readDelayComparison', () => {
     expect(v).toEqual({ baselineYears: 0, delayYears: 2, onTimeRun: true, cong: null, avoid: null,
       forgone: null, total: -541002927.9687195,
       omittedForgone: ['avoided_emissions_benefit', 'congestion_benefit'],
-      omittedTotal: ['avoided_emissions_benefit', 'congestion_benefit', 'emissions_comp', 'line_loss_conductor', 'line_loss_converter'] });
+      omittedTotal: ['avoided_emissions_benefit', 'congestion_benefit', 'emissions_comp', 'line_loss_conductor', 'line_loss_converter'], notApplying: new Set() });
   });
 
   it('reads a v4 block without omitted as empty lists and keeps a measured zero', () => {

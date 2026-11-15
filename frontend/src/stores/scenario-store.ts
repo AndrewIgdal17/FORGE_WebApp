@@ -1,3 +1,4 @@
+import { itemDoesNotApply, stateDoesNotApply } from '@/lib/results-utils';
 import { create } from 'zustand';
 
 import { resolvedRowWidthFt, rowWidthProblem } from '@/lib/analyze-request';
@@ -117,15 +118,20 @@ const NEW_SCENARIO_BLANK_FIELDS: Array<{ path: string; value: unknown }> = [
   { path: '01_project_technical_details.project.old_converter_type', value: null },
 ];
 
-const RESULTS_EXPORT_FIELDS: Array<{ key: string; path: string }> = [
+const RESULTS_EXPORT_FIELDS: Array<{
+  key: string;
+  path: string;
+  appliesId?: string;
+  statePath?: string;
+}> = [
   { key: 'capacity_mw', path: 'technical_parameters.capacity_mw' },
   { key: 'line_length_miles', path: 'technical_parameters.line_length_miles' },
   { key: 'project_lifetime_years', path: 'technical_parameters.project_lifetime_years' },
   { key: 'delay_years', path: 'technical_parameters.delay_years' },
   { key: 'build_cost_pv', path: 'costs.build.total_pv' },
-  { key: 'acquisition_pv', path: 'costs.row.acquisition_pv' },
-  { key: 'row_rent_pv', path: 'costs.row.row_rent_pv' },
-  { key: 'env_mitigation_pv', path: 'costs.environmental.total_pv' },
+  { key: 'acquisition_pv', path: 'costs.row.acquisition_pv', appliesId: 'row_acquisition' },
+  { key: 'row_rent_pv', path: 'costs.row.row_rent_pv', appliesId: 'row_rent' },
+  { key: 'env_mitigation_pv', path: 'costs.environmental.total_pv', appliesId: 'env_mitigation' },
   { key: 'total_capital_pv', path: 'summary.total_capital_pv' },
   { key: 'insurance_pv', path: 'costs.insurance.pv_total' },
   { key: 'oandm_pv', path: 'costs.oandm.total_pv' },
@@ -135,10 +141,10 @@ const RESULTS_EXPORT_FIELDS: Array<{ key: string; path: string }> = [
   { key: 'total_risk_pv', path: 'summary.total_risk_pv' },
   { key: 'delay_pv', path: 'costs.delay.total_pv' },
   { key: 'delay_baseline_years', path: 'delay_comparison.baseline_delay_years' },
-  { key: 'delay_forgone_cong_pv', path: 'delay_comparison.delay_cost_cong' },
-  { key: 'delay_forgone_avoid_pv', path: 'delay_comparison.delay_cost_avoid' },
-  { key: 'delay_forgone_pv', path: 'delay_comparison.delay_cost_forgone' },
-  { key: 'delay_total_pv', path: 'delay_comparison.delta_nb_delay' },
+  { key: 'delay_forgone_cong_pv', path: 'delay_comparison.delay_cost_cong', statePath: 'delay_comparison.states.delay_cost_cong' },
+  { key: 'delay_forgone_avoid_pv', path: 'delay_comparison.delay_cost_avoid', statePath: 'delay_comparison.states.delay_cost_avoid' },
+  { key: 'delay_forgone_pv', path: 'delay_comparison.delay_cost_forgone', statePath: 'delay_comparison.states.delay_cost_forgone' },
+  { key: 'delay_total_pv', path: 'delay_comparison.delta_nb_delay', statePath: 'delay_comparison.states.delta_nb_delay' },
   { key: 'line_loss_pv', path: 'costs.line_loss.total_pv' },
   { key: 'emissions_pv', path: 'costs.emissions.total_pv' },
   { key: 'displacement_avoided_benefit_pv', path: 'bcr.displacement_avoided_benefit_pv' },
@@ -663,10 +669,13 @@ export function exportAsCsv(
     csv += 'key,value,omitted\n';
     for (const field of RESULTS_EXPORT_FIELDS) {
       const value = getValueAtPath(scenario.results, field.path);
+      const offState =
+        (field.appliesId !== undefined && itemDoesNotApply(scenario.results, field.appliesId)) ||
+        (field.statePath !== undefined && stateDoesNotApply(scenario.results, field.statePath));
       csv +=
         csvEscape(field.key) +
         ',' +
-        csvEscape(resultCell(value)) +
+        csvEscape(offState ? 'does not apply' : resultCell(value)) +
         ',' +
         csvEscape(omittedCell(scenario.results, field.key)) +
         '\n';

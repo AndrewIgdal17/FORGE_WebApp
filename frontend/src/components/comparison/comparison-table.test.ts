@@ -265,3 +265,27 @@ describe('comparison cost rows and state (Spec 11)', () => {
     expect(html.split('Does not apply').length - 1).toBe(3);
   });
 });
+
+describe('three states in comparison and CSV (Spec 12 items 1 and 3)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+  const dedicated = scenario('d', 'Dedicated', {
+    costs: { row: { acquisition_pv: 0 } },
+    taxonomy_results: [{ taxonomy_id: 'row_acquisition', state: 'does_not_apply', value_pv: 0 }],
+    delay_comparison: {
+      ...CTT_ACTUAL_DELAY2_BLOCK,
+      delay_cost_cong: null,
+      states: { delay_cost_cong: 'does_not_apply', delay_cost_avoid: 'measured', delay_cost_forgone: 'measured', delta_nb_delay: 'measured' },
+    },
+  });
+  it('the forgone congestion row reads Does not apply', () => {
+    expect(renderRows([dedicated], ['delay_forgone_cong'])).toContain('Does not apply');
+  });
+  it('the CSV writes does not apply for items and forgone benefits that do not apply', async () => {
+    const csv = await captureCsv(dedicated);
+    expect(csv).toContain('acquisition_pv,does not apply,');
+    expect(csv).toContain('delay_forgone_cong_pv,does not apply,');
+    expect(csv).toContain('delay_total_pv,-247125646.34603548,');
+  });
+});

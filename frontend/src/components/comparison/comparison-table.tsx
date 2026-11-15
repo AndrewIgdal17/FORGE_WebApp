@@ -12,7 +12,7 @@ import {
   type ComparisonMetric,
 } from '@/data/configs';
 import { getValueAtPath } from '@/lib/path';
-import { DOES_NOT_APPLY, itemDoesNotApply } from '@/lib/results-utils';
+import { DOES_NOT_APPLY, itemDoesNotApply, stateDoesNotApply } from '@/lib/results-utils';
 import type { Scenario } from '@/stores/scenario-store';
 
 export interface ComparisonTableProps {
@@ -115,7 +115,10 @@ function MetricCell({
   showDelta: boolean;
   showPercentDelta: boolean;
 }): ReactElement {
-  if (metric.appliesId && itemDoesNotApply(scenario.results, metric.appliesId)) {
+  if (
+    (metric.appliesId && itemDoesNotApply(scenario.results, metric.appliesId)) ||
+    (metric.statePath && stateDoesNotApply(scenario.results, metric.statePath))
+  ) {
     return <div className="text-right text-slate-500">{DOES_NOT_APPLY}</div>;
   }
   const raw = readMetricValue(scenario, metric);

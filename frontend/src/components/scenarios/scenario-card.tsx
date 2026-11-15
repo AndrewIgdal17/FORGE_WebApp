@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { formatTimestamp } from '@/lib/format';
+import { LEGACY_BADGE, isLegacyScenario } from '@/lib/legacy';
 import type { Scenario } from '@/stores/scenario-store';
 
 export interface ScenarioCardProps {
@@ -116,7 +117,14 @@ export function ScenarioCard({
     <Card size="sm" className="overflow-visible">
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 py-4">
         <div className="min-w-0">
-          <CardTitle className="font-bold">{scenario.name}</CardTitle>
+          <CardTitle className="font-bold">
+            {scenario.name}
+            {isLegacyScenario(scenario) ? (
+              <span className="ml-2 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-900">
+                {LEGACY_BADGE}
+              </span>
+            ) : null}
+          </CardTitle>
           <CardDescription className="text-xs opacity-60">
             {formatTimestamp(scenario.updated_at)}
             {scenario.ownerUsername ? ` · ${scenario.ownerUsername}` : ''}

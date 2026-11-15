@@ -70,3 +70,21 @@ describe('DelayComparisonCard', () => {
     for (const row of DELAY_ROWS) expect(render({ delay_comparison: CTT_ACTUAL_DELAY2_BLOCK })).toContain(row.help.replace(/'/g, '&#x27;'));
   });
 });
+
+describe('forgone benefit states (Spec 12 item 1)', () => {
+  it('a forgone benefit that does not apply reads Does not apply', () => {
+    const block = {
+      ...CTT_ACTUAL_DELAY2_BLOCK,
+      delay_cost_cong: null,
+      delay_cost_avoid: 1000,
+      delay_cost_forgone: 1000,
+      states: { delay_cost_cong: 'does_not_apply', delay_cost_avoid: 'measured', delay_cost_forgone: 'measured', delta_nb_delay: 'measured' },
+    };
+    const html = render({ delay_comparison: block });
+    expect(html).toContain('Does not apply');
+    expect(count(html, 'Not available')).toBe(0);
+  });
+  it('a block without states renders as today', () => {
+    expect(render({ delay_comparison: CTT_ACTUAL_DELAY2_BLOCK })).not.toContain('Does not apply');
+  });
+});

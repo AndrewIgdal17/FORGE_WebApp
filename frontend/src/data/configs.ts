@@ -21,6 +21,8 @@ export interface ComparisonMetric {
   description?: string;
   /** Taxonomy id whose `applies: false` turns the cell into "Does not apply". */
   appliesId?: string;
+  /** Path to a three-state value; "does_not_apply" turns the cell into "Does not apply". */
+  statePath?: string;
 }
 
 export interface ComparisonMetricGroup {
@@ -368,6 +370,7 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
       },
       {
         key: 'delay_forgone_cong',
+        statePath: 'delay_comparison.states.delay_cost_cong',
         label: 'Forgone congestion relief',
         path: 'delay_comparison.delay_cost_cong',
         format: 'currency',
@@ -375,6 +378,7 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
       },
       {
         key: 'delay_forgone_avoid',
+        statePath: 'delay_comparison.states.delay_cost_avoid',
         label: 'Forgone avoided emissions',
         path: 'delay_comparison.delay_cost_avoid',
         format: 'currency',
@@ -382,6 +386,7 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
       },
       {
         key: 'delay_forgone',
+        statePath: 'delay_comparison.states.delay_cost_forgone',
         label: 'Forgone benefits',
         path: 'delay_comparison.delay_cost_forgone',
         format: 'currency',
@@ -389,6 +394,7 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
       },
       {
         key: 'delay_total',
+        statePath: 'delay_comparison.states.delta_nb_delay',
         label: 'Total cost of delay',
         path: 'delay_comparison.delta_nb_delay',
         format: 'currency',
