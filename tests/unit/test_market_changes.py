@@ -65,8 +65,8 @@ def test_acceptance_measured_west_to_nyc():
 
     import forge
 
-    if forge.calculator_info()["version"] != "5.2.0":
-        pytest.skip("v5.2.0 is not installed; this plan does not push the tag")
+    if forge.calculator_info()["version"] != "5.2.1":
+        pytest.skip("v5.2.1 is not installed; this plan does not push the tag")
 
     template = forge.get_defaults_template()
     project = template["01_project_technical_details"]["project"]
