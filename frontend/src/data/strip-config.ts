@@ -126,10 +126,10 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
     resultsView: 'r-overview',
   },
   timeline: {
-    title: 'Timeline affects delay cost and AFUDC',
+    title: 'Timeline sets the direct delay cost and the cost of delay',
     figures: [
-      { label: 'Base Delay PV', source: 'path', path: 'bcr.delay_cost_pv', format: 'currency' },
-      { label: 'Total Delay PV', source: 'path', path: 'summary.total_delay_pv', format: 'currency' },
+      { label: 'Direct delay cost (PV)', source: 'path', path: 'bcr.delay_cost_pv', format: 'currency' },
+      { label: 'Total cost of delay', source: 'path', path: 'delay_comparison.delta_nb_delay', format: 'currency' },
     ],
     resultsView: 'r-overview',
   },
@@ -368,10 +368,9 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
     resultsView: 'r-overview',
   },
   'delay-costs': {
-    title: 'Delay costs include base and constraint delays',
+    title: 'Delay costs are the direct pre-construction spend',
     figures: [
-      { label: 'Base Delay PV', source: 'path', path: 'bcr.delay_cost_pv', format: 'currency' },
-      { label: 'Total Delay PV', source: 'path', path: 'summary.total_delay_pv', format: 'currency' },
+      { label: 'Direct delay cost (PV)', source: 'path', path: 'bcr.delay_cost_pv', format: 'currency' },
     ],
     resultsView: 'r-overview',
   },

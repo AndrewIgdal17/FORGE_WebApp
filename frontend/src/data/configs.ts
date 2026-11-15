@@ -1,3 +1,11 @@
+import { DELAY_ROWS, DIRECT_DELAY_HELP } from '@/lib/delay-comparison';
+
+function delayRowHelp(key: (typeof DELAY_ROWS)[number]['key']): string {
+  const row = DELAY_ROWS.find((item) => item.key === key);
+  if (!row) throw new Error(`missing delay row ${key}`);
+  return row.help;
+}
+
 export type ComparisonMetricFormat =
   | 'text'
   | 'number'
@@ -337,13 +345,48 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
     ],
   },
   {
-    group: 'Delay Costs (PV)',
+    group: 'Delay (PV)',
     metrics: [
       {
         key: 'delay_pv',
-        label: 'Base Delay Cost',
+        label: 'Direct delay cost (PV)',
         path: 'costs.delay.total_pv',
         format: 'currency',
+        description: DIRECT_DELAY_HELP,
+      },
+      {
+        key: 'delay_baseline_years',
+        label: 'Baseline delay (yr)',
+        path: 'delay_comparison.baseline_delay_years',
+        format: 'number',
+      },
+      {
+        key: 'delay_forgone_cong',
+        label: 'Forgone congestion relief',
+        path: 'delay_comparison.delay_cost_cong',
+        format: 'currency',
+        description: delayRowHelp('cong'),
+      },
+      {
+        key: 'delay_forgone_avoid',
+        label: 'Forgone avoided emissions',
+        path: 'delay_comparison.delay_cost_avoid',
+        format: 'currency',
+        description: delayRowHelp('avoid'),
+      },
+      {
+        key: 'delay_forgone',
+        label: 'Forgone benefits',
+        path: 'delay_comparison.delay_cost_forgone',
+        format: 'currency',
+        description: delayRowHelp('forgone'),
+      },
+      {
+        key: 'delay_total',
+        label: 'Total cost of delay',
+        path: 'delay_comparison.delta_nb_delay',
+        format: 'currency',
+        description: delayRowHelp('total'),
       },
     ],
   },
@@ -425,7 +468,7 @@ export const COMPARISON_GROUP_SUPERGROUP: Record<string, ComparisonSupergroup> =
     'Cost Categories (PV)': 'costs',
     Benefits: 'benefits',
     'Risk Costs (PV)': 'costs',
-    'Delay Costs (PV)': 'costs',
+    'Delay (PV)': 'costs',
     'Energy / Emissions (PV)': 'costs',
     'BCR — Societal Exclusions': 'sensitivity',
   };

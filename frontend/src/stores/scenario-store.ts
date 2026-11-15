@@ -134,6 +134,11 @@ const RESULTS_EXPORT_FIELDS: Array<{ key: string; path: string }> = [
   { key: 'outage_pv', path: 'costs.outage.pv_cost' },
   { key: 'total_risk_pv', path: 'summary.total_risk_pv' },
   { key: 'delay_pv', path: 'costs.delay.total_pv' },
+  { key: 'delay_baseline_years', path: 'delay_comparison.baseline_delay_years' },
+  { key: 'delay_forgone_cong_pv', path: 'delay_comparison.delay_cost_cong' },
+  { key: 'delay_forgone_avoid_pv', path: 'delay_comparison.delay_cost_avoid' },
+  { key: 'delay_forgone_pv', path: 'delay_comparison.delay_cost_forgone' },
+  { key: 'delay_total_pv', path: 'delay_comparison.delta_nb_delay' },
   { key: 'line_loss_pv', path: 'costs.line_loss.total_pv' },
   { key: 'emissions_pv', path: 'costs.emissions.total_pv' },
   { key: 'displacement_avoided_benefit_pv', path: 'bcr.displacement_avoided_benefit_pv' },
@@ -170,16 +175,35 @@ function resultCell(value: unknown): string {
   return String(value);
 }
 
+function joinedIds(value: unknown): string {
+  if (!Array.isArray(value)) return '';
+  return value.filter((id): id is string => typeof id === 'string').join(';');
+}
+
+function delayComparisonOmitted(
+  results: Record<string, unknown>,
+  exportKey: string,
+): string {
+  const block = results.delay_comparison;
+  if (!block || typeof block !== 'object' || Array.isArray(block)) return '';
+  const omitted = (block as Record<string, unknown>).omitted;
+  if (!omitted || typeof omitted !== 'object' || Array.isArray(omitted)) return '';
+  const omittedKey =
+    exportKey === 'delay_forgone_pv' ? 'delay_cost_forgone' : 'delta_nb_delay';
+  return joinedIds((omitted as Record<string, unknown>)[omittedKey]);
+}
+
 function omittedCell(results: Record<string, unknown>, exportKey: string): string {
+  if (exportKey === 'delay_forgone_pv' || exportKey === 'delay_total_pv') {
+    return delayComparisonOmitted(results, exportKey);
+  }
   const omittedKey = omittedKeyFor(exportKey);
   if (!omittedKey) return '';
   const bcr = results.bcr;
   if (!bcr || typeof bcr !== 'object' || Array.isArray(bcr)) return '';
   const omitted = (bcr as Record<string, unknown>).omitted;
   if (!omitted || typeof omitted !== 'object' || Array.isArray(omitted)) return '';
-  const ids = (omitted as Record<string, unknown>)[omittedKey];
-  if (!Array.isArray(ids)) return '';
-  return ids.filter((id): id is string => typeof id === 'string').join(';');
+  return joinedIds((omitted as Record<string, unknown>)[omittedKey]);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

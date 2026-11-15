@@ -9,6 +9,10 @@ vi.mock('@/lib/supabase', () => ({
 import { ComparisonTable } from '@/components/comparison/comparison-table';
 import { formatComparisonValue } from '@/components/comparison/delta-display';
 import { CMP_PICKER_STORAGE_KEY, COMPARISON_METRICS } from '@/data/configs';
+import {
+  CTT_ACTUAL_DELAY2_BLOCK,
+  SUNZIA_DELAY2_BLOCK,
+} from '@/lib/delay-comparison.fixtures';
 import { exportAsCsv, type Scenario } from '@/stores/scenario-store';
 
 const METRIC_KEYS = [
@@ -76,7 +80,18 @@ function measurements(
 
 function renderRows(scenarios: Scenario[]): string {
   const store = new Map<string, string>([
-    [CMP_PICKER_STORAGE_KEY, JSON.stringify([...METRIC_KEYS])],
+    [
+      CMP_PICKER_STORAGE_KEY,
+      JSON.stringify([
+        ...METRIC_KEYS,
+        'delay_pv',
+        'delay_baseline_years',
+        'delay_forgone_cong',
+        'delay_forgone_avoid',
+        'delay_forgone',
+        'delay_total',
+      ]),
+    ],
   ]);
   vi.stubGlobal('localStorage', {
     getItem: (key: string) => store.get(key) ?? null,
@@ -201,5 +216,21 @@ describe('comparison market measurements', () => {
       'bcr_societal,not available,avoided_emissions_benefit;congestion_benefit;emissions_comp;line_loss_conductor\n',
     );
     expect(csv).toContain('delay_pv,not available,\n');
+  });
+
+  it('delay rows and CSV (acceptance 10, 11)', async () => {
+    expect(metric('delay_pv')!.label).toBe('Direct delay cost (PV)');
+    const html = renderRows([scenario('sz', 'SunZia', { delay_comparison: SUNZIA_DELAY2_BLOCK }),
+                             scenario('ctt', 'CTT', { delay_comparison: CTT_ACTUAL_DELAY2_BLOCK })]);
+    for (const label of ['Baseline delay (yr)', 'Forgone congestion relief', 'Forgone avoided emissions', 'Forgone benefits', 'Total cost of delay'])
+      expect(html).toContain(label);
+    expect(html).toContain('$9,218,180');
+    expect(html).toContain('Not available');
+    const csv = await captureCsv(scenario('sz', 'SunZia', { delay_comparison: SUNZIA_DELAY2_BLOCK }));
+    expect(csv).toContain('delay_baseline_years,0,\n');
+    expect(csv).toContain('delay_forgone_pv,not available,avoided_emissions_benefit;congestion_benefit\n');
+    expect(csv).toContain('delay_total_pv,-541002927.9687195,avoided_emissions_benefit;congestion_benefit;emissions_comp;line_loss_conductor;line_loss_converter\n');
+    const none = await captureCsv(scenario('tbc', 'TBC', {}));
+    expect(none).toContain('delay_total_pv,not available,\n');
   });
 });
