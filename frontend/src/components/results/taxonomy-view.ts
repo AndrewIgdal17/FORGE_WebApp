@@ -21,7 +21,10 @@ export interface TaxonomyCardValues {
   pvValue: number | null;
   detailRows: TaxonomyDetailRow[];
   missingHover: string;
+  doesNotApply: boolean;
 }
+
+export const DOES_NOT_APPLY = 'Does not apply';
 
 const MISSING_INPUT_LABELS: Record<string, string> = {
   congestion_spread_per_mwh: 'Congestion spread (route)',
@@ -156,6 +159,7 @@ export function cardValues(
     pvValue: presentValue(row),
     detailRows: detailRows(row),
     missingHover: missingInputsHover(row?.missing_inputs),
+    doesNotApply: row?.applies === false,
   };
 }
 

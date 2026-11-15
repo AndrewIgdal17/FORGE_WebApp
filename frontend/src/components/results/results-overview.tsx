@@ -683,6 +683,7 @@ function CategoryAccordions({
                         colorIndex={index}
                         parentTotal={row.value === null ? undefined : row.value}
                         title={values.missingHover}
+                        doesNotApply={values.doesNotApply}
                       />
                     );
                   })

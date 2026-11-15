@@ -5,6 +5,7 @@ import {
   CardContent,
 } from '@/components/ui/card';
 import { formatCurrency, formatResultCurrency } from '@/lib/format';
+import { DOES_NOT_APPLY } from '@/components/results/taxonomy-view';
 import { COMPOSITION_COLORS } from '@/lib/results-utils';
 import { cn } from '@/lib/utils';
 
@@ -23,6 +24,7 @@ export interface TaxonomyCardProps {
   colorIndex?: number;
   parentTotal?: number;
   title?: string;
+  doesNotApply?: boolean;
 }
 
 function currencyClass(value: number): string | undefined {
@@ -47,12 +49,14 @@ export function TaxonomyCard({
   colorIndex = 0,
   parentTotal,
   title,
+  doesNotApply = false,
 }: TaxonomyCardProps): ReactElement {
   const [expanded, setExpanded] = useState(false);
-  const rows = detailRows ?? [];
+  const rows = doesNotApply ? [] : (detailRows ?? []);
   const expandable = rows.length > 0;
   const share = pvValue ?? nominalValue ?? annualValue;
-  const showShare = parentTotal != null && parentTotal > 0 && share != null;
+  const showShare =
+    !doesNotApply && parentTotal != null && parentTotal > 0 && share != null;
   const sharePct = showShare ? (share / parentTotal) * 100 : 0;
   const color = accentColor(colorIndex);
 
@@ -82,7 +86,7 @@ export function TaxonomyCard({
                 {expandable ? ` · ${rows.length} components` : ''}
               </div>
             ) : null}
-            {annualValue != null || nominalValue != null ? (
+            {!doesNotApply && (annualValue != null || nominalValue != null) ? (
               <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                 {annualValue != null ? (
                   <span>
@@ -98,7 +102,9 @@ export function TaxonomyCard({
             ) : null}
           </div>
           <div className="flex items-center gap-2">
-            {pvValue != null ? (
+            {doesNotApply ? (
+              <div className="text-lg font-bold text-slate-500">{DOES_NOT_APPLY}</div>
+            ) : pvValue != null ? (
               <div className={cn('text-lg font-bold tabular-nums', currencyClass(pvValue))}>
                 {formatCurrency(pvValue, 0)}
               </div>
