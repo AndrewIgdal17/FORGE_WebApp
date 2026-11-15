@@ -8,6 +8,8 @@ import {
   ResultsOverview,
   WATERFALL_NOT_AVAILABLE,
   adjustedRatio,
+  categoryValueText,
+  loadCategories,
   readTotal,
 } from '@/components/results/results-overview';
 import { DELAY_OTHER_VIEW_NOTE, DIRECT_DELAY_LABEL } from '@/lib/delay-comparison';
@@ -149,5 +151,30 @@ describe('readTotal with a non-number stored value (Spec 11 D3)', () => {
     const rows = [{ key: 'a', label: 'A', value: 5 }];
     expect(readTotal({ summary: { total_benefits_pv: 'x' } }, 'summary.total_benefits_pv', rows)).toBe(5);
     expect(readTotal({ summary: { total_benefits_pv: null } }, 'summary.total_benefits_pv', rows)).toBeNull();
+  });
+});
+
+describe('single-item overview rows that do not apply (Spec 11, final review)', () => {
+  const ctt = {
+    bcr: { converter_loss_pv: 0, row_rent_pv: 0, conductor_loss_pv: 5 },
+    taxonomy_results: [
+      { taxonomy_id: 'line_loss_converter', state: 'does_not_apply', value_pv: 0, value_pv_wacc: 0 },
+      { taxonomy_id: 'row_rent', state: 'does_not_apply', value_pv: 0, value_pv_wacc: 0 },
+      { taxonomy_id: 'line_loss_conductor', state: 'measured', value_pv: 5, value_pv_wacc: 5 },
+    ],
+  };
+  it('marks the row and shows Does not apply', () => {
+    const rows = loadCategories(ctt, PERSPECTIVE_CATEGORIES.ratepayer.costs);
+    const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
+    expect(byKey.converter_loss!.doesNotApply).toBe(true);
+    expect(byKey.row_rent!.doesNotApply).toBe(true);
+    expect(byKey.conductor_loss!.doesNotApply).toBe(false);
+    expect(categoryValueText(byKey.row_rent!)).toBe('Does not apply');
+    expect(categoryValueText(byKey.conductor_loss!)).toBe('$5');
+  });
+  it('an old row without state keeps its value', () => {
+    const old = { bcr: { row_rent_pv: 0 }, taxonomy_results: [{ taxonomy_id: 'row_rent', value_pv: 0, value_pv_wacc: 0 }] };
+    const rows = loadCategories(old, PERSPECTIVE_CATEGORIES.ratepayer.costs);
+    expect(rows.find((r) => r.key === 'row_rent')!.doesNotApply).toBe(false);
   });
 });

@@ -24,7 +24,7 @@ import {
 } from '@/components/results/taxonomy-view';
 import { DELAY_OTHER_VIEW_NOTE, DIRECT_DELAY_LABEL } from '@/lib/delay-comparison';
 import { formatCurrency, formatNumber } from '@/lib/format';
-import { excludesNote } from '@/lib/results-utils';
+import { DOES_NOT_APPLY, excludesNote, itemDoesNotApply } from '@/lib/results-utils';
 import { getValueAtPath } from '@/lib/path';
 import { waccValueSum } from '@/lib/perspective-values';
 import { cn } from '@/lib/utils';
@@ -101,6 +101,13 @@ export interface CategoryAmount {
   key: string;
   label: string;
   value: number | null;
+  /** A single-item row whose item the method switches off (Spec 11). */
+  doesNotApply?: boolean;
+}
+
+/** The row's value text: "Does not apply", else its currency. */
+export function categoryValueText(row: CategoryAmount): string {
+  return row.doesNotApply ? DOES_NOT_APPLY : formatCurrency(row.value, 0);
 }
 
 interface WaterfallBar {
@@ -177,7 +184,7 @@ function magnitude(value: number | null): number {
   return value === null ? -1 : Math.abs(value);
 }
 
-function loadCategories(
+export function loadCategories(
   results: Record<string, unknown>,
   items: PerspectiveCategoryItem[],
 ): CategoryAmount[] {
@@ -186,6 +193,8 @@ function loadCategories(
       key: item.key,
       label: item.label,
       value: item.waccIds ? waccValueSum(results, item.waccIds) : readNumber(results, item.path),
+      doesNotApply:
+        item.waccIds?.length === 1 && itemDoesNotApply(results, item.waccIds[0]!),
     }))
     .sort((left, right) => magnitude(right.value) - magnitude(left.value));
 }
@@ -198,7 +207,8 @@ function measuredCategories(
   items: CategoryAmount[],
 ): Array<CategoryAmount & { value: number }> {
   return sortByMagnitude(items).filter(
-    (item): item is CategoryAmount & { value: number } => item.value !== null,
+    (item): item is CategoryAmount & { value: number } =>
+      item.value !== null && !item.doesNotApply,
   );
 }
 
@@ -634,7 +644,7 @@ function CategoryAccordions({
         const isOpen = open.has(openKey);
         const isExcluded = excluded.has(excludeKey);
         const share =
-          row.value === null || grandTotal === null
+          row.value === null || grandTotal === null || row.doesNotApply
             ? null
             : grandTotal !== 0
               ? (row.value / grandTotal) * 100
@@ -683,8 +693,13 @@ function CategoryAccordions({
                 >
                   {row.label}
                 </span>
-                <span className="shrink-0 text-sm font-semibold tabular-nums">
-                  {formatCurrency(row.value, 0)}
+                <span
+                  className={cn(
+                    'shrink-0 text-sm font-semibold tabular-nums',
+                    row.doesNotApply && 'text-slate-500',
+                  )}
+                >
+                  {categoryValueText(row)}
                 </span>
                 <span className="w-14 shrink-0 text-right text-xs tabular-nums text-slate-500">
                   {share === null ? '' : `${formatNumber(share, 1)}%`}
