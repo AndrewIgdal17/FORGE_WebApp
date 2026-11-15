@@ -178,6 +178,7 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         label: 'Environmental Cost',
         path: 'costs.environmental.total_pv',
         format: 'currency',
+        appliesId: 'env_mitigation',
       },
       {
         key: 'insurance_pv',
@@ -190,12 +191,14 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         label: 'Acquisition Cost',
         path: 'costs.row.acquisition_pv',
         format: 'currency',
+        appliesId: 'row_acquisition',
       },
       {
         key: 'row_rent_pv',
         label: 'ROW Rent Cost',
         path: 'costs.row.row_rent_pv',
         format: 'currency',
+        appliesId: 'row_rent',
       },
       {
         key: 'total_capital_pv',

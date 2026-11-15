@@ -143,3 +143,11 @@ describe('waterfall with a null benefit total (final review I1)', () => {
     expect(render('societal')).not.toContain(WATERFALL_NOT_AVAILABLE);
   });
 });
+
+describe('readTotal with a non-number stored value (Spec 11 D3)', () => {
+  it('falls back to the category sum; only null stays null', () => {
+    const rows = [{ key: 'a', label: 'A', value: 5 }];
+    expect(readTotal({ summary: { total_benefits_pv: 'x' } }, 'summary.total_benefits_pv', rows)).toBe(5);
+    expect(readTotal({ summary: { total_benefits_pv: null } }, 'summary.total_benefits_pv', rows)).toBeNull();
+  });
+});

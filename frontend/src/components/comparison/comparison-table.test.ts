@@ -247,3 +247,21 @@ describe('comparison congestion row and applies (Spec 10 rule 8)', () => {
     expect(html).toContain('$0');
   });
 });
+
+describe('comparison cost rows and state (Spec 11)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+  it('acquisition, rent and mitigation rows read Does not apply when switched off', () => {
+    const aep = scenario('a', 'AEP', {
+      costs: { row: { acquisition_pv: 0, row_rent_pv: 0 } },
+      taxonomy_results: [
+        { taxonomy_id: 'row_acquisition', state: 'does_not_apply', value_pv: 0 },
+        { taxonomy_id: 'row_rent', state: 'does_not_apply', value_pv: 0 },
+        { taxonomy_id: 'env_mitigation', state: 'does_not_apply', value_pv: 0 },
+      ],
+    });
+    const html = renderRows([aep], ['acquisition_pv', 'row_rent_pv', 'env_pv']);
+    expect(html.split('Does not apply').length - 1).toBe(3);
+  });
+});

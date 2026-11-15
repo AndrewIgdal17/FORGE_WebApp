@@ -5,6 +5,7 @@ import {
   buildResultById,
   deriveTaxonomyResults,
   readNumber,
+  rowDoesNotApply,
 } from '@/lib/results-utils';
 
 export interface TaxonomyItemView {
@@ -159,7 +160,7 @@ export function cardValues(
     pvValue: presentValue(row),
     detailRows: detailRows(row),
     missingHover: missingInputsHover(row?.missing_inputs),
-    doesNotApply: row?.applies === false,
+    doesNotApply: rowDoesNotApply(row),
   };
 }
 

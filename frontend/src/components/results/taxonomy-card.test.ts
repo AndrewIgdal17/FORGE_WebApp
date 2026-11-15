@@ -57,4 +57,13 @@ describe('TaxonomyCard and applies (Spec 10)', () => {
     expect(html).toContain('Not available');
     expect(html).not.toContain(DOES_NOT_APPLY);
   });
+  it('state does_not_apply without applies (Spec 11): Does not apply', () => {
+    const values = cardValues({ row_rent: { state: 'does_not_apply', value_pv: 0 } }, 'row_rent');
+    expect(values.doesNotApply).toBe(true);
+    expect(render('ROW Rent', values)).toContain(DOES_NOT_APPLY);
+  });
+  it('state measured overrides a stale applies flag', () => {
+    const values = cardValues({ row_rent: { state: 'measured', applies: false, value_pv: 5 } }, 'row_rent');
+    expect(values.doesNotApply).toBe(false);
+  });
 });

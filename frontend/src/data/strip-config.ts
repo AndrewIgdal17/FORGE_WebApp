@@ -167,7 +167,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         field: 'value_pv',
         format: 'currency',
       },
-      { label: 'Converter Loss PV', source: 'path', path: 'bcr.converter_loss_pv', format: 'currency' },
+      { label: 'Converter Loss PV', source: 'path', path: 'bcr.converter_loss_pv', format: 'currency', appliesId: 'line_loss_converter' },
       {
         label: 'Converter Losses (MWh/yr)',
         source: 'path',
@@ -202,9 +202,9 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   'rights-of-way': {
     title: 'Rights of Way contributes to capital',
     figures: [
-      { label: 'Holding PV', source: 'path', path: 'costs.row.row_holding_pv', format: 'currency' },
-      { label: 'Acquisition PV', source: 'path', path: 'costs.row.acquisition_pv', format: 'currency' },
-      { label: 'Rent PV', source: 'path', path: 'costs.row.row_rent_pv', format: 'currency' },
+      { label: 'Holding PV', source: 'path', path: 'costs.row.row_holding_pv', format: 'currency', appliesId: 'row_holding' },
+      { label: 'Acquisition PV', source: 'path', path: 'costs.row.acquisition_pv', format: 'currency', appliesId: 'row_acquisition' },
+      { label: 'Rent PV', source: 'path', path: 'costs.row.row_rent_pv', format: 'currency', appliesId: 'row_rent' },
     ],
     resultsView: 'r-overview',
   },
@@ -317,13 +317,15 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         source: 'path',
         path: 'costs.environmental.base_cost_pv',
         format: 'currency',
+        appliesId: 'env_mitigation',
       },
-      { label: 'Credits PV', source: 'path', path: 'costs.environmental.credits_pv', format: 'currency' },
+      { label: 'Credits PV', source: 'path', path: 'costs.environmental.credits_pv', format: 'currency', appliesId: 'env_mitigation' },
       {
         label: 'Total Env. Mitigation PV',
         source: 'path',
         path: 'bcr.env_mitigation_pv',
         format: 'currency',
+        appliesId: 'env_mitigation',
       },
     ],
     resultsView: 'r-overview',
@@ -331,18 +333,20 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   credits: {
     title: 'Credits reduce capital cost',
     figures: [
-      { label: 'Credits PV', source: 'path', path: 'costs.environmental.credits_pv', format: 'currency' },
+      { label: 'Credits PV', source: 'path', path: 'costs.environmental.credits_pv', format: 'currency', appliesId: 'env_mitigation' },
       {
         label: 'Base Restoration PV',
         source: 'path',
         path: 'costs.environmental.base_cost_pv',
         format: 'currency',
+        appliesId: 'env_mitigation',
       },
       {
         label: 'Total Env. Mitigation PV',
         source: 'path',
         path: 'bcr.env_mitigation_pv',
         format: 'currency',
+        appliesId: 'env_mitigation',
       },
     ],
     resultsView: 'r-overview',

@@ -28,6 +28,7 @@ function figureDoesNotApply(
   figure: StripFigure,
   results: Record<string, unknown> | null,
 ): boolean {
+  if (figure.source === 'taxonomy') return itemDoesNotApply(results, figure.taxonomyId);
   return figure.source === 'path' && !!figure.appliesId && itemDoesNotApply(results, figure.appliesId);
 }
 

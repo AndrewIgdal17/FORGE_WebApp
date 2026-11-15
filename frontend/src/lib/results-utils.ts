@@ -53,14 +53,22 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 export const DOES_NOT_APPLY = 'Does not apply';
 
-/** True only when results record the item with `applies: false` (Spec 10). */
+/** A taxonomy result's state is "does not apply" (Spec 11): `state` when present,
+ * else `applies: false` (Spec 10 rows), else it applies. */
+export function rowDoesNotApply(row: unknown): boolean {
+  if (!row || typeof row !== 'object') return false;
+  const record = row as Record<string, unknown>;
+  if (typeof record.state === 'string') return record.state === 'does_not_apply';
+  return record.applies === false;
+}
+
+/** True only when results record the item as not applying. */
 export function itemDoesNotApply(
   results: Record<string, unknown> | null | undefined,
   taxonomyId: string,
 ): boolean {
   if (!results) return false;
-  const row = buildResultById(results)[taxonomyId];
-  return !!row && typeof row === 'object' && (row as Record<string, unknown>).applies === false;
+  return rowDoesNotApply(buildResultById(results)[taxonomyId]);
 }
 
 export function readNumber(value: unknown): number | null {

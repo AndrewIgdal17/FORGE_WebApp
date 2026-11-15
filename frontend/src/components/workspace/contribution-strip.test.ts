@@ -42,3 +42,50 @@ describe('benefit strips and applies (Spec 10 rule 8)', () => {
     for (const figure of figures) expect(displayFigure(figure, old)).toBe('$0');
   });
 });
+
+const AEP_LIKE = {
+  costs: {
+    row: { row_holding_pv: 0, acquisition_pv: 0, row_rent_pv: 2142409 },
+    environmental: { base_cost_pv: 0, credits_pv: 0 },
+  },
+  bcr: { converter_loss_pv: 0, env_mitigation_pv: 0 },
+  taxonomy_results: [
+    { taxonomy_id: 'build_structure', state: 'does_not_apply', value_pv: 0 },
+    { taxonomy_id: 'build_converter', state: 'does_not_apply', value_pv: 0 },
+    { taxonomy_id: 'line_loss_converter', state: 'does_not_apply', value_pv: 0 },
+    { taxonomy_id: 'row_acquisition', state: 'does_not_apply', value_pv: 0 },
+    { taxonomy_id: 'row_holding', state: 'does_not_apply', value_pv: 0 },
+    { taxonomy_id: 'row_rent', state: 'measured', value_pv: 2142409 },
+    { taxonomy_id: 'env_mitigation', state: 'does_not_apply', value_pv: 0 },
+  ],
+};
+
+function figureByLabel(stripKey: string, label: string) {
+  const figure = STRIP_CONFIG[stripKey]!.figures.find((f) => f.label === label);
+  if (!figure) throw new Error(`${stripKey}: ${label}`);
+  return figure;
+}
+
+describe('cost strips and state (Spec 11)', () => {
+  const off: Array<[string, string]> = [
+    ['converter-details', 'Converter Build Cost PV'],
+    ['converter-details', 'Converter Loss PV'],
+    ['rights-of-way', 'Holding PV'],
+    ['rights-of-way', 'Acquisition PV'],
+    ['base-mitigation', 'Total Env. Mitigation PV'],
+    ['base-mitigation', 'Base Restoration PV'],
+    ['base-mitigation', 'Credits PV'],
+  ];
+  it('a cost that does not apply reads Does not apply (state only, no applies field)', () => {
+    for (const [strip, label] of off) {
+      expect(displayFigure(figureByLabel(strip, label), AEP_LIKE), `${strip} ${label}`).toBe('Does not apply');
+    }
+    const structure = Object.values(STRIP_CONFIG)
+      .flatMap((c) => c.figures)
+      .find((f) => f.label === 'Structure Cost PV')!;
+    expect(displayFigure(structure, AEP_LIKE)).toBe('Does not apply');
+  });
+  it('a measured cost shows its value', () => {
+    expect(displayFigure(figureByLabel('rights-of-way', 'Rent PV'), AEP_LIKE)).toBe('$2,142,409');
+  });
+});

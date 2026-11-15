@@ -10,6 +10,9 @@ const SENDING_SOURCE_PATH = '01_project_technical_details.project.sending_source
 const SECTION = '17_congestion_reductions';
 const CAPACITY = '20_capacity_value';
 
+export const CAPACITY_GATE_HELP =
+  'Capacity value does not apply unless this is on. With it on, a credit or price of 0 gives a measured $0.';
+
 export function SystemConstraints(): ReactElement {
   const projectType = useFormStore((state) => state.getFieldValue(PROJECT_TYPE_PATH));
   const sendingSource = useFormStore((state) => state.getFieldValue(SENDING_SOURCE_PATH));
@@ -50,7 +53,7 @@ export function SystemConstraints(): ReactElement {
         <CheckboxField
           path={`${CAPACITY}.applicability_gate`}
           label="Receiving region is capacity-short"
-          helpText="Capacity value stays zero unless this is on and credit and price are both positive."
+          helpText={CAPACITY_GATE_HELP}
         />
         <PercentageField
           path={`${CAPACITY}.capacity_credit`}

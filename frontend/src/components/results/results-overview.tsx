@@ -565,16 +565,17 @@ function sumValues(rows: CategoryAmount[]): number {
   return rows.reduce((total, row) => (row.value === null ? total : total + row.value), 0);
 }
 
-/** The stored total, or the category sum for older results that lack the key.
- * A stored null stays null: nothing that applies was available. */
+/** The stored total, or the category sum when the key is absent or not a number.
+ * Only a stored null stays null: nothing that applies was available. */
 export function readTotal(
   results: Record<string, unknown>,
   path: string,
   rows: CategoryAmount[],
 ): number | null {
   const value = getValueAtPath(results, path);
-  if (value === undefined) return sumValues(rows);
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  if (value === null) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  return sumValues(rows);
 }
 
 export function adjustedRatio(benefits: number | null, costs: number | null): number | null {
