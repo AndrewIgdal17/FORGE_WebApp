@@ -17,3 +17,28 @@ describe('stripGridClass', () => {
     expect(stripGridClass(5)).toBe('grid-cols-5');
   });
 });
+
+import { displayFigure } from '@/components/workspace/contribution-strip';
+
+const NOT_APPLYING = {
+  bcr: { delivered_benefit_pv: 0, capacity_value_benefit_pv: 0, congestion_benefit_pv: 0 },
+  taxonomy_results: [
+    { taxonomy_id: 'delivered_energy_benefit', applies: false, available: true, value_pv: 0 },
+    { taxonomy_id: 'capacity_value_benefit', applies: false, available: true, value_pv: 0 },
+    { taxonomy_id: 'congestion_benefit', applies: false, available: true, value_pv: 0 },
+  ],
+};
+
+describe('benefit strips and applies (Spec 10 rule 8)', () => {
+  const figures = [
+    ...STRIP_CONFIG['economic-details'].figures.slice(0, 2),
+    STRIP_CONFIG['system-constraints'].figures[1]!,
+  ];
+  it('a benefit that does not apply reads Does not apply', () => {
+    for (const figure of figures) expect(displayFigure(figure, NOT_APPLYING)).toBe('Does not apply');
+  });
+  it('a stored result without applies shows its value as today', () => {
+    const old = { bcr: NOT_APPLYING.bcr };
+    for (const figure of figures) expect(displayFigure(figure, old)).toBe('$0');
+  });
+});

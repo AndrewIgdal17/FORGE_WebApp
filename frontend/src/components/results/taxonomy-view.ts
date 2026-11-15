@@ -24,7 +24,7 @@ export interface TaxonomyCardValues {
   doesNotApply: boolean;
 }
 
-export const DOES_NOT_APPLY = 'Does not apply';
+export { DOES_NOT_APPLY } from '@/lib/results-utils';
 
 const MISSING_INPUT_LABELS: Record<string, string> = {
   congestion_spread_per_mwh: 'Congestion spread (route)',

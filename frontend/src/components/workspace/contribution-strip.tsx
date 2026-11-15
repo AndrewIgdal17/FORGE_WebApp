@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import { getStripConfig, readFigureValue, type StripFigure } from '@/data/strip-config';
 import { useNavigation } from '@/hooks/use-navigation';
 import { formatCurrency, formatNumber, formatSignedCurrencyValue, formatSignedNumberValue } from '@/lib/format';
+import { DOES_NOT_APPLY, itemDoesNotApply } from '@/lib/results-utils';
 import { cn } from '@/lib/utils';
 
 export interface ContributionStripProps {
@@ -21,6 +22,22 @@ const GRID_COLS: Record<number, string> = {
 
 export function stripGridClass(figureCount: number): string {
   return GRID_COLS[figureCount] ?? 'grid-cols-3';
+}
+
+function figureDoesNotApply(
+  figure: StripFigure,
+  results: Record<string, unknown> | null,
+): boolean {
+  return figure.source === 'path' && !!figure.appliesId && itemDoesNotApply(results, figure.appliesId);
+}
+
+/** The figure's text: "Does not apply" for a switched-off benefit, else its value. */
+export function displayFigure(
+  figure: StripFigure,
+  results: Record<string, unknown> | null,
+): string {
+  if (figureDoesNotApply(figure, results)) return DOES_NOT_APPLY;
+  return formatFigure(results ? readFigureValue(figure, results) : null, figure);
 }
 
 function figureUnit(figure: StripFigure): string {
@@ -121,19 +138,27 @@ export function ContributionStrip({
       <div className={cn('grid divide-x divide-slate-100', colsClass)}>
         {config.figures.map((figure) => {
           const value = readFigureValue(figure, results);
+          const offFigure = figureDoesNotApply(figure, results);
           return (
             <div key={figure.label} className="px-4 py-3">
               <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-400">
                 {figure.label}
               </p>
-              <p className={cn('mt-0.5 text-lg font-bold tabular-nums', figureColor(figure, value))}>
-                {formatFigure(value, figure)}
+              <p
+                className={cn(
+                  'mt-0.5 text-lg font-bold tabular-nums',
+                  offFigure ? 'text-slate-500' : figureColor(figure, value),
+                )}
+              >
+                {displayFigure(figure, results)}
               </p>
-              <DeltaChip
-                current={value}
-                saved={savedResults ? readFigureValue(figure, savedResults) : null}
-                figure={figure}
-              />
+              {offFigure ? null : (
+                <DeltaChip
+                  current={value}
+                  saved={savedResults ? readFigureValue(figure, savedResults) : null}
+                  figure={figure}
+                />
+              )}
             </div>
           );
         })}

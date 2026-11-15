@@ -19,6 +19,8 @@ export interface ComparisonMetric {
   path: string;
   format: ComparisonMetricFormat;
   description?: string;
+  /** Taxonomy id whose `applies: false` turns the cell into "Does not apply". */
+  appliesId?: string;
 }
 
 export interface ComparisonMetricGroup {
@@ -241,6 +243,7 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         label: 'Congestion Benefits',
         path: 'bcr.congestion_benefit_pv',
         format: 'currency',
+        appliesId: 'congestion_benefit',
       },
       {
         key: 'custom_nb',

@@ -78,21 +78,18 @@ function measurements(
   return { technical_parameters: technical };
 }
 
-function renderRows(scenarios: Scenario[]): string {
-  const store = new Map<string, string>([
-    [
-      CMP_PICKER_STORAGE_KEY,
-      JSON.stringify([
-        ...METRIC_KEYS,
-        'delay_pv',
-        'delay_baseline_years',
-        'delay_forgone_cong',
-        'delay_forgone_avoid',
-        'delay_forgone',
-        'delay_total',
-      ]),
-    ],
-  ]);
+const DEFAULT_KEYS = [
+  ...METRIC_KEYS,
+  'delay_pv',
+  'delay_baseline_years',
+  'delay_forgone_cong',
+  'delay_forgone_avoid',
+  'delay_forgone',
+  'delay_total',
+];
+
+function renderRows(scenarios: Scenario[], keys: string[] = DEFAULT_KEYS): string {
+  const store = new Map<string, string>([[CMP_PICKER_STORAGE_KEY, JSON.stringify(keys)]]);
   vi.stubGlobal('localStorage', {
     getItem: (key: string) => store.get(key) ?? null,
     setItem: (key: string, value: string) => {
@@ -232,5 +229,21 @@ describe('comparison market measurements', () => {
     expect(csv).toContain('delay_total_pv,-541002927.9687195,avoided_emissions_benefit;congestion_benefit;emissions_comp;line_loss_conductor;line_loss_converter\n');
     const none = await captureCsv(scenario('tbc', 'TBC', {}));
     expect(none).toContain('delay_total_pv,not available,\n');
+  });
+});
+
+describe('comparison congestion row and applies (Spec 10 rule 8)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+  it('a dedicated line reads Does not apply; an old row keeps its value', () => {
+    const dedicated = scenario('d', 'Dedicated', {
+      bcr: { congestion_benefit_pv: 0 },
+      taxonomy_results: [{ taxonomy_id: 'congestion_benefit', applies: false, available: true, value_pv: 0 }],
+    });
+    const old = scenario('o', 'Old', { bcr: { congestion_benefit_pv: 0 } });
+    const html = renderRows([old, dedicated], ['congestion_pv']);
+    expect(html).toContain('Does not apply');
+    expect(html).toContain('$0');
   });
 });

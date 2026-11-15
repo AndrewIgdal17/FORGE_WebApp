@@ -10,6 +10,8 @@ interface PathFigure {
   colorByThreshold?: boolean;
   decimals?: number;
   unit?: string;
+  /** Taxonomy id whose `applies: false` turns the figure into "Does not apply". */
+  appliesId?: string;
 }
 
 interface TaxonomyFigure {
@@ -216,12 +218,14 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         source: 'path',
         path: 'bcr.delivered_benefit_pv',
         format: 'currency',
+        appliesId: 'delivered_energy_benefit',
       },
       {
         label: 'Capacity Value PV',
         source: 'path',
         path: 'bcr.capacity_value_benefit_pv',
         format: 'currency',
+        appliesId: 'capacity_value_benefit',
       },
       { label: 'Outage PV', source: 'path', path: 'bcr.outage_pv', format: 'currency' },
     ],
@@ -236,6 +240,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         source: 'path',
         path: 'bcr.congestion_benefit_pv',
         format: 'currency',
+        appliesId: 'congestion_benefit',
       },
     ],
     resultsView: 'r-overview',

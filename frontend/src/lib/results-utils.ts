@@ -51,6 +51,18 @@ function asRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
+export const DOES_NOT_APPLY = 'Does not apply';
+
+/** True only when results record the item with `applies: false` (Spec 10). */
+export function itemDoesNotApply(
+  results: Record<string, unknown> | null | undefined,
+  taxonomyId: string,
+): boolean {
+  if (!results) return false;
+  const row = buildResultById(results)[taxonomyId];
+  return !!row && typeof row === 'object' && (row as Record<string, unknown>).applies === false;
+}
+
 export function readNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   return null;
