@@ -221,6 +221,8 @@ function barFill(bar: WaterfallBar): string {
   return bar.type === 'positive' ? BENEFIT_BAR : COST_BAR;
 }
 
+export const WATERFALL_NOT_AVAILABLE = 'Cost and benefit waterfall: Not available.';
+
 function buildWaterfallBars(
   costs: CategoryAmount[],
   benefits: CategoryAmount[],
@@ -776,6 +778,12 @@ export function ResultsOverview({
   const omittedNote =
     omitted.length > 0 && displayBcr !== null ? excludesNote(omitted) : null;
 
+  // A stored null total or net benefit means nothing that applies was
+  // available; a waterfall built from the costs alone would read as measured.
+  const waterfallAvailable =
+    benefitTotal !== null &&
+    costTotal !== null &&
+    (hasExclusions || getValueAtPath(results, definition.netBenefitPath) !== null);
   const waterfallCosts = costs.filter((row) => !excluded.has(`cost:${row.key}`));
   const waterfallBenefits = benefits.filter(
     (row) => !excluded.has(`benefit:${row.key}`),
@@ -839,11 +847,15 @@ export function ResultsOverview({
         <p className="text-sm italic text-slate-600">{DELAY_OTHER_VIEW_NOTE}</p>
       )}
 
-      <CostBenefitWaterfall
-        costs={waterfallCosts}
-        benefits={waterfallBenefits}
-        netBenefit={displayNet}
-      />
+      {waterfallAvailable ? (
+        <CostBenefitWaterfall
+          costs={waterfallCosts}
+          benefits={waterfallBenefits}
+          netBenefit={displayNet}
+        />
+      ) : (
+        <p className="text-sm italic text-slate-600">{WATERFALL_NOT_AVAILABLE}</p>
+      )}
 
       <CategoryAccordions
         title="Costs"

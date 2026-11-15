@@ -6,6 +6,7 @@ import type { PerspectiveKey } from '@/components/results/perspective-toggle';
 import {
   PERSPECTIVE_CATEGORIES,
   ResultsOverview,
+  WATERFALL_NOT_AVAILABLE,
   adjustedRatio,
   readTotal,
 } from '@/components/results/results-overview';
@@ -128,5 +129,17 @@ describe('ResultsOverview with no applicable benefit available (Spec 10)', () =>
     expect(adjustedRatio(null, 4e9)).toBeNull();
     expect(adjustedRatio(1, 2)).toBe(0.5);
     expect(adjustedRatio(1, 0)).toBeNull();
+  });
+});
+
+describe('waterfall with a null benefit total (final review I1)', () => {
+  it('replaces the waterfall with a Not available line', () => {
+    const html = render('societal', NULL_BENEFITS);
+    expect(html).toContain(WATERFALL_NOT_AVAILABLE);
+    expect(html).not.toContain('Total Benefits');
+    expect(html).not.toContain('Net Benefit</text>');
+  });
+  it('still draws the waterfall for a stored result with numbers', () => {
+    expect(render('societal')).not.toContain(WATERFALL_NOT_AVAILABLE);
   });
 });
