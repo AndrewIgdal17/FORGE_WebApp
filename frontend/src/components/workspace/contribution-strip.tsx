@@ -12,11 +12,16 @@ export interface ContributionStripProps {
 }
 
 const GRID_COLS: Record<number, string> = {
+  1: 'grid-cols-1',
   2: 'grid-cols-2',
   3: 'grid-cols-3',
   4: 'grid-cols-4',
   5: 'grid-cols-5',
 };
+
+export function stripGridClass(figureCount: number): string {
+  return GRID_COLS[figureCount] ?? 'grid-cols-3';
+}
 
 function figureUnit(figure: StripFigure): string {
   return 'unit' in figure && figure.unit ? ` ${figure.unit}` : '';
@@ -87,7 +92,7 @@ export function ContributionStrip({
   const config = getStripConfig(subItemId);
   if (!config) return null;
 
-  const colsClass = GRID_COLS[config.figures.length] ?? 'grid-cols-3';
+  const colsClass = stripGridClass(config.figures.length);
 
   if (!results) {
     return (
