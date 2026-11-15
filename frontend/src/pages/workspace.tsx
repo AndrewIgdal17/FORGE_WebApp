@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LegacyBanner } from '@/components/results/legacy-banner';
-import { isLegacyScenario } from '@/lib/legacy';
+import { showLegacyBanner } from '@/lib/legacy';
 import type { ReactElement } from 'react';
 import type { MultiLineString } from 'geojson';
 import { toast } from 'sonner';
@@ -897,7 +897,7 @@ function WorkspaceBody(): ReactElement {
                     perspective={perspective}
                     onPerspectiveChange={setPerspective}
                   />
-                  {activeScenario && isLegacyScenario(activeScenario) ? <LegacyBanner /> : null}
+                  {showLegacyBanner(activeScenario, drawn) ? <LegacyBanner /> : null}
                   {subItemId ? (
                     <ResultsDispatcher
                       subItemId={subItemId}

@@ -10,3 +10,13 @@ export function isLegacyScenario(scenario: {
 }): boolean {
   return scenario.route == null && !(Array.isArray(scenario.segments) && scenario.segments.length > 0);
 }
+
+/** Show the banner for a legacy scenario unless a route is drawn on screen. A saved
+ * route that is being redrawn never shows it. */
+export function showLegacyBanner(
+  scenario: { route: Record<string, unknown> | null; segments: unknown[] | null } | null,
+  drawn: { route: unknown } | undefined,
+): boolean {
+  if (!scenario || !isLegacyScenario(scenario)) return false;
+  return drawn === undefined || drawn.route == null;
+}

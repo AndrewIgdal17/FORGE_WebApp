@@ -46,3 +46,15 @@ describe('legacy scenarios (Spec 12 item 5)', () => {
     expect(renderToStaticMarkup(createElement(LegacyBanner))).toContain('Draw its route to recalculate.');
   });
 });
+
+import { showLegacyBanner } from '@/lib/legacy';
+
+describe('legacy banner follows the drawing on screen (review minor 1)', () => {
+  it('a drawn route clears the banner before save; deleting it does not add one', () => {
+    expect(showLegacyBanner(scenario(null), undefined)).toBe(true);
+    expect(showLegacyBanner(scenario(null), { route: { type: 'MultiLineString' } })).toBe(false);
+    expect(showLegacyBanner(scenario(null), { route: null })).toBe(true);
+    expect(showLegacyBanner(scenario({ type: 'MultiLineString' }), { route: null })).toBe(false);
+    expect(showLegacyBanner(null, undefined)).toBe(false);
+  });
+});
