@@ -12,6 +12,7 @@ import {
   PERSPECTIVE_DEFINITIONS,
   type PerspectiveKey,
 } from '@/components/results/perspective-toggle';
+import { DelayComparisonCard } from '@/components/results/delay-comparison';
 import { TaxonomyCard } from '@/components/results/taxonomy-card';
 import {
   cardValues,
@@ -21,6 +22,7 @@ import {
   resolveResultById,
   type TaxonomyItemView,
 } from '@/components/results/taxonomy-view';
+import { DELAY_OTHER_VIEW_NOTE, DIRECT_DELAY_LABEL } from '@/lib/delay-comparison';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import { excludesNote } from '@/lib/results-utils';
 import { getValueAtPath } from '@/lib/path';
@@ -81,7 +83,7 @@ export const PERSPECTIVE_CATEGORIES: Record<
       { key: 'oandm', label: 'O&M', path: 'bcr.oandm_pv', waccIds: ['oandm'] },
       { key: 'insurance', label: 'Insurance', path: 'bcr.insurance_pv', waccIds: ['insurance'] },
       { key: 'row_rent', label: 'ROW Rent', path: 'bcr.row_rent_pv', waccIds: ['row_rent'] },
-      { key: 'delay', label: 'Base Delay', path: 'bcr.delay_cost_pv', waccIds: ['base_delay'] },
+      { key: 'delay', label: DIRECT_DELAY_LABEL, path: 'bcr.delay_cost_pv', waccIds: ['base_delay'] },
     ],
     benefits: [
       { key: 'capital_recovery', label: 'Capital Recovery', path: 'bcr.capital_recovery_pv', waccIds: ['capital_recovery'] },
@@ -812,6 +814,11 @@ export function ResultsOverview({
           </div>
         </CardContent>
       </Card>
+      {perspective === 'societal' ? (
+        <DelayComparisonCard results={results} />
+      ) : (
+        <p className="text-sm italic text-slate-600">{DELAY_OTHER_VIEW_NOTE}</p>
+      )}
 
       <CostBenefitWaterfall
         costs={waterfallCosts}
