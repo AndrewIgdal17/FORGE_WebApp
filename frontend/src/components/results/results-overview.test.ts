@@ -3,7 +3,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import type { PerspectiveKey } from '@/components/results/perspective-toggle';
-import { PERSPECTIVE_CATEGORIES, ResultsOverview } from '@/components/results/results-overview';
+import {
+  PERSPECTIVE_CATEGORIES,
+  ResultsOverview,
+  adjustedRatio,
+  readTotal,
+} from '@/components/results/results-overview';
 import { DELAY_OTHER_VIEW_NOTE, DIRECT_DELAY_LABEL } from '@/lib/delay-comparison';
 import { SUNZIA_DELAY2_BLOCK } from '@/lib/delay-comparison.fixtures';
 
@@ -75,5 +80,53 @@ describe('ResultsOverview delay card', () => {
   });
   it('utility cost row reads Direct delay cost', () => {
     expect(PERSPECTIVE_CATEGORIES.utility.costs.find((c) => c.key === 'delay')!.label).toBe(DIRECT_DELAY_LABEL);
+  });
+});
+
+const NULL_BENEFITS: Record<string, unknown> = {
+  summary: { total_benefits_pv: null, total_costs_pv: 4.8e9 },
+  bcr: {
+    bcr_societal: null,
+    net_benefit_pv: null,
+    bcr_ratepayer: null,
+    net_benefit_ratepayer_pv: null,
+    ratepayer_benefits_pv: null,
+    ratepayer_costs_pv: 6.4e8,
+    bcr_utility: 0.9854,
+    benefits_enabling_pv: 0,
+    benefits_remedial_pv: null,
+    displacement_avoided_benefit_pv: null,
+    omitted: {
+      bcr_societal: ['avoided_emissions_benefit', 'congestion_benefit'],
+      bcr_ratepayer: ['congestion_benefit'],
+    },
+  },
+};
+
+describe('ResultsOverview with no applicable benefit available (Spec 10)', () => {
+  it('null societal ratio reads Not available with no Excludes note', () => {
+    const html = render('societal', NULL_BENEFITS);
+    expect(html).toContain('Not available');
+    expect(html).not.toContain('0.000');
+    expect(html).not.toContain('Excludes:');
+  });
+  it('null ratepayer ratio reads Not available with no Excludes note', () => {
+    const html = render('ratepayer', NULL_BENEFITS);
+    expect(html).not.toContain('0.000');
+    expect(html).not.toContain('Excludes:');
+  });
+  it('stored results without a total key still render their ratio', () => {
+    expect(render('societal')).toContain('0.148');
+  });
+  it('a null total stays null; an absent total sums its categories (review focus 1)', () => {
+    const rows = [{ key: 'a', label: 'A', value: 5 }, { key: 'b', label: 'B', value: null }];
+    expect(readTotal(NULL_BENEFITS, 'summary.total_benefits_pv', rows)).toBeNull();
+    expect(readTotal({}, 'summary.total_benefits_pv', rows)).toBe(5);
+    expect(readTotal(NULL_BENEFITS, 'summary.total_costs_pv', rows)).toBe(4.8e9);
+  });
+  it('an adjusted ratio with null benefits is null (review focus 2)', () => {
+    expect(adjustedRatio(null, 4e9)).toBeNull();
+    expect(adjustedRatio(1, 2)).toBe(0.5);
+    expect(adjustedRatio(1, 0)).toBeNull();
   });
 });

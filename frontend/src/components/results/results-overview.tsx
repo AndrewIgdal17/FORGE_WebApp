@@ -563,6 +563,23 @@ function sumValues(rows: CategoryAmount[]): number {
   return rows.reduce((total, row) => (row.value === null ? total : total + row.value), 0);
 }
 
+/** The stored total, or the category sum for older results that lack the key.
+ * A stored null stays null: nothing that applies was available. */
+export function readTotal(
+  results: Record<string, unknown>,
+  path: string,
+  rows: CategoryAmount[],
+): number | null {
+  const value = getValueAtPath(results, path);
+  if (value === undefined) return sumValues(rows);
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+export function adjustedRatio(benefits: number | null, costs: number | null): number | null {
+  if (benefits === null || costs === null || !(costs > 0)) return null;
+  return benefits / costs;
+}
+
 function omittedIds(results: Record<string, unknown>, bcrPath: string): string[] {
   const key = bcrPath.slice(bcrPath.lastIndexOf('.') + 1);
   const bcr = results.bcr;
@@ -596,7 +613,7 @@ function CategoryAccordions({
   title: string;
   rows: CategoryAmount[];
   side: LedgerSide;
-  grandTotal: number;
+  grandTotal: number | null;
   taxonomyItems: TaxonomyItemView[];
   sides: Map<string, string>;
   resultById: Record<string, unknown>;
@@ -614,7 +631,11 @@ function CategoryAccordions({
         const isOpen = open.has(openKey);
         const isExcluded = excluded.has(excludeKey);
         const share =
-          row.value === null ? null : grandTotal !== 0 ? (row.value / grandTotal) * 100 : 0;
+          row.value === null || grandTotal === null
+            ? null
+            : grandTotal !== 0
+              ? (row.value / grandTotal) * 100
+              : 0;
         const matched = itemsForCategory(taxonomyItems, sides, side, row.key);
         const cards = [
           ...positiveItems(matched, resultById, true),
@@ -721,9 +742,8 @@ export function ResultsOverview({
   const visibleCosts = costs.filter((row) => hasLineItems('cost', row.key));
   const visibleBenefits = benefits.filter((row) => hasLineItems('benefit', row.key));
 
-  const costTotal = readNumber(results, TOTAL_PATHS[perspective].costs) ?? sumValues(costs);
-  const benefitTotal =
-    readNumber(results, TOTAL_PATHS[perspective].benefits) ?? sumValues(benefits);
+  const costTotal = readTotal(results, TOTAL_PATHS[perspective].costs, costs);
+  const benefitTotal = readTotal(results, TOTAL_PATHS[perspective].benefits, benefits);
 
   const excludedCostPV = sumValues(
     costs.filter((row) => excluded.has(`cost:${row.key}`)),
@@ -732,16 +752,13 @@ export function ResultsOverview({
     benefits.filter((row) => excluded.has(`benefit:${row.key}`)),
   );
   const hasExclusions = excluded.size > 0;
-  const adjustedCosts = costTotal - excludedCostPV;
-  const adjustedBenefits = benefitTotal - excludedBenefitPV;
-  const adjustedBcr =
-    adjustedCosts > 0 && Number.isFinite(adjustedBenefits)
-      ? adjustedBenefits / adjustedCosts
-      : null;
+  const adjustedCosts = costTotal === null ? null : costTotal - excludedCostPV;
+  const adjustedBenefits = benefitTotal === null ? null : benefitTotal - excludedBenefitPV;
+  const adjustedBcr = adjustedRatio(adjustedBenefits, adjustedCosts);
   const adjustedNet =
-    Number.isFinite(adjustedBenefits) && Number.isFinite(adjustedCosts)
-      ? adjustedBenefits - adjustedCosts
-      : null;
+    adjustedBenefits === null || adjustedCosts === null
+      ? null
+      : adjustedBenefits - adjustedCosts;
 
   const displayBcr = hasExclusions ? adjustedBcr : readNumber(results, definition.bcrPath);
   const displayNet = hasExclusions
@@ -756,7 +773,8 @@ export function ResultsOverview({
     ? `Excluding ${joinLabels(excludedLabels)}.`
     : null;
   const omitted = omittedIds(results, definition.bcrPath);
-  const omittedNote = omitted.length > 0 ? excludesNote(omitted) : null;
+  const omittedNote =
+    omitted.length > 0 && displayBcr !== null ? excludesNote(omitted) : null;
 
   const waterfallCosts = costs.filter((row) => !excluded.has(`cost:${row.key}`));
   const waterfallBenefits = benefits.filter(
