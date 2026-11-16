@@ -229,13 +229,19 @@ def test_unpriced_pjm_names_the_iso_not_the_zone():
     )
 
 
-def test_endpoint_sql_keeps_spp_and_ercot_out_of_the_partition():
+def test_endpoint_sql_assigns_spp_areas_inside_the_footprint():
     assert "loc_abbrev LIKE 'LRZ%'" in _ENDPOINT_SQL
     assert "loc_type = 'ZON'" in _ENDPOINT_SQL
-    assert "ORDER BY" in _ENDPOINT_SQL
     assert "LIMIT 1" in _ENDPOINT_SQL
-    assert "SPP" not in _ENDPOINT_SQL
     assert "ERCOT" not in _ENDPOINT_SQL
+    assert "z.rto_iso = 'SPP'" in _ENDPOINT_SQL
+    assert "z.loc_type = 'REG'" in _ENDPOINT_SQL
+    assert "z.name <> 'SPP_Region'" in _ENDPOINT_SQL
+    assert "b.iso_code = 'SPP'" in _ENDPOINT_SQL
+    assert "ST_Area(z.geom)" in _ENDPOINT_SQL
+    assert "CASE WHEN z.rto_iso = 'SPP' THEN 1 ELSE 0 END" in _ENDPOINT_SQL
+    assert _ENDPOINT_SQL.count("ST_Covers(b.geom, send_pt)") == 2
+    assert _ENDPOINT_SQL.count("ST_Covers(b.geom, recv_pt)") == 2
     assert FOOTPRINT_ISO == {
         "ISO-NE": "ISONE",
         "CAISO": "CAISO",

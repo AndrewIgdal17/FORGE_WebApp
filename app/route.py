@@ -163,8 +163,22 @@ send_part AS (
       OR (z.rto_iso = 'NYISO' AND z.loc_type = 'REG')
       OR (z.rto_iso = 'MISO' AND z.loc_type = 'REG' AND z.loc_abbrev LIKE 'LRZ%')
       OR (z.rto_iso = 'PJM' AND z.loc_type = 'ZON')
+      OR (
+        z.rto_iso = 'SPP'
+        AND z.loc_type = 'REG'
+        AND z.name <> 'SPP_Region'
+        AND EXISTS (
+          SELECT 1
+          FROM ref.iso_rto_boundaries b
+          WHERE b.iso_code = 'SPP'
+            AND ST_Covers(b.geom, send_pt)
+        )
+      )
     )
-  ORDER BY z.loc_abbrev
+  ORDER BY
+    CASE WHEN z.rto_iso = 'SPP' THEN 1 ELSE 0 END,
+    CASE WHEN z.rto_iso = 'SPP' THEN ST_Area(z.geom) END,
+    z.loc_abbrev
   LIMIT 1
 ),
 recv_part AS (
@@ -177,8 +191,22 @@ recv_part AS (
       OR (z.rto_iso = 'NYISO' AND z.loc_type = 'REG')
       OR (z.rto_iso = 'MISO' AND z.loc_type = 'REG' AND z.loc_abbrev LIKE 'LRZ%')
       OR (z.rto_iso = 'PJM' AND z.loc_type = 'ZON')
+      OR (
+        z.rto_iso = 'SPP'
+        AND z.loc_type = 'REG'
+        AND z.name <> 'SPP_Region'
+        AND EXISTS (
+          SELECT 1
+          FROM ref.iso_rto_boundaries b
+          WHERE b.iso_code = 'SPP'
+            AND ST_Covers(b.geom, recv_pt)
+        )
+      )
     )
-  ORDER BY z.loc_abbrev
+  ORDER BY
+    CASE WHEN z.rto_iso = 'SPP' THEN 1 ELSE 0 END,
+    CASE WHEN z.rto_iso = 'SPP' THEN ST_Area(z.geom) END,
+    z.loc_abbrev
   LIMIT 1
 ),
 send_foot AS (
