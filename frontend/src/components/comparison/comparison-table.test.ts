@@ -338,3 +338,36 @@ describe('reporting category comparison and CSV (Task 5)', () => {
     expect(csv).toContain('benefits_market_pv,not available,congestion_benefit');
   });
 });
+
+describe('comparison operating parts (Task 8)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const ac = scenario('ac', 'AC', {
+    bcr: {
+      oandm_pv: 100,
+      oandm_line_pv: 12_345.67,
+      oandm_converter_pv: 0,
+      insurance_converter_pv: 99,
+    },
+    costs: { insurance: { pv_total: 50 } },
+    taxonomy_results: [
+      { taxonomy_id: 'oandm_line', state: 'measured', value_pv: 12_345.67 },
+      { taxonomy_id: 'oandm_converter', state: 'does_not_apply', value_pv: null },
+      { taxonomy_id: 'insurance_converter', state: 'does_not_apply', value_pv: null },
+    ],
+  });
+
+  it('shows Does not apply on converter parts and Line O&M currency on AC', () => {
+    const keys = [
+      'oandm_line_pv',
+      'oandm_converter_pv',
+      'insurance_converter_pv',
+    ];
+    const html = renderRows([ac], keys);
+    expect(html).toContain('Does not apply');
+    expect(html.split('Does not apply').length - 1).toBe(2);
+    expect(html).toContain('$12,346');
+  });
+});

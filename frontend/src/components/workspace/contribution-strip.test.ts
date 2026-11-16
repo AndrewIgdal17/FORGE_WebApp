@@ -89,3 +89,21 @@ describe('cost strips and state (Spec 11)', () => {
     expect(displayFigure(figureByLabel('rights-of-way', 'Rent PV'), AEP_LIKE)).toBe('$2,142,409');
   });
 });
+
+describe('vegetation strip and oandm_line (Task 8)', () => {
+  const reconductoring = {
+    costs: {
+      oandm: { vegetation_annual: 1_200, vegetation_pv: 9_876 },
+    },
+    bcr: { oandm_pv: 9_876 },
+    taxonomy_results: [{ taxonomy_id: 'oandm_line', state: 'does_not_apply', value_pv: null }],
+  };
+
+  it('reads Does not apply on vegetation figures when line O&M does not apply', () => {
+    for (const label of ['Vegetation Annual', 'Vegetation PV']) {
+      expect(displayFigure(figureByLabel('vegetation-management', label), reconductoring)).toBe(
+        'Does not apply',
+      );
+    }
+  });
+});

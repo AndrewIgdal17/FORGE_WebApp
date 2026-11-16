@@ -370,8 +370,20 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   'vegetation-management': {
     title: 'Vegetation management contributes to O&M',
     figures: [
-      { label: 'Vegetation Annual', source: 'path', path: 'costs.oandm.vegetation_annual', format: 'currency' },
-      { label: 'Vegetation PV', source: 'path', path: 'costs.oandm.vegetation_pv', format: 'currency' },
+      {
+        label: 'Vegetation Annual',
+        source: 'path',
+        path: 'costs.oandm.vegetation_annual',
+        format: 'currency',
+        appliesId: 'oandm_line',
+      },
+      {
+        label: 'Vegetation PV',
+        source: 'path',
+        path: 'costs.oandm.vegetation_pv',
+        format: 'currency',
+        appliesId: 'oandm_line',
+      },
       { label: 'Total O&M PV', source: 'path', path: 'bcr.oandm_pv', format: 'currency' },
     ],
     resultsView: 'r-overview',

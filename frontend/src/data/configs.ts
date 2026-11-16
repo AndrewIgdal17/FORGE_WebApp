@@ -2,6 +2,7 @@ import { DELAY_ROWS, DIRECT_DELAY_HELP } from '@/lib/delay-comparison';
 import {
   BENEFIT_CATEGORY_LABELS,
   CATEGORY_LABELS,
+  OPERATING_PART_LABELS,
   REPORTING_PATHS,
   type ReportingKey,
 } from '@/lib/results-utils';
@@ -191,12 +192,6 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         appliesId: 'env_mitigation',
       },
       {
-        key: 'insurance_pv',
-        label: 'Insurance Cost',
-        path: 'costs.insurance.pv_total',
-        format: 'currency',
-      },
-      {
         key: 'acquisition_pv',
         label: 'Acquisition Cost',
         path: 'costs.row.acquisition_pv',
@@ -227,6 +222,51 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         label: 'Total System Cost',
         path: 'summary.total_costs_pv',
         format: 'currency',
+      },
+    ],
+  },
+  {
+    group: 'Operating Costs (PV)',
+    metrics: [
+      {
+        key: 'oandm_pv',
+        label: 'O&M',
+        path: 'bcr.oandm_pv',
+        format: 'currency',
+      },
+      {
+        key: 'oandm_line_pv',
+        label: OPERATING_PART_LABELS.oandm_line,
+        path: 'bcr.oandm_line_pv',
+        format: 'currency',
+        appliesId: 'oandm_line',
+      },
+      {
+        key: 'oandm_converter_pv',
+        label: OPERATING_PART_LABELS.oandm_converter,
+        path: 'bcr.oandm_converter_pv',
+        format: 'currency',
+        appliesId: 'oandm_converter',
+      },
+      {
+        key: 'insurance_pv',
+        label: 'Insurance',
+        path: 'costs.insurance.pv_total',
+        format: 'currency',
+      },
+      {
+        key: 'insurance_line_pv',
+        label: OPERATING_PART_LABELS.insurance_line,
+        path: 'bcr.insurance_line_pv',
+        format: 'currency',
+        appliesId: 'insurance_line',
+      },
+      {
+        key: 'insurance_converter_pv',
+        label: OPERATING_PART_LABELS.insurance_converter,
+        path: 'bcr.insurance_converter_pv',
+        format: 'currency',
+        appliesId: 'insurance_converter',
       },
     ],
   },
@@ -505,6 +545,7 @@ export const COMPARISON_GROUP_SUPERGROUP: Record<string, ComparisonSupergroup> =
     'BCR — Societal': 'bcr',
     'BCR — Firm': 'bcr',
     'Costs (PV)': 'costs',
+    'Operating Costs (PV)': 'costs',
     'Cost Categories (PV)': 'costs',
     Benefits: 'benefits',
     'Risk Costs (PV)': 'costs',

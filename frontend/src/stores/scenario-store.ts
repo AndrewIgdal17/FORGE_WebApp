@@ -152,7 +152,27 @@ const RESULTS_EXPORT_FIELDS: Array<{
   { key: 'env_mitigation_pv', path: 'costs.environmental.total_pv', appliesId: 'env_mitigation' },
   { key: 'total_capital_pv', path: 'summary.total_capital_pv' },
   { key: 'insurance_pv', path: 'costs.insurance.pv_total' },
-  { key: 'oandm_pv', path: 'costs.oandm.total_pv' },
+  { key: 'oandm_pv', path: 'bcr.oandm_pv' },
+  {
+    key: 'oandm_line_pv',
+    path: 'bcr.oandm_line_pv',
+    appliesId: 'oandm_line',
+  },
+  {
+    key: 'oandm_converter_pv',
+    path: 'bcr.oandm_converter_pv',
+    appliesId: 'oandm_converter',
+  },
+  {
+    key: 'insurance_line_pv',
+    path: 'bcr.insurance_line_pv',
+    appliesId: 'insurance_line',
+  },
+  {
+    key: 'insurance_converter_pv',
+    path: 'bcr.insurance_converter_pv',
+    appliesId: 'insurance_converter',
+  },
   { key: 'total_operational_pv', path: 'summary.total_operational_pv' },
   { key: 'wildfire_pv', path: 'costs.wildfire.pv_cost' },
   { key: 'outage_pv', path: 'costs.outage.pv_cost' },

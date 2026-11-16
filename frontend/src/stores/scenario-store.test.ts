@@ -14,7 +14,13 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import { scenarioMapRoute } from '@/lib/route-geometry';
-import { asRoute, routePayload, useScenarioStore } from './scenario-store';
+import {
+  asRoute,
+  exportAsCsv,
+  routePayload,
+  useScenarioStore,
+  type Scenario,
+} from './scenario-store';
 
 const LINE = {
   type: 'MultiLineString' as const,
@@ -148,5 +154,74 @@ describe('loadScenarios', () => {
     const scenario = useScenarioStore.getState().scenarios[0];
     expect(scenario.route).toBe(LINE);
     expect(scenarioMapRoute(scenario)).toBe(LINE);
+  });
+});
+
+function acScenario(results: Record<string, unknown>): Scenario {
+  return {
+    id: 'ac',
+    name: 'AC',
+    source: 'user',
+    defaults_id: 'defaults',
+    changes: {},
+    results,
+    calculator: null,
+    inputs_id: null,
+    computed_at: null,
+    calc_error: null,
+    revision: 1,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    user_id: 'user',
+    route: null,
+    route_geojson: null,
+    segments: null,
+  };
+}
+
+async function captureCsv(row: Scenario): Promise<string> {
+  const blobs: Blob[] = [];
+  vi.stubGlobal('document', {
+    createElement: () => ({
+      href: '',
+      download: '',
+      click() {},
+    }),
+    body: {
+      appendChild() {},
+      removeChild() {},
+    },
+  });
+  vi.stubGlobal('URL', {
+    createObjectURL(blob: Blob) {
+      blobs.push(blob);
+      return 'blob:csv';
+    },
+    revokeObjectURL() {},
+  });
+  exportAsCsv(row, {});
+  return blobs[0]?.text() ?? '';
+}
+
+describe('CSV operating parts (Task 8)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('exports converter O&M as does not apply and a numeric line O&M on AC', async () => {
+    const csv = await captureCsv(
+      acScenario({
+        bcr: {
+          oandm_line_pv: 12_345.67,
+          oandm_converter_pv: 0,
+        },
+        taxonomy_results: [
+          { taxonomy_id: 'oandm_line', state: 'measured', value_pv: 12_345.67 },
+          { taxonomy_id: 'oandm_converter', state: 'does_not_apply', value_pv: null },
+        ],
+      }),
+    );
+    expect(csv).toContain('oandm_converter_pv,does not apply,');
+    expect(csv).toContain('oandm_line_pv,12345.67,');
   });
 });
