@@ -90,6 +90,91 @@ describe('cost strips and state (Spec 11)', () => {
   });
 });
 
+const LINE_LOSS_NET = {
+  costs: {
+    line_loss: {
+      line_loss_mwh_yr: -120,
+      line_loss_mwh_yr_new: 80,
+      line_loss_mwh_yr_old: 200,
+      converter_loss_mwh_yr: 0,
+      converter_loss_mwh_yr_new: 50,
+      converter_loss_mwh_yr_old: 50,
+    },
+  },
+};
+
+const LINE_LOSS_LEGACY = {
+  costs: {
+    line_loss: {
+      line_loss_mwh_yr: 200,
+      converter_loss_mwh_yr: 10,
+    },
+  },
+};
+
+describe('net line and converter loss MWh (Task 5)', () => {
+  it('labels net conductor and converter figures and shows savings for negative net', () => {
+    const conductor = figureByLabel(
+      'conductor-details',
+      'Net change in conductor losses (MWh/yr)',
+    );
+    const converter = figureByLabel(
+      'converter-details',
+      'Net change in converter losses (MWh/yr)',
+    );
+    expect(displayFigure(conductor, LINE_LOSS_NET)).toBe('120 MWh/yr saved');
+    expect(displayFigure(converter, LINE_LOSS_NET)).toBe('0');
+  });
+
+  it('shows new and old conductor and converter MWh figures', () => {
+    expect(
+      displayFigure(
+        figureByLabel('conductor-details', 'Conductor losses, new line (MWh/yr)'),
+        LINE_LOSS_NET,
+      ),
+    ).toBe('80');
+    expect(
+      displayFigure(
+        figureByLabel('conductor-details', 'Conductor losses, replaced line (MWh/yr)'),
+        LINE_LOSS_NET,
+      ),
+    ).toBe('200');
+    expect(
+      displayFigure(
+        figureByLabel('converter-details', 'Converter losses, new line (MWh/yr)'),
+        LINE_LOSS_NET,
+      ),
+    ).toBe('50');
+    expect(
+      displayFigure(
+        figureByLabel('converter-details', 'Converter losses, replaced line (MWh/yr)'),
+        LINE_LOSS_NET,
+      ),
+    ).toBe('50');
+  });
+
+  it('reads Not available when new/old keys are missing on a stored result', () => {
+    for (const label of [
+      'Conductor losses, new line (MWh/yr)',
+      'Conductor losses, replaced line (MWh/yr)',
+    ]) {
+      expect(
+        displayFigure(figureByLabel('conductor-details', label), LINE_LOSS_LEGACY),
+        label,
+      ).toBe('Not available');
+    }
+    for (const label of [
+      'Converter losses, new line (MWh/yr)',
+      'Converter losses, replaced line (MWh/yr)',
+    ]) {
+      expect(
+        displayFigure(figureByLabel('converter-details', label), LINE_LOSS_LEGACY),
+        label,
+      ).toBe('Not available');
+    }
+  });
+});
+
 describe('vegetation strip and oandm_line (Task 8)', () => {
   const reconductoring = {
     costs: {

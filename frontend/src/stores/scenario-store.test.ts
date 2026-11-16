@@ -203,6 +203,27 @@ async function captureCsv(row: Scenario): Promise<string> {
   return blobs[0]?.text() ?? '';
 }
 
+describe('CSV line loss omitted key (Task 5)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('line_loss_pv omitted column reads energy_losses_pv, not line_loss_benefit_pv', async () => {
+    const csv = await captureCsv(
+      acScenario({
+        costs: { line_loss: { total_pv: 1_234 } },
+        bcr: {
+          omitted: {
+            energy_losses_pv: ['line_loss_conductor', 'line_loss_converter'],
+          },
+        },
+      }),
+    );
+    expect(csv).toContain('line_loss_pv,1234,line_loss_conductor;line_loss_converter\n');
+    expect(csv).not.toContain('line_loss_benefit_pv');
+  });
+});
+
 describe('CSV operating parts (Task 8)', () => {
   beforeEach(() => {
     vi.unstubAllGlobals();

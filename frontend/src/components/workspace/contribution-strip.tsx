@@ -2,7 +2,13 @@ import type { ReactElement } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { getStripConfig, readFigureValue, type StripFigure } from '@/data/strip-config';
 import { useNavigation } from '@/hooks/use-navigation';
-import { formatCurrency, formatNumber, formatSignedCurrencyValue, formatSignedNumberValue } from '@/lib/format';
+import {
+  formatCurrency,
+  formatNetMwhYrChange,
+  formatNumber,
+  formatSignedCurrencyValue,
+  formatSignedNumberValue,
+} from '@/lib/format';
 import { DOES_NOT_APPLY, itemDoesNotApply } from '@/lib/results-utils';
 import { cn } from '@/lib/utils';
 
@@ -65,6 +71,8 @@ function formatFigure(value: number | null, figure: StripFigure): string {
       return formatNumber(value * 100, 1) + '%' + unit;
     case 'number':
       return formatNumber(value, figureDecimals(figure)) + unit;
+    case 'netMwh':
+      return formatNetMwhYrChange(value);
   }
 }
 

@@ -54,6 +54,16 @@ export function formatSignedCurrencyValue(
   return dollars;
 }
 
+/** Net annual loss MWh: negative net is a saving, zero is no change. */
+export function formatNetMwhYrChange(value: number | null | undefined): string {
+  if (value === null || value === undefined) return 'Not available';
+  const num = Number(value);
+  if (Number.isNaN(num)) return String(value);
+  if (num < 0) return `${formatNumber(Math.abs(num), 0)} MWh/yr saved`;
+  if (num === 0) return '0';
+  return formatNumber(num, 0);
+}
+
 export function formatSignedNumberValue(
   value: number | null | undefined,
   decimals = 0,

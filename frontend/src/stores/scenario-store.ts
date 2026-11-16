@@ -243,7 +243,8 @@ const OMITTED_KEY_BY_EXPORT: Record<string, string> = {
   total_operational_pv: 'operational_costs_pv',
   total_risk_pv: 'external_risk_costs_pv',
   total_energy_emissions_pv: 'energy_emissions_costs_pv',
-  line_loss_pv: 'line_loss_benefit_pv',
+  // line_loss_benefit_pv remains a constant 0 in the calculator; loss total omitted key is energy_losses_pv.
+  line_loss_pv: 'energy_losses_pv',
   capital_costs_pv: 'capital_costs_pv',
   delay_period_costs_pv: 'delay_period_costs_pv',
   operating_costs_pv: 'operating_costs_pv',

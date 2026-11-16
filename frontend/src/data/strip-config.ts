@@ -6,7 +6,7 @@ interface PathFigure {
   label: string;
   source: 'path';
   path: string;
-  format: 'currency' | 'number' | 'percent' | 'ratio';
+  format: 'currency' | 'number' | 'percent' | 'ratio' | 'netMwh';
   colorByThreshold?: boolean;
   decimals?: number;
   unit?: string;
@@ -149,9 +149,21 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
       },
       { label: 'Conductor Loss PV', source: 'path', path: 'bcr.conductor_loss_pv', format: 'currency' },
       {
-        label: 'Conductor Losses (MWh/yr)',
+        label: 'Net change in conductor losses (MWh/yr)',
         source: 'path',
         path: 'costs.line_loss.line_loss_mwh_yr',
+        format: 'netMwh',
+      },
+      {
+        label: 'Conductor losses, new line (MWh/yr)',
+        source: 'path',
+        path: 'costs.line_loss.line_loss_mwh_yr_new',
+        format: 'number',
+      },
+      {
+        label: 'Conductor losses, replaced line (MWh/yr)',
+        source: 'path',
+        path: 'costs.line_loss.line_loss_mwh_yr_old',
         format: 'number',
       },
     ],
@@ -169,9 +181,21 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
       },
       { label: 'Converter Loss PV', source: 'path', path: 'bcr.converter_loss_pv', format: 'currency', appliesId: 'line_loss_converter' },
       {
-        label: 'Converter Losses (MWh/yr)',
+        label: 'Net change in converter losses (MWh/yr)',
         source: 'path',
         path: 'costs.line_loss.converter_loss_mwh_yr',
+        format: 'netMwh',
+      },
+      {
+        label: 'Converter losses, new line (MWh/yr)',
+        source: 'path',
+        path: 'costs.line_loss.converter_loss_mwh_yr_new',
+        format: 'number',
+      },
+      {
+        label: 'Converter losses, replaced line (MWh/yr)',
+        source: 'path',
+        path: 'costs.line_loss.converter_loss_mwh_yr_old',
         format: 'number',
       },
     ],
