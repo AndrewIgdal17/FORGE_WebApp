@@ -37,6 +37,25 @@ _HOURS = 8760
 _ENERGY_SPAN = Decimal("0.02")
 _IDENTITY_SPAN = Decimal("0.01")
 _UTC = UTC
+_SPP_LOAD_GAP = datetime(2025, 1, 23, 1, tzinfo=_UTC)
+_SPP_LOAD_GAP_AREAS = frozenset(
+    {
+        "CSWS",
+        "EDE",
+        "GRDA",
+        "INDN",
+        "KACY",
+        "KCPL",
+        "LES",
+        "MPS",
+        "OKGE",
+        "SECI",
+        "SPRM",
+        "SPS",
+        "WFEC",
+        "WR",
+    }
+)
 _EST = timezone(timedelta(hours=-5))
 _EDT = timezone(timedelta(hours=-4))
 _EASTERN = ZoneInfo("America/New_York")
@@ -45,6 +64,7 @@ _ISO_FROM_DIR = {
     "ISO-NE": "ISONE",
     "NYISO": "NYISO",
     "MISO": "MISO",
+    "SPP": "SPP",
 }
 _BARE_SHA = r"(?:[-*]\s*)?(?:\*\*)?SHA-256:(?:\*\*)?\s*[0-9A-Fa-f]{64}"
 _DATE_TEXT = re.compile(r"\d{1,2}/\d{1,2}/\d{4}(?:\s.*)?|\d{4}-\d{2}-\d{2}(?:[T\s].*)?|\d+(?:\.0+)?")
@@ -128,17 +148,34 @@ def expected_hours(iso: str) -> list[datetime]:
 
     ISO-NE, NYISO, and MISO share the Eastern window, which runs from
     2025-01-01 05:00 UTC through 2026-01-01 04:00 UTC. CAISO uses the Pacific
-    window, from 2025-01-01 08:00 UTC through 2026-01-01 07:00 UTC.
+    window, from 2025-01-01 08:00 UTC through 2026-01-01 07:00 UTC. SPP uses
+    the Central window, from 2025-01-01 06:00 UTC through 2026-01-01 05:00 UTC.
     """
 
     if iso == "CAISO":
         start_hour = 8
+    elif iso == "SPP":
+        start_hour = 6
     elif iso in {"ISONE", "ISO-NE", "NYISO", "MISO"}:
         start_hour = 5
     else:
         raise ArchiveRejected(iso, iso, [])
     start = datetime(2025, 1, 1, start_hour, tzinfo=_UTC)
     return [start + timedelta(hours=offset) for offset in range(_HOURS)]
+
+
+def _hours_complete(iso: str, location: str, found: list[datetime]) -> bool:
+    expected = set(expected_hours(iso))
+    got = set(found)
+    if len(found) != len(got):
+        return False
+    if got == expected:
+        return True
+    return (
+        iso == "SPP"
+        and location in _SPP_LOAD_GAP_AREAS
+        and got == expected - {_SPP_LOAD_GAP}
+    )
 
 
 def load_zones(path: Path | str) -> list[Zone]:
@@ -161,7 +198,7 @@ def load_zones(path: Path | str) -> list[Zone]:
 
 
 def _required_load_keys(zones: Sequence[Zone]) -> tuple[tuple[str, str], ...]:
-    """Non-null load locations on the CAISO, ISONE, NYISO, and MISO rows."""
+    """Non-null load locations on the CAISO, ISONE, NYISO, MISO, and SPP rows."""
 
     allowed = set(_ISO_FROM_DIR.values())
     keys: list[tuple[str, str]] = []
@@ -178,7 +215,7 @@ def _required_load_keys(zones: Sequence[Zone]) -> tuple[tuple[str, str], ...]:
 
 
 def _required_price_keys(zones: Sequence[Zone]) -> tuple[tuple[str, str], ...]:
-    """Non-null price locations on the CAISO, ISONE, NYISO, and MISO rows."""
+    """Non-null price locations on the CAISO, ISONE, NYISO, MISO, and SPP rows."""
 
     allowed = set(_ISO_FROM_DIR.values())
     keys: list[tuple[str, str]] = []
@@ -208,7 +245,7 @@ def gate_hours(
     for (iso, location), found in grouped.items():
         expected = set(expected_hours(iso))
         got = set(found)
-        if len(found) == _HOURS and got == expected:
+        if _hours_complete(iso, location, found):
             continue
         hours = [item.isoformat() for item in sorted(expected.symmetric_difference(got))]
         if len(found) != len(got):
@@ -367,6 +404,8 @@ def read_prices(root: Path | str, zones: Sequence[Zone]) -> list[PriceRow]:
             rows.extend(_isone_prices(raw, keep))
         elif iso == "NYISO":
             rows.extend(_nyiso_prices(raw, keep))
+        elif iso == "SPP":
+            rows.extend(_spp_prices(raw, keep))
         else:
             rows.extend(_miso_prices(raw, keep))
     return rows
@@ -386,6 +425,8 @@ def read_loads(root: Path | str, zones: Sequence[Zone]) -> list[LoadRow]:
             rows.extend(_isone_loads(raw, keep))
         elif iso == "NYISO":
             rows.extend(_nyiso_loads(raw, keep))
+        elif iso == "SPP":
+            rows.extend(_spp_loads(raw, keep))
         else:
             rows.extend(_miso_loads(raw, keep))
     return rows
@@ -395,9 +436,10 @@ def replace_archive(data_root: Path | str, zones_path: Path | str) -> None:
     """Replace the archive after every gate has passed.
 
     The database connection is opened only after the gates. Every non-null
-    load location on the CAISO, ISONE, NYISO, and MISO rows must already be
-    a full 8,760-hour set, including a series such as LRZ3_5 that belongs
-    only to unpriced zones. One transaction deletes the six tables and
+    load location on the CAISO, ISONE, NYISO, MISO, and SPP rows must already
+    be a full 8,760-hour set, including a series such as LRZ3_5 that belongs
+    only to unpriced zones. The 14 SPP load areas may omit 2025-01-23 01:00 UTC
+    only. One transaction deletes the six tables and
     inserts the replacement. An exception rolls that transaction back.
     """
 
@@ -1025,6 +1067,91 @@ def _stamp_parts(stamp: str) -> tuple[date, int, int]:
         )
     except ValueError as exc:
         raise ArchiveRejected(stamp, "NYISO", []) from exc
+
+
+def _gmt_hour_start(text: str) -> datetime | None:
+    cleaned = text.strip()
+    if cleaned == "":
+        return None
+    for fmt in ("%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M"):
+        try:
+            ending = datetime.strptime(cleaned, fmt).replace(tzinfo=_UTC)
+        except ValueError:
+            continue
+        return ending - timedelta(hours=1)
+    return None
+
+
+def _spp_prices(raw: Path, keep: set[str]) -> list[PriceRow]:
+    rows: list[PriceRow] = []
+    for path in _files(raw):
+        text = path.read_text(encoding="utf-8-sig")
+        rows.extend(_consume_spp_price(text, keep))
+    return rows
+
+
+def _consume_spp_price(text: str, keep: set[str]) -> list[PriceRow]:
+    reader = csv.DictReader(text.splitlines())
+    if reader.fieldnames is None:
+        return []
+    fields = {name.strip(): name for name in reader.fieldnames}
+    needed = ("GMTIntervalEnd", "Settlement Location", "LMP", "MLC", "MCC", "MEC")
+    if any(name not in fields for name in needed):
+        return []
+    rows: list[PriceRow] = []
+    for record in reader:
+        location = record[fields["Settlement Location"]].strip()
+        if location not in keep:
+            continue
+        hour = _gmt_hour_start(record[fields["GMTIntervalEnd"]])
+        if hour is None:
+            continue
+        rows.append(
+            PriceRow(
+                "SPP",
+                location,
+                hour,
+                _money(record[fields["LMP"]]),
+                _money(record[fields["MEC"]]),
+                _money(record[fields["MCC"]]),
+                _money(record[fields["MLC"]]),
+                False,
+            )
+        )
+    return rows
+
+
+def _spp_loads(raw: Path, keep: set[str]) -> list[LoadRow]:
+    rows: list[LoadRow] = []
+    for path in _files(raw):
+        if path.name != "DAILY_HOURLY_LOAD-2025.csv":
+            continue
+        text = path.read_text(encoding="utf-8-sig")
+        rows.extend(_consume_spp_load(text, keep))
+    return rows
+
+
+def _consume_spp_load(text: str, keep: set[str]) -> list[LoadRow]:
+    reader = csv.DictReader(text.splitlines())
+    if reader.fieldnames is None:
+        return []
+    fields = {name.strip(): name for name in reader.fieldnames}
+    if "MarketHour" not in fields:
+        return []
+    rows: list[LoadRow] = []
+    for record in reader:
+        hour = _gmt_hour_start(record[fields["MarketHour"]])
+        if hour is None:
+            continue
+        for area in keep:
+            key = fields.get(area)
+            if key is None:
+                continue
+            cell = record[key].strip()
+            if cell == "":
+                continue
+            rows.append(LoadRow("SPP", area, hour, _money(cell)))
+    return rows
 
 
 def _miso_prices(raw: Path, keep: set[str]) -> list[PriceRow]:

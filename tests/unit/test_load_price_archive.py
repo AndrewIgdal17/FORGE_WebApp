@@ -605,3 +605,140 @@ def test_missing_price_series_is_named_by_hour_gate():
     with pytest.raises(loader.ArchiveRejected) as caught:
         loader.gate_hours([], required)
     assert caught.value.location
+
+
+def test_spp_expected_hours_are_the_central_window():
+    loader = _loader()
+    hours = loader.expected_hours("SPP")
+    assert len(hours) == 8760
+    assert len(set(hours)) == 8760
+    assert hours[0] == datetime(2025, 1, 1, 6, tzinfo=UTC)
+    assert hours[-1] == datetime(2026, 1, 1, 5, tzinfo=UTC)
+    assert loader.expected_hours("CAISO")[0] == datetime(2025, 1, 1, 8, tzinfo=UTC)
+    assert loader.expected_hours("MISO")[0] == datetime(2025, 1, 1, 5, tzinfo=UTC)
+
+
+def test_spp_settlement_location_uses_published_mec(tmp_path):
+    loader = _loader()
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "DA-LMP-SL-202506150100.csv").write_text(
+        "Interval,GMTIntervalEnd,Settlement Location,Pnode,LMP,MLC,MCC,MEC\n"
+        "06/15/2025 01:00:00,06/15/2025 06:00:00,OKGE_OKGE,OKGE_LA,12.8450,-0.2079,-0.7031,13.7560\n"
+        "06/15/2025 01:00:00,06/15/2025 06:00:00,WR_WR,WR_LA,8.0262,-0.6665,-5.0633,13.7560\n"
+        "06/15/2025 01:00:00,06/15/2025 06:00:00,AEPM_CSWS,CSWS_LA,18.9322,0.1620,5.0143,13.7559\n"
+        "06/15/2025 01:00:00,06/15/2025 06:00:00,WAUE_UGPM,WAUE_UGPM_LA,11.3786,0.3356,-2.7129,13.7559\n"
+        "06/15/2025 01:00:00,06/15/2025 06:00:00,SPPNORTH_HUB,SPPNORTH_H,20,0,0,20\n",
+        encoding="utf-8",
+    )
+    (raw / "spp_da_lmp_hourly_hub_2025.csv").write_text(
+        "Time,Interval Start,Location,LMP,Energy,Congestion,Loss\n"
+        "2025-01-01 00:00:00-06:00,2025-01-01 00:00:00-06:00,SPPNORTH_HUB,1,1,0,0\n",
+        encoding="utf-8",
+    )
+    keep = {"OKGE_OKGE", "WR_WR", "AEPM_CSWS", "WAUE_UGPM"}
+    rows = loader._spp_prices(raw, keep)
+    by_location = {row.price_location: row for row in rows}
+    assert set(by_location) == keep
+    okge = by_location["OKGE_OKGE"]
+    assert okge.iso == "SPP"
+    assert okge.energy_derived is False
+    assert okge.hour_utc == datetime(2025, 6, 15, 5, tzinfo=UTC)
+    assert okge.lmp == Decimal("12.8450")
+    assert okge.energy == Decimal("13.7560")
+    assert okge.congestion == Decimal("-0.7031")
+    assert okge.loss == Decimal("-0.2079")
+    assert abs(okge.lmp - (okge.energy + okge.congestion + okge.loss)) <= Decimal("0.01")
+    loader.gate_identity(rows)
+    loader.gate_equal_energy(rows)
+
+
+def test_spp_fixture_passes_identity_and_8760():
+    loader = _loader()
+    hours = loader.expected_hours("SPP")
+    rows = []
+    for location in ("OKGE_OKGE", "WR_WR"):
+        for hour in hours:
+            rows.append(
+                loader.PriceRow(
+                    "SPP",
+                    location,
+                    hour,
+                    Decimal("30.00"),
+                    Decimal("28.00"),
+                    Decimal("1.50"),
+                    Decimal("0.50"),
+                    False,
+                )
+            )
+    loader.gate_hours(rows, (("SPP", "OKGE_OKGE"), ("SPP", "WR_WR")))
+    loader.gate_identity(rows)
+    loader.gate_equal_energy(rows)
+    assert all(row.energy_derived is False for row in rows)
+
+
+def test_spp_blank_load_cell_is_omitted(tmp_path):
+    loader = _loader()
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "DAILY_HOURLY_LOAD-2025.csv").write_text(
+        "MarketHour, CSWS, OKGE, WR\n"
+        "01/01/2025 07:00:00,4944.996,2100.5,1800\n"
+        "01/23/2025 02:00:00,, ,171.377\n",
+        encoding="utf-8",
+    )
+    rows = loader._spp_loads(raw, {"CSWS", "OKGE", "WR"})
+    assert rows
+    assert all(row.load_mw != Decimal(0) for row in rows)
+    present = {(row.load_location, row.hour_utc) for row in rows}
+    start = datetime(2025, 1, 1, 6, tzinfo=UTC)
+    blank = datetime(2025, 1, 23, 1, tzinfo=UTC)
+    assert ("CSWS", start) in present
+    assert ("OKGE", start) in present
+    assert ("WR", start) in present
+    assert ("CSWS", blank) not in present
+    assert ("OKGE", blank) not in present
+    assert ("WR", blank) in present
+    assert next(row for row in rows if row.load_location == "WR" and row.hour_utc == blank).load_mw == Decimal("171.377")
+
+
+def test_spp_load_gate_allows_only_the_named_blank_hour():
+    loader = _loader()
+    hours = loader.expected_hours("SPP")
+    gap = datetime(2025, 1, 23, 1, tzinfo=UTC)
+    assert gap == loader._SPP_LOAD_GAP
+    okge = [
+        loader.LoadRow("SPP", "OKGE", hour, Decimal("1"))
+        for hour in hours
+        if hour != gap
+    ]
+    loader.gate_hours(okge, (("SPP", "OKGE"),))
+    other = next(hour for hour in hours if hour != gap)
+    short = [row for row in okge if row.hour_utc != other]
+    with pytest.raises(loader.ArchiveRejected) as rejected:
+        loader.gate_hours(short, (("SPP", "OKGE"),))
+    assert gap.isoformat() in rejected.value.hours
+    assert other.isoformat() in rejected.value.hours
+    nppd = [
+        loader.LoadRow("SPP", "NPPD", hour, Decimal("1"))
+        for hour in hours
+        if hour != gap
+    ]
+    with pytest.raises(loader.ArchiveRejected):
+        loader.gate_hours(nppd, (("SPP", "NPPD"),))
+    prices = [
+        loader.PriceRow(
+            "SPP",
+            "OKGE_OKGE",
+            hour,
+            Decimal("1"),
+            Decimal("1"),
+            Decimal("0"),
+            Decimal("0"),
+            False,
+        )
+        for hour in hours
+        if hour != gap
+    ]
+    with pytest.raises(loader.ArchiveRejected):
+        loader.gate_hours(prices, (("SPP", "OKGE_OKGE"),))
