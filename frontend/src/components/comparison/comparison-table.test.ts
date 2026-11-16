@@ -371,3 +371,23 @@ describe('comparison operating parts (Task 8)', () => {
     expect(html).toContain('$12,346');
   });
 });
+
+describe('comparison outage redispatch (pre-v6 tidy-up)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('reads Does not apply on a dedicated line', () => {
+    const dedicated = scenario('dedicated', 'AC', {
+      bcr: { outage_load_shed_pv: 12_000 },
+      costs: { outage: { pv_load_shed: 12_000, pv_redispatch: null, cost_redispatch: null, load_shed_fraction: 0.05 } },
+      taxonomy_results: [
+        { taxonomy_id: 'outage_load_shed', state: 'measured', value_pv: 12_000 },
+        { taxonomy_id: 'outage_redispatch', state: 'does_not_apply', value_pv: null },
+      ],
+    });
+    const html = renderRows([dedicated], ['outage_redispatch_pv', 'outage_redispatch_per_event']);
+    expect(html.split('Does not apply').length - 1).toBe(2);
+    expect(renderRows([dedicated], ['outage_rho'])).toContain('0.05');
+  });
+});

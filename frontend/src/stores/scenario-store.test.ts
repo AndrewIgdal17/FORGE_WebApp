@@ -244,6 +244,22 @@ describe('CSV outage split (Spec 18)', () => {
     expect(csv).toContain('outage_load_shed_pv,12000,');
     expect(csv).toContain('outage_redispatch_pv,not available,');
   });
+
+  it('exports redispatch as does not apply on a dedicated line', async () => {
+    const csv = await captureCsv(
+      acScenario({
+        bcr: { outage_load_shed_pv: 12_000, outage_redispatch_pv: null },
+        costs: {
+          outage: { pv_load_shed: 12_000, pv_redispatch: null, pv_cost: 12_000 },
+        },
+        taxonomy_results: [
+          { taxonomy_id: 'outage_load_shed', state: 'measured', value_pv: 12_000 },
+          { taxonomy_id: 'outage_redispatch', state: 'does_not_apply', value_pv: null },
+        ],
+      }),
+    );
+    expect(csv).toContain('outage_redispatch_pv,does not apply,');
+  });
 });
 
 describe('CSV operating parts (Task 8)', () => {

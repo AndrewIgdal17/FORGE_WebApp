@@ -444,6 +444,7 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         source: 'path',
         path: 'bcr.outage_redispatch_pv',
         format: 'currency',
+        appliesId: 'outage_redispatch',
       },
       { label: 'Total Risk PV', source: 'path', path: 'summary.total_risk_pv', format: 'currency' },
     ],

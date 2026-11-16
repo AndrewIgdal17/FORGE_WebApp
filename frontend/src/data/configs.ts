@@ -399,6 +399,7 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         label: 'Outage redispatch (PV)',
         path: 'costs.outage.pv_redispatch',
         format: 'currency',
+        appliesId: 'outage_redispatch',
       },
       {
         key: 'outage_loadshed_per_event',
@@ -411,11 +412,12 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         label: 'Outage Redispatch Cost/Event',
         path: 'costs.outage.cost_redispatch',
         format: 'currency',
+        appliesId: 'outage_redispatch',
       },
       {
         key: 'outage_rho',
         label: 'Load-Shed Fraction (\u03C1)',
-        path: 'costs.outage.rho',
+        path: 'costs.outage.load_shed_fraction',
         format: 'number2',
       },
       {

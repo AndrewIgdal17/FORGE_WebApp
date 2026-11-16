@@ -216,3 +216,25 @@ describe('vegetation strip and oandm_line (Task 8)', () => {
     }
   });
 });
+
+describe('outage redispatch on a dedicated line (pre-v6 tidy-up)', () => {
+  const dedicated = {
+    bcr: { outage_load_shed_pv: 12_000, outage_redispatch_pv: null },
+    taxonomy_results: [
+      { taxonomy_id: 'outage_load_shed', state: 'measured', value_pv: 12_000 },
+      { taxonomy_id: 'outage_redispatch', state: 'does_not_apply', value_pv: null },
+    ],
+  };
+  const missingSpread = {
+    bcr: { outage_load_shed_pv: 12_000, outage_redispatch_pv: null },
+    taxonomy_results: [
+      { taxonomy_id: 'outage_load_shed', state: 'measured', value_pv: 12_000 },
+      { taxonomy_id: 'outage_redispatch', state: 'not_available', available: false, value_pv: null },
+    ],
+  };
+  it('reads Does not apply on a dedicated line and Not available when the spread is missing', () => {
+    const figure = figureByLabel('outage-risk', 'Redispatch PV');
+    expect(displayFigure(figure, dedicated)).toBe('Does not apply');
+    expect(displayFigure(figure, missingSpread)).not.toBe('Does not apply');
+  });
+});
