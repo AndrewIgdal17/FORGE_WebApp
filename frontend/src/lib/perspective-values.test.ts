@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { waccValueSum } from './perspective-values';
+import { waccApplyingValueSum, waccValueSum } from './perspective-values';
 
 const results = {
   taxonomy_results: [
@@ -24,5 +24,22 @@ describe('waccValueSum', () => {
   it('returns null when an item or the list is missing', () => {
     expect(waccValueSum(results, ['row_rent'])).toBeNull();
     expect(waccValueSum({}, ['oandm'])).toBeNull();
+  });
+});
+
+describe('waccApplyingValueSum', () => {
+  it('sums available WACC values and skips unavailable and non-applying items', () => {
+    const partial = {
+      taxonomy_results: [
+        { taxonomy_id: 'congestion_benefit', available: false, value_pv_wacc: null },
+        { taxonomy_id: 'delivered_energy_benefit', applies: false, value_pv_wacc: 0 },
+        { taxonomy_id: 'capacity_value_benefit', value_pv_wacc: 42 },
+      ],
+    };
+    expect(waccApplyingValueSum(partial, [
+      'congestion_benefit',
+      'delivered_energy_benefit',
+      'capacity_value_benefit',
+    ])).toBe(42);
   });
 });

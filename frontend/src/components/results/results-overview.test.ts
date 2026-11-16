@@ -12,6 +12,7 @@ import {
   externalAccordionSubgroupHeadings,
   itemsForCategory,
   loadCategories,
+  perspectiveCategoryLists,
   readTotal,
   sideMapFromTaxonomy,
 } from '@/components/results/results-overview';
@@ -262,10 +263,49 @@ describe('reporting category overview (Task 5)', () => {
         { taxonomy_id: 'row_holding', value_pv_wacc: 50 },
       ],
     };
-    const rows = loadCategories(utility, PERSPECTIVE_CATEGORIES.utility.costs);
+    const { costs } = perspectiveCategoryLists('utility', utility);
+    const rows = loadCategories(utility, costs);
     expect(rows.find((r) => r.key === 'holding')?.label).toBe('ROW Holding Cost');
     const sum = rows.reduce((total, row) => (row.value === null ? total : total + row.value), 0);
     expect(sum).toBe(515);
+  });
+
+  it('stored v5 utility costs omit holding and still sum to utility_costs_pv', () => {
+    const stored = {
+      bcr: {
+        utility_costs_pv: 465,
+        capital_recovery_pv: 400,
+        oandm_pv: 10,
+        insurance_pv: 5,
+        row_rent_pv: 20,
+        delay_cost_pv: 30,
+      },
+      taxonomy_results: [
+        { taxonomy_id: 'capital_recovery', value_pv_wacc: 400 },
+        { taxonomy_id: 'oandm', value_pv_wacc: 10 },
+        { taxonomy_id: 'insurance', value_pv_wacc: 5 },
+        { taxonomy_id: 'row_rent', value_pv_wacc: 20 },
+        { taxonomy_id: 'base_delay', value_pv_wacc: 30 },
+        { taxonomy_id: 'row_holding', value_pv_wacc: 50 },
+      ],
+    };
+    const { costs } = perspectiveCategoryLists('utility', stored);
+    const rows = loadCategories(stored, costs);
+    expect(rows.find((r) => r.key === 'holding')).toBeUndefined();
+    const sum = rows.reduce((total, row) => (row.value === null ? total : total + row.value), 0);
+    expect(sum).toBe(465);
+  });
+
+  it('ratepayer market row sums available WACC when congestion is unavailable', () => {
+    const ratepayer = {
+      taxonomy_results: [
+        { taxonomy_id: 'congestion_benefit', available: false, value_pv_wacc: null },
+        { taxonomy_id: 'delivered_energy_benefit', applies: false, value_pv_wacc: 0 },
+        { taxonomy_id: 'capacity_value_benefit', value_pv_wacc: 99 },
+      ],
+    };
+    const rows = loadCategories(ratepayer, PERSPECTIVE_CATEGORIES.ratepayer.benefits);
+    expect(rows.find((r) => r.key === 'market')?.value).toBe(99);
   });
 
   it('external accordion exposes Risk and Emissions subgroup headings', () => {

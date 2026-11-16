@@ -38,7 +38,7 @@ import {
   type ReportingKey,
 } from '@/lib/results-utils';
 import { getValueAtPath } from '@/lib/path';
-import { waccValueSum } from '@/lib/perspective-values';
+import { waccApplyingValueSum, waccValueSum } from '@/lib/perspective-values';
 import { cn } from '@/lib/utils';
 
 export interface ResultsOverviewProps {
@@ -142,6 +142,30 @@ export const PERSPECTIVE_CATEGORIES: Record<
   },
 };
 
+/** Utility holding row only when the BCR object carries `holding_pv` (recalculated). */
+export function perspectiveCategoryLists(
+  perspective: PerspectiveKey,
+  results: Record<string, unknown>,
+): {
+  costs: PerspectiveCategoryItem[];
+  benefits: PerspectiveCategoryItem[];
+} {
+  const base = PERSPECTIVE_CATEGORIES[perspective];
+  if (perspective !== 'utility') {
+    return { costs: base.costs, benefits: base.benefits };
+  }
+  const bcr = results.bcr;
+  const hasHolding =
+    bcr &&
+    typeof bcr === 'object' &&
+    !Array.isArray(bcr) &&
+    Object.prototype.hasOwnProperty.call(bcr, 'holding_pv');
+  return {
+    costs: hasHolding ? base.costs : base.costs.filter((item) => item.key !== 'holding'),
+    benefits: base.benefits,
+  };
+}
+
 const COST_BAR = '#dc2626';
 const BENEFIT_BAR = '#059669';
 
@@ -243,7 +267,9 @@ export function loadCategories(
       value: item.reportingKey
         ? readCategoryTotal(results, item.reportingKey)
         : item.waccIds
-          ? waccValueSum(results, item.waccIds)
+          ? item.waccIds.length > 1
+            ? waccApplyingValueSum(results, item.waccIds)
+            : waccValueSum(results, item.waccIds)
           : readNumber(results, item.path),
       doesNotApply:
         item.waccIds?.length === 1 && itemDoesNotApply(results, item.waccIds[0]!),
@@ -862,7 +888,7 @@ export function ResultsOverview({
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const [excluded, setExcluded] = useState<Set<string>>(() => new Set());
   const definition = PERSPECTIVE_DEFINITIONS[perspective];
-  const categories = PERSPECTIVE_CATEGORIES[perspective];
+  const categories = perspectiveCategoryLists(perspective, results);
   const costs = loadCategories(results, categories.costs);
   const benefits = loadCategories(results, categories.benefits);
   const resultById = resolveResultById(results);
