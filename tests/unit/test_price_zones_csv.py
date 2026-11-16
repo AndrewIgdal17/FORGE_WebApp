@@ -8,14 +8,14 @@ SQL = ROOT / "supabase/migrations/20261113150000_price_archive.sql"
 def test_price_zones_csv_matches_the_partition():
     with CSV.open(newline="") as handle:
         rows = list(csv.DictReader(handle))
-    assert len(rows) == 55
+    assert len(rows) == 72
     by_iso: dict[str, list[dict[str, str]]] = {}
     for row in rows:
         by_iso.setdefault(row["iso"], []).append(row)
         assert row["polygon_source"] == "rto_subzones"
         assert row["polygon_rto_iso"] == row["iso"]
         assert row["iso"] != "ISO-NE"
-    assert set(by_iso) == {"CAISO", "ISONE", "NYISO", "MISO", "PJM"}
+    assert set(by_iso) == {"CAISO", "ISONE", "NYISO", "MISO", "PJM", "SPP"}
     assert {r["zone"] for r in by_iso["CAISO"]} == {"PGE", "SCE", "SDGE", "VEA"}
     sce = next(r for r in by_iso["CAISO"] if r["zone"] == "SCE")
     assert sce["polygon_loc_abbrev"] == "SCE"
@@ -37,6 +37,24 @@ def test_price_zones_csv_matches_the_partition():
         assert row["price_location"] == ""
     assert all(r["price_location"] == "" and r["load_location"] == "" for r in by_iso["PJM"])
     assert len(by_iso["PJM"]) == 22
+    assert {r["zone"] for r in by_iso["SPP"]} == {
+        "CSWS", "EDE", "GRDA", "INDN", "KACY", "KCPL", "LES", "MPS",
+        "NPPD", "OKGE", "OPPD", "SECI", "SPRM", "SPS", "WAUE", "WFEC", "WR",
+    }
+    for row in by_iso["SPP"]:
+        assert row["polygon_source"] == "rto_subzones"
+        assert row["polygon_rto_iso"] == "SPP"
+        assert row["polygon_loc_type"] == "REG"
+        assert row["polygon_loc_abbrev"] == row["zone"]
+        assert row["load_location"] == row["zone"]
+        assert row["price_location"]
+    okge = next(r for r in by_iso["SPP"] if r["zone"] == "OKGE")
+    assert okge["price_location"] == "OKGE_OKGE"
+    csws = next(r for r in by_iso["SPP"] if r["zone"] == "CSWS")
+    assert csws["price_location"] == "AEPM_CSWS"
+    waue = next(r for r in by_iso["SPP"] if r["zone"] == "WAUE")
+    assert waue["price_location"] == "WAUE_UGPM"
+    assert "SPP_Region" not in {r["zone"] for r in by_iso["SPP"]}
     text = "\n".join(r["price_location"] for r in rows)
     assert "MS.HUB" not in text
     assert "TEXAS.HUB" not in text

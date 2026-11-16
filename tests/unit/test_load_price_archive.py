@@ -72,6 +72,16 @@ def test_acceptance_loader_gates_8760_and_iso_counts():
     assert counts["ISONE"] == 8
     assert counts["NYISO"] == 11
     assert counts["MISO"] == 6
+    assert counts["SPP"] == 17
+    spp_prices = {
+        zone.zone: zone.price_location
+        for zone in zones
+        if zone.iso == "SPP"
+    }
+    assert spp_prices["OKGE"] == "OKGE_OKGE"
+    assert spp_prices["CSWS"] == "AEPM_CSWS"
+    assert spp_prices["WAUE"] == "WAUE_UGPM"
+    assert spp_prices["WR"] == "WR_WR"
     hubs = [zone.price_location for zone in zones if zone.iso == "MISO" and zone.price_location]
     assert hubs == HUBS
 
