@@ -289,3 +289,52 @@ describe('three states in comparison and CSV (Spec 12 items 1 and 3)', () => {
     expect(csv).toContain('delay_total_pv,-247125646.34603548,');
   });
 });
+
+describe('reporting category comparison and CSV (Task 5)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const v5Delay = {
+    bcr: { capital_costs_pv: 999 },
+    taxonomy_results: [
+      { taxonomy_id: 'row_holding', value_pv: 7 },
+      { taxonomy_id: 'base_delay', value_pv: 100 },
+    ],
+  };
+
+  it('uses Delay-period costs label and rebuilds delay_period for v5 stored rows', () => {
+    expect(metric('delay_period_costs_pv')!.label).toBe('Delay-period costs');
+    const html = renderRows([scenario('v5', 'V5', v5Delay)], ['delay_period_costs_pv']);
+    expect(html).toContain('$107');
+    expect(html).not.toContain('Not available');
+  });
+
+  it('exports reporting category keys instead of legacy hard/soft keys', async () => {
+    const csv = await captureCsv(
+      scenario('v5', 'V5', {
+        ...v5Delay,
+        bcr: {
+          ...v5Delay.bcr,
+          omitted: { benefits_market_pv: ['congestion_benefit'] },
+        },
+        taxonomy_results: [
+          ...v5Delay.taxonomy_results,
+          { taxonomy_id: 'build_structure', value_pv: 20 },
+        ],
+      }),
+    );
+    for (const key of [
+      'capital_costs_pv,',
+      'delay_period_costs_pv,',
+      'benefits_market_pv,',
+      'holding_pv,',
+    ]) {
+      expect(csv).toContain(key);
+    }
+    for (const legacy of ['hard_costs_pv,', 'soft_costs_pv,', 'benefits_remedial_pv,']) {
+      expect(csv).not.toContain(legacy);
+    }
+    expect(csv).toContain('benefits_market_pv,not available,congestion_benefit');
+  });
+});

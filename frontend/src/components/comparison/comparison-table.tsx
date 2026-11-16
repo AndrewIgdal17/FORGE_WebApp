@@ -12,7 +12,12 @@ import {
   type ComparisonMetric,
 } from '@/data/configs';
 import { getValueAtPath } from '@/lib/path';
-import { DOES_NOT_APPLY, itemDoesNotApply, stateDoesNotApply } from '@/lib/results-utils';
+import {
+  DOES_NOT_APPLY,
+  itemDoesNotApply,
+  readCategoryTotal,
+  stateDoesNotApply,
+} from '@/lib/results-utils';
 import type { Scenario } from '@/stores/scenario-store';
 
 export interface ComparisonTableProps {
@@ -68,6 +73,9 @@ function readMetricValue(scenario: Scenario, metric: ComparisonMetric): unknown 
   if (!scenario.results) return undefined;
   if (metric.key === 'custom_bcr' || metric.key === 'custom_nb') {
     return computeCustomMetric(scenario.results, metric.key);
+  }
+  if (metric.reportingKey) {
+    return readCategoryTotal(scenario.results, metric.reportingKey);
   }
   return getValueAtPath(scenario.results, metric.path);
 }

@@ -24,7 +24,16 @@ import {
 } from '@/components/results/taxonomy-view';
 import { DELAY_OTHER_VIEW_NOTE, DIRECT_DELAY_LABEL } from '@/lib/delay-comparison';
 import { formatCurrency, formatNumber } from '@/lib/format';
-import { DOES_NOT_APPLY, excludesNote, itemDoesNotApply } from '@/lib/results-utils';
+import {
+  BENEFIT_CATEGORY_LABELS,
+  CATEGORY_LABELS,
+  DOES_NOT_APPLY,
+  REPORTING_PATHS,
+  excludesNote,
+  itemDoesNotApply,
+  readCategoryTotal,
+  type ReportingKey,
+} from '@/lib/results-utils';
 import { getValueAtPath } from '@/lib/path';
 import { waccValueSum } from '@/lib/perspective-values';
 import { cn } from '@/lib/utils';
@@ -41,6 +50,8 @@ export interface PerspectiveCategoryItem {
   path: string;
   /** Utility and ratepayer items: the taxonomy items whose WACC present values sum to this row. */
   waccIds?: readonly string[];
+  /** Societal category rows resolved via `readCategoryTotal` (Spec 15). */
+  reportingKey?: ReportingKey;
 }
 
 export const PERSPECTIVE_CATEGORIES: Record<
@@ -52,15 +63,44 @@ export const PERSPECTIVE_CATEGORIES: Record<
 > = {
   societal: {
     costs: [
-      { key: 'risk', label: 'Risk Costs', path: 'summary.reporting_category_risk_pv' },
-      { key: 'soft', label: 'Soft Costs', path: 'summary.reporting_category_soft_pv' },
-      { key: 'emissions', label: 'Emissions', path: 'summary.reporting_category_emissions_pv' },
-      { key: 'hard', label: 'Hard Costs', path: 'summary.reporting_category_hard_pv' },
+      {
+        key: 'capital',
+        label: CATEGORY_LABELS.capital,
+        path: REPORTING_PATHS.capital,
+        reportingKey: 'capital',
+      },
+      {
+        key: 'delay_period',
+        label: CATEGORY_LABELS.delay_period,
+        path: REPORTING_PATHS.delay_period,
+        reportingKey: 'delay_period',
+      },
+      {
+        key: 'operating',
+        label: CATEGORY_LABELS.operating,
+        path: REPORTING_PATHS.operating,
+        reportingKey: 'operating',
+      },
+      {
+        key: 'external',
+        label: CATEGORY_LABELS.external,
+        path: REPORTING_PATHS.external,
+        reportingKey: 'external',
+      },
     ],
     benefits: [
-      { key: 'avoided', label: 'Avoided Emissions', path: 'bcr.displacement_avoided_benefit_pv' },
-      { key: 'enabling', label: 'Enabling', path: 'bcr.benefits_enabling_pv' },
-      { key: 'remedial', label: 'Remedial', path: 'bcr.benefits_remedial_pv' },
+      {
+        key: 'market',
+        label: BENEFIT_CATEGORY_LABELS.market,
+        path: REPORTING_PATHS.market,
+        reportingKey: 'market',
+      },
+      {
+        key: 'external',
+        label: BENEFIT_CATEGORY_LABELS.external,
+        path: REPORTING_PATHS.external_benefits,
+        reportingKey: 'external_benefits',
+      },
     ],
   },
   ratepayer: {
@@ -73,8 +113,12 @@ export const PERSPECTIVE_CATEGORIES: Record<
       { key: 'converter_loss', label: 'Converter Losses', path: 'bcr.converter_loss_pv', waccIds: ['line_loss_converter'] },
     ],
     benefits: [
-      { key: 'enabling', label: 'Enabling', path: 'bcr.benefits_enabling_pv', waccIds: ['delivered_energy_benefit', 'capacity_value_benefit'] },
-      { key: 'remedial', label: 'Remedial', path: 'bcr.benefits_remedial_pv', waccIds: ['congestion_benefit'] },
+      {
+        key: 'market',
+        label: BENEFIT_CATEGORY_LABELS.market,
+        path: REPORTING_PATHS.market,
+        waccIds: ['congestion_benefit', 'delivered_energy_benefit', 'capacity_value_benefit'],
+      },
     ],
   },
   utility: {
@@ -84,6 +128,7 @@ export const PERSPECTIVE_CATEGORIES: Record<
       { key: 'insurance', label: 'Insurance', path: 'bcr.insurance_pv', waccIds: ['insurance'] },
       { key: 'row_rent', label: 'ROW Rent', path: 'bcr.row_rent_pv', waccIds: ['row_rent'] },
       { key: 'delay', label: DIRECT_DELAY_LABEL, path: 'bcr.delay_cost_pv', waccIds: ['base_delay'] },
+      { key: 'holding', label: 'ROW Holding Cost', path: 'bcr.holding_pv', waccIds: ['row_holding'] },
     ],
     benefits: [
       { key: 'capital_recovery', label: 'Capital Recovery', path: 'bcr.capital_recovery_pv', waccIds: ['capital_recovery'] },
@@ -192,7 +237,11 @@ export function loadCategories(
     .map((item) => ({
       key: item.key,
       label: item.label,
-      value: item.waccIds ? waccValueSum(results, item.waccIds) : readNumber(results, item.path),
+      value: item.reportingKey
+        ? readCategoryTotal(results, item.reportingKey)
+        : item.waccIds
+          ? waccValueSum(results, item.waccIds)
+          : readNumber(results, item.path),
       doesNotApply:
         item.waccIds?.length === 1 && itemDoesNotApply(results, item.waccIds[0]!),
     }))
@@ -549,6 +598,7 @@ function sideById(taxonomy: Record<string, unknown> | undefined): Map<string, st
  */
 const ITEM_ID_BY_KEY: Record<string, string> = {
   delay:            'base_delay',
+  holding:          'row_holding',
   capital_recovery: 'capital_recovery',
   oandm:            'oandm',
   insurance:        'insurance',
@@ -565,10 +615,38 @@ function itemsForCategory(
 ): TaxonomyItemView[] {
   const itemId = ITEM_ID_BY_KEY[key];
   if (itemId) return items.filter((item) => item.id === itemId);
-  const category = key === 'avoided' ? 'avoided_emissions' : key;
+  const category = key;
   return items
     .filter((item) => item.category === category && sides.get(item.id) === side)
     .sort((left, right) => left.displayOrder - right.displayOrder);
+}
+
+export function externalAccordionSubgroupHeadings(
+  matched: TaxonomyItemView[],
+): string[] {
+  const headings: string[] = [];
+  if (matched.some((item) => item.subgroup === 'risk')) headings.push(CATEGORY_LABELS.risk);
+  if (matched.some((item) => item.subgroup === 'emissions')) {
+    headings.push(CATEGORY_LABELS.emissions);
+  }
+  return headings;
+}
+
+function subgroupSections(
+  matched: TaxonomyItemView[],
+): Array<{ heading: string | null; items: TaxonomyItemView[] }> {
+  const risk = matched.filter((item) => item.subgroup === 'risk');
+  const emissions = matched.filter((item) => item.subgroup === 'emissions');
+  const rest = matched.filter(
+    (item) => item.subgroup !== 'risk' && item.subgroup !== 'emissions',
+  );
+  const sections: Array<{ heading: string | null; items: TaxonomyItemView[] }> = [];
+  if (risk.length > 0) sections.push({ heading: CATEGORY_LABELS.risk, items: risk });
+  if (emissions.length > 0) {
+    sections.push({ heading: CATEGORY_LABELS.emissions, items: emissions });
+  }
+  if (rest.length > 0) sections.push({ heading: null, items: rest });
+  return sections;
 }
 
 function sumValues(rows: CategoryAmount[]): number {
@@ -650,10 +728,18 @@ function CategoryAccordions({
               ? (row.value / grandTotal) * 100
               : 0;
         const matched = itemsForCategory(taxonomyItems, sides, side, row.key);
-        const cards = [
-          ...positiveItems(matched, resultById, true),
-          ...matched.filter((item) => itemPresentValue(resultById, item.id) === null),
+        const taxonomyCards = (items: TaxonomyItemView[]): TaxonomyItemView[] => [
+          ...positiveItems(items, resultById, true),
+          ...items.filter((item) => itemPresentValue(resultById, item.id) === null),
         ];
+        const cards = taxonomyCards(matched);
+        const sections =
+          side === 'cost' && row.key === 'external'
+            ? subgroupSections(matched).map((section) => ({
+                heading: section.heading,
+                items: taxonomyCards(section.items),
+              }))
+            : [{ heading: null as string | null, items: cards }];
         return (
           <div
             key={openKey}
@@ -709,23 +795,32 @@ function CategoryAccordions({
             {isOpen ? (
               <div className="space-y-2 border-t border-slate-200 px-3 py-3">
                 {cards.length > 0 ? (
-                  cards.map((item, index) => {
-                    const values = cardValues(resultById, item.id);
-                    return (
-                      <TaxonomyCard
-                        key={item.id}
-                        label={item.label}
-                        annualValue={values.annualValue}
-                        nominalValue={values.nominalValue}
-                        pvValue={values.pvValue}
-                        detailRows={values.detailRows}
-                        colorIndex={index}
-                        parentTotal={row.value === null ? undefined : row.value}
-                        title={values.missingHover}
-                        doesNotApply={values.doesNotApply}
-                      />
-                    );
-                  })
+                  sections.map((section, sectionIndex) => (
+                    <div key={section.heading ?? `section-${sectionIndex}`} className="space-y-2">
+                      {section.heading ? (
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          {section.heading}
+                        </h3>
+                      ) : null}
+                      {section.items.map((item, index) => {
+                        const values = cardValues(resultById, item.id);
+                        return (
+                          <TaxonomyCard
+                            key={item.id}
+                            label={item.label}
+                            annualValue={values.annualValue}
+                            nominalValue={values.nominalValue}
+                            pvValue={values.pvValue}
+                            detailRows={values.detailRows}
+                            colorIndex={index}
+                            parentTotal={row.value === null ? undefined : row.value}
+                            title={values.missingHover}
+                            doesNotApply={values.doesNotApply}
+                          />
+                        );
+                      })}
+                    </div>
+                  ))
                 ) : (
                   <p className="text-sm text-slate-500">No line items in this category.</p>
                 )}
@@ -757,8 +852,14 @@ export function ResultsOverview({
     return itemsForCategory(taxonomyItems, sideMap, side, key).length > 0;
   }
 
-  const visibleCosts = costs.filter((row) => hasLineItems('cost', row.key));
-  const visibleBenefits = benefits.filter((row) => hasLineItems('benefit', row.key));
+  const visibleCosts =
+    perspective === 'societal'
+      ? costs
+      : costs.filter((row) => hasLineItems('cost', row.key));
+  const visibleBenefits =
+    perspective === 'societal'
+      ? benefits
+      : benefits.filter((row) => hasLineItems('benefit', row.key));
 
   const costTotal = readTotal(results, TOTAL_PATHS[perspective].costs, costs);
   const benefitTotal = readTotal(results, TOTAL_PATHS[perspective].benefits, benefits);

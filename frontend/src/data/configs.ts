@@ -1,4 +1,10 @@
 import { DELAY_ROWS, DIRECT_DELAY_HELP } from '@/lib/delay-comparison';
+import {
+  BENEFIT_CATEGORY_LABELS,
+  CATEGORY_LABELS,
+  REPORTING_PATHS,
+  type ReportingKey,
+} from '@/lib/results-utils';
 
 function delayRowHelp(key: (typeof DELAY_ROWS)[number]['key']): string {
   const row = DELAY_ROWS.find((item) => item.key === key);
@@ -23,6 +29,8 @@ export interface ComparisonMetric {
   appliesId?: string;
   /** Path to a three-state value; "does_not_apply" turns the cell into "Does not apply". */
   statePath?: string;
+  /** Spec 15 category total rebuilt from taxonomy when absent on stored v5 rows. */
+  reportingKey?: ReportingKey;
 }
 
 export interface ComparisonMetricGroup {
@@ -226,6 +234,20 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
     group: 'Benefits',
     metrics: [
       {
+        key: 'benefits_market_pv',
+        label: BENEFIT_CATEGORY_LABELS.market,
+        path: REPORTING_PATHS.market,
+        format: 'currency',
+        reportingKey: 'market',
+      },
+      {
+        key: 'benefits_external_pv',
+        label: BENEFIT_CATEGORY_LABELS.external,
+        path: REPORTING_PATHS.external_benefits,
+        format: 'currency',
+        reportingKey: 'external_benefits',
+      },
+      {
         key: 'benefits_remedial_pv',
         label: 'Remedial Benefits',
         path: 'bcr.benefits_remedial_pv',
@@ -292,22 +314,46 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
     group: 'Cost Categories (PV)',
     metrics: [
       {
-        key: 'hard_costs_pv',
-        label: 'Hard Costs',
-        path: 'bcr.hard_costs_pv',
+        key: 'capital_costs_pv',
+        label: CATEGORY_LABELS.capital,
+        path: REPORTING_PATHS.capital,
         format: 'currency',
+        reportingKey: 'capital',
       },
       {
-        key: 'soft_costs_pv',
-        label: 'Soft Costs',
-        path: 'bcr.soft_costs_pv',
+        key: 'delay_period_costs_pv',
+        label: CATEGORY_LABELS.delay_period,
+        path: REPORTING_PATHS.delay_period,
         format: 'currency',
+        reportingKey: 'delay_period',
       },
       {
-        key: 'emissions_costs_pv',
-        label: 'Line Loss Compensation Emissions',
-        path: 'bcr.emissions_costs_pv',
+        key: 'operating_costs_pv',
+        label: CATEGORY_LABELS.operating,
+        path: REPORTING_PATHS.operating,
         format: 'currency',
+        reportingKey: 'operating',
+      },
+      {
+        key: 'external_costs_pv',
+        label: CATEGORY_LABELS.external,
+        path: REPORTING_PATHS.external,
+        format: 'currency',
+        reportingKey: 'external',
+      },
+      {
+        key: 'external_risk_costs_pv',
+        label: 'External costs: Risk',
+        path: REPORTING_PATHS.external_risk,
+        format: 'currency',
+        reportingKey: 'external_risk',
+      },
+      {
+        key: 'external_emissions_costs_pv',
+        label: 'External costs: Emissions',
+        path: REPORTING_PATHS.external_emissions,
+        format: 'currency',
+        reportingKey: 'external_emissions',
       },
     ],
   },

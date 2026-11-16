@@ -1,4 +1,10 @@
-import { itemDoesNotApply, stateDoesNotApply } from '@/lib/results-utils';
+import {
+  REPORTING_PATHS,
+  itemDoesNotApply,
+  readCategoryTotal,
+  stateDoesNotApply,
+  type ReportingKey,
+} from '@/lib/results-utils';
 import { create } from 'zustand';
 
 import { resolvedRowWidthFt, rowWidthProblem } from '@/lib/analyze-request';
@@ -118,11 +124,23 @@ const NEW_SCENARIO_BLANK_FIELDS: Array<{ path: string; value: unknown }> = [
   { path: '01_project_technical_details.project.old_converter_type', value: null },
 ];
 
+const REPORTING_EXPORT_KEYS = new Set<string>([
+  'capital_costs_pv',
+  'delay_period_costs_pv',
+  'operating_costs_pv',
+  'external_costs_pv',
+  'external_risk_costs_pv',
+  'external_emissions_costs_pv',
+  'benefits_market_pv',
+  'benefits_external_pv',
+]);
+
 const RESULTS_EXPORT_FIELDS: Array<{
   key: string;
   path: string;
   appliesId?: string;
   statePath?: string;
+  reportingKey?: ReportingKey;
 }> = [
   { key: 'capacity_mw', path: 'technical_parameters.capacity_mw' },
   { key: 'line_length_miles', path: 'technical_parameters.line_length_miles' },
@@ -150,9 +168,47 @@ const RESULTS_EXPORT_FIELDS: Array<{
   { key: 'displacement_avoided_benefit_pv', path: 'bcr.displacement_avoided_benefit_pv' },
   { key: 'total_energy_emissions_pv', path: 'summary.total_energy_emissions_pv' },
   { key: 'grand_total_cost_pv', path: 'summary.total_costs_pv' },
-  { key: 'hard_costs_pv', path: 'bcr.hard_costs_pv' },
-  { key: 'soft_costs_pv', path: 'bcr.soft_costs_pv' },
-  { key: 'emissions_costs_pv', path: 'bcr.emissions_costs_pv' },
+  {
+    key: 'capital_costs_pv',
+    path: REPORTING_PATHS.capital,
+    reportingKey: 'capital',
+  },
+  {
+    key: 'delay_period_costs_pv',
+    path: REPORTING_PATHS.delay_period,
+    reportingKey: 'delay_period',
+  },
+  {
+    key: 'operating_costs_pv',
+    path: REPORTING_PATHS.operating,
+    reportingKey: 'operating',
+  },
+  {
+    key: 'external_costs_pv',
+    path: REPORTING_PATHS.external,
+    reportingKey: 'external',
+  },
+  {
+    key: 'external_risk_costs_pv',
+    path: REPORTING_PATHS.external_risk,
+    reportingKey: 'external_risk',
+  },
+  {
+    key: 'external_emissions_costs_pv',
+    path: REPORTING_PATHS.external_emissions,
+    reportingKey: 'external_emissions',
+  },
+  {
+    key: 'benefits_market_pv',
+    path: REPORTING_PATHS.market,
+    reportingKey: 'market',
+  },
+  {
+    key: 'benefits_external_pv',
+    path: REPORTING_PATHS.external_benefits,
+    reportingKey: 'external_benefits',
+  },
+  { key: 'holding_pv', path: 'bcr.holding_pv', appliesId: 'row_holding' },
   { key: 'revenue_pv', path: 'bcr.capital_recovery_pv' },
   { key: 'bcr_societal', path: 'bcr.bcr_societal' },
   { key: 'bcr_utility', path: 'bcr.bcr_utility' },
@@ -165,13 +221,22 @@ const RESULTS_EXPORT_FIELDS: Array<{
 const OMITTED_KEY_BY_EXPORT: Record<string, string> = {
   grand_total_cost_pv: 'total_costs_pv',
   total_operational_pv: 'operational_costs_pv',
-  total_risk_pv: 'risk_costs_pv',
+  total_risk_pv: 'external_risk_costs_pv',
   total_energy_emissions_pv: 'energy_emissions_costs_pv',
   line_loss_pv: 'line_loss_benefit_pv',
+  capital_costs_pv: 'capital_costs_pv',
+  delay_period_costs_pv: 'delay_period_costs_pv',
+  operating_costs_pv: 'operating_costs_pv',
+  external_costs_pv: 'external_costs_pv',
+  external_risk_costs_pv: 'external_risk_costs_pv',
+  external_emissions_costs_pv: 'external_emissions_costs_pv',
+  benefits_market_pv: 'benefits_market_pv',
+  benefits_external_pv: 'benefits_external_pv',
 };
 
 function omittedKeyFor(exportKey: string): string | null {
   if (exportKey in OMITTED_KEY_BY_EXPORT) return OMITTED_KEY_BY_EXPORT[exportKey] ?? null;
+  if (REPORTING_EXPORT_KEYS.has(exportKey)) return exportKey;
   if (exportKey.startsWith('bcr_') || exportKey.startsWith('net_benefit_')) return exportKey;
   return null;
 }
@@ -668,7 +733,10 @@ export function exportAsCsv(
     csv += '[RESULTS]\n';
     csv += 'key,value,omitted\n';
     for (const field of RESULTS_EXPORT_FIELDS) {
-      const value = getValueAtPath(scenario.results, field.path);
+      const value =
+        field.reportingKey !== undefined
+          ? readCategoryTotal(scenario.results, field.reportingKey)
+          : getValueAtPath(scenario.results, field.path);
       const offState =
         (field.appliesId !== undefined && itemDoesNotApply(scenario.results, field.appliesId)) ||
         (field.statePath !== undefined && stateDoesNotApply(scenario.results, field.statePath));

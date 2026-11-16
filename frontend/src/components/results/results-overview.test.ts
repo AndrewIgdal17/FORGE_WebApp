@@ -9,6 +9,7 @@ import {
   WATERFALL_NOT_AVAILABLE,
   adjustedRatio,
   categoryValueText,
+  externalAccordionSubgroupHeadings,
   loadCategories,
   readTotal,
 } from '@/components/results/results-overview';
@@ -176,5 +177,103 @@ describe('single-item overview rows that do not apply (Spec 11, final review)', 
     const old = { bcr: { row_rent_pv: 0 }, taxonomy_results: [{ taxonomy_id: 'row_rent', value_pv: 0, value_pv_wacc: 0 }] };
     const rows = loadCategories(old, PERSPECTIVE_CATEGORIES.ratepayer.costs);
     expect(rows.find((r) => r.key === 'row_rent')!.doesNotApply).toBe(false);
+  });
+});
+
+const V5_SOCIETAL: Record<string, unknown> = {
+  summary: { total_costs_pv: 500, total_benefits_pv: 100 },
+  bcr: {
+    bcr_societal: 0.2,
+    net_benefit_pv: -400,
+    capital_costs_pv: 999,
+    benefits_remedial_pv: 40,
+    benefits_enabling_pv: 60,
+    omitted: {},
+  },
+  taxonomy_results: [
+    { taxonomy_id: 'build_conductor', value_pv: 50 },
+    { taxonomy_id: 'build_structure', value_pv: 20 },
+    { taxonomy_id: 'build_converter', value_pv: 10 },
+    { taxonomy_id: 'row_acquisition', value_pv: 30 },
+    { taxonomy_id: 'env_mitigation', value_pv: 10 },
+    { taxonomy_id: 'row_holding', value_pv: 7 },
+    { taxonomy_id: 'base_delay', value_pv: 100 },
+    { taxonomy_id: 'oandm', value_pv: 5 },
+    { taxonomy_id: 'insurance', value_pv: 3 },
+    { taxonomy_id: 'row_rent', value_pv: 2 },
+    { taxonomy_id: 'line_loss_conductor', value_pv: 1 },
+    { taxonomy_id: 'line_loss_converter', value_pv: 1 },
+    { taxonomy_id: 'wildfire_eac', value_pv: 8 },
+    { taxonomy_id: 'outage_eac', value_pv: 4 },
+    { taxonomy_id: 'emissions_comp', value_pv: 6 },
+    { taxonomy_id: 'congestion_benefit', value_pv: 20 },
+    { taxonomy_id: 'delivered_energy_benefit', value_pv: 30 },
+    { taxonomy_id: 'capacity_value_benefit', value_pv: 10 },
+    { taxonomy_id: 'avoided_emissions_benefit', value_pv: 40 },
+  ],
+};
+
+const EXTERNAL_TAXONOMY_ITEMS = [
+  { id: 'wildfire_eac', label: 'Wildfire', category: 'external', subgroup: 'risk', side: 'cost', display_order: 1 },
+  { id: 'outage_eac', label: 'Outage', category: 'external', subgroup: 'risk', side: 'cost', display_order: 2 },
+  { id: 'emissions_comp', label: 'Emissions comp', category: 'external', subgroup: 'emissions', side: 'cost', display_order: 3 },
+];
+
+describe('reporting category overview (Task 5)', () => {
+  it('societal view shows new labels and rebuilt capital, not legacy names', () => {
+    const html = render('societal', V5_SOCIETAL);
+  for (const label of [
+      'Capital costs',
+      'Delay-period costs',
+      'Operating costs',
+      'External costs',
+      'Market benefits',
+      'External benefits',
+    ]) {
+      expect(html).toContain(label);
+    }
+    expect(html).toContain('$120');
+    for (const legacy of ['Hard Costs', 'Soft Costs', 'Remedial', 'Enabling']) {
+      expect(html).not.toContain(legacy);
+    }
+  });
+
+  it('utility cost rows sum to utility_costs_pv and include ROW Holding Cost', () => {
+    const utility = {
+      bcr: {
+        utility_costs_pv: 515,
+        capital_recovery_pv: 400,
+        oandm_pv: 10,
+        insurance_pv: 5,
+        row_rent_pv: 20,
+        delay_cost_pv: 30,
+        holding_pv: 50,
+      },
+      taxonomy_results: [
+        { taxonomy_id: 'capital_recovery', value_pv_wacc: 400 },
+        { taxonomy_id: 'oandm', value_pv_wacc: 10 },
+        { taxonomy_id: 'insurance', value_pv_wacc: 5 },
+        { taxonomy_id: 'row_rent', value_pv_wacc: 20 },
+        { taxonomy_id: 'base_delay', value_pv_wacc: 30 },
+        { taxonomy_id: 'row_holding', value_pv_wacc: 50 },
+      ],
+    };
+    const rows = loadCategories(utility, PERSPECTIVE_CATEGORIES.utility.costs);
+    expect(rows.find((r) => r.key === 'holding')?.label).toBe('ROW Holding Cost');
+    const sum = rows.reduce((total, row) => (row.value === null ? total : total + row.value), 0);
+    expect(sum).toBe(515);
+  });
+
+  it('external accordion exposes Risk and Emissions subgroup headings', () => {
+    const headings = externalAccordionSubgroupHeadings(
+      EXTERNAL_TAXONOMY_ITEMS.map((item) => ({
+        id: item.id,
+        label: item.label,
+        category: item.category,
+        subgroup: item.subgroup,
+        displayOrder: item.display_order,
+      })),
+    );
+    expect(headings).toEqual(['Risk', 'Emissions']);
   });
 });
