@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import type { ReactElement } from 'react';
-import { CheckboxField } from '@/components/form/checkbox-field';
 import { PercentageField } from '@/components/form/percentage-field';
 import { SelectField } from '@/components/form/select-field';
 import { useFormStore } from '@/stores/form-store';
@@ -14,7 +13,6 @@ const WACC_PATH = `${FINANCIAL}.wacc_nominal`;
 const SOCIAL_PATH = `${FINANCIAL}.social_discount_rate`;
 const ESCALATION_PATH = `${FINANCIAL}.construction_cost_escalation_rate`;
 const BENEFIT_ESCALATION_PATH = '17_congestion_reductions.benefit_price_escalation_real';
-const REVENUE_PATH = `${FINANCIAL}.revenue.rate_based.enabled`;
 
 function readDecimal(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -98,11 +96,6 @@ export function FinancialRates(): ReactElement {
         path={BENEFIT_ESCALATION_PATH}
         label="Benefit price escalation (%/yr, real)"
         helpText="Real annual growth of congestion prices, capacity prices, and the value of delivered energy and losses. Default 0%/yr."
-      />
-      <CheckboxField
-        path={REVENUE_PATH}
-        label="Revenue requirement"
-        helpText="Enable rate-based revenue from the declining rate base and real WACC."
       />
     </section>
   );

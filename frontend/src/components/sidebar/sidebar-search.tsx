@@ -67,7 +67,6 @@ const SYN: Record<string, readonly string[]> = {
   loss: ['loss_compensation_rate', 'compensation_percent', 'converter_loss_pct'],
   inflation: ['inflation_rate'],
   'base year': ['base_year'],
-  afudc: ['apply_afudc'],
   rent: ['zone_1_rent_cost'],
   acquisition: ['zone_1_acquisition_cost'],
   conductor: ['conductor_type', 'old_conductor_type'],

@@ -1,11 +1,10 @@
 import type { ReactElement } from 'react';
-import { CheckboxField } from '@/components/form/checkbox-field';
 import { PercentageField } from '@/components/form/percentage-field';
 import { useFormStore } from '@/stores/form-store';
 
 const INSURANCE = '04_insurance.insurance';
 const CONSTRUCTION_TYPE_PATH = '01_project_technical_details.project.construction_type';
-const CONVERTERS_PATH = `${INSURANCE}.insurable_components.converters`;
+const AC_DC_PATH = '01_project_technical_details.project.ac_dc';
 
 interface RateField {
   path: string;
@@ -47,31 +46,13 @@ const ESCALATION_RATE: RateField = {
     'Real annual growth of the premium. Default 2.0%/yr. Source: WTW (2025); Powerlink (2025).',
 };
 
-const COMPONENTS: Array<{ key: string; label: string; helpText: string }> = [
-  {
-    key: 'conductors',
-    label: 'Conductors',
-    helpText: 'Include conductor capital cost in the insured value.',
-  },
-  {
-    key: 'structures',
-    label: 'Structures',
-    helpText: 'Include structure capital cost in the insured value.',
-  },
-  {
-    key: 'converters',
-    label: 'Converters',
-    helpText: 'Include converter capital cost in the insured value.',
-  },
-];
-
-function isChecked(value: unknown): boolean {
-  return value === true || value === 'true';
+export function showConverterRate(acDc: unknown): boolean {
+  return acDc === 'DC';
 }
 
 export function InsurancePanel(): ReactElement {
   const constructionType = useFormStore((state) => state.getFieldValue(CONSTRUCTION_TYPE_PATH));
-  const convertersInsured = useFormStore((state) => isChecked(state.getFieldValue(CONVERTERS_PATH)));
+  const acDc = useFormStore((state) => state.getFieldValue(AC_DC_PATH));
   const lineRate =
     typeof constructionType === 'string'
       ? LINE_RATE_BY_CONSTRUCTION_TYPE[constructionType]
@@ -93,7 +74,7 @@ export function InsurancePanel(): ReactElement {
           helpText={lineRate.helpText}
         />
       ) : null}
-      {convertersInsured ? (
+      {showConverterRate(acDc) ? (
         <PercentageField
           path={CONVERTER_RATE.path}
           label={CONVERTER_RATE.label}
@@ -110,14 +91,6 @@ export function InsurancePanel(): ReactElement {
         label="Fallback premium rate (%)"
         helpText="Used only when the construction type has no specific rate. All default construction types have specific rates."
       />
-      {COMPONENTS.map((component) => (
-        <CheckboxField
-          key={component.key}
-          path={`${INSURANCE}.insurable_components.${component.key}`}
-          label={component.label}
-          helpText={component.helpText}
-        />
-      ))}
     </section>
   );
 }
