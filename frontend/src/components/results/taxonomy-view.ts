@@ -74,6 +74,27 @@ export function resolveResultById(
   return buildResultById({ taxonomy_results: deriveTaxonomyResults(results) });
 }
 
+export const RETIRED_TAXONOMY_ITEMS: TaxonomyItemView[] = [
+  {
+    id: 'outage_eac',
+    label: 'Expected outage cost',
+    category: 'external',
+    subgroup: 'risk',
+    displayOrder: 2,
+  },
+];
+
+export function withRetiredItems(
+  items: TaxonomyItemView[],
+  resultById: Record<string, unknown>,
+): TaxonomyItemView[] {
+  const existing = new Set(items.map((item) => item.id));
+  const appended = RETIRED_TAXONOMY_ITEMS.filter(
+    (retired) => retired.id in resultById && !existing.has(retired.id),
+  );
+  return appended.length === 0 ? items : [...items, ...appended];
+}
+
 export function withLegacyItems(
   items: TaxonomyItemView[],
   resultById: Record<string, unknown>,

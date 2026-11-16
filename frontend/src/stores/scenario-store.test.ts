@@ -224,6 +224,28 @@ describe('CSV line loss omitted key (Task 5)', () => {
   });
 });
 
+describe('CSV outage split (Spec 18)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('exports load shed and not-available redispatch', async () => {
+    const csv = await captureCsv(
+      acScenario({
+        bcr: {
+          outage_load_shed_pv: 12_000,
+          outage_redispatch_pv: null,
+        },
+        costs: {
+          outage: { pv_load_shed: 12_000, pv_redispatch: null, pv_cost: 12_000 },
+        },
+      }),
+    );
+    expect(csv).toContain('outage_load_shed_pv,12000,');
+    expect(csv).toContain('outage_redispatch_pv,not available,');
+  });
+});
+
 describe('CSV operating parts (Task 8)', () => {
   beforeEach(() => {
     vi.unstubAllGlobals();

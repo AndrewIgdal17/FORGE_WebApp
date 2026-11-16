@@ -1,16 +1,15 @@
 import type { ReactElement } from 'react';
 import { Button } from '@/components/ui/button';
-import { CurrencyField } from '@/components/form/currency-field';
 import { NumberField } from '@/components/form/number-field';
 import { PercentageField } from '@/components/form/percentage-field';
 import { useFormStore } from '@/stores/form-store';
 
 const OUTAGE = '07_outage_costs.outage';
-const AC_DC_PATH = '01_project_technical_details.project.ac_dc';
 const CAPACITY_PATH = `${OUTAGE}.capacity_at_risk_factor`;
 const LOAD_SHED_PATH = `${OUTAGE}.load_shed_fraction`;
-const LOAD_SHED_HELP =
-  'Share of lost megawatts priced at the value of lost load. The rest uses the redispatch cost. Auto is 5% for AC and 80% for DC.';
+
+export const LOAD_SHED_HELP =
+  "Share of lost power shed as unserved energy and priced at the value of lost load. Default 0.05 for AC and DC lines alike (ENTSO-E 2021). The rest is redispatched at the route's congestion spread.";
 
 const DURATION_TYPES = [
   { key: 'overhead', label: 'Overhead' },
@@ -18,13 +17,9 @@ const DURATION_TYPES = [
 ] as const;
 
 export function OutageRisk(): ReactElement {
-  const acDc = useFormStore((state) => state.getFieldValue(AC_DC_PATH));
   const capacity = useFormStore((state) => state.getFieldValue(CAPACITY_PATH));
-  const loadShed = useFormStore((state) => state.getFieldValue(LOAD_SHED_PATH));
   const setFieldValue = useFormStore((state) => state.setFieldValue);
   const automatic = capacity === 'auto';
-  const loadShedAutomatic = loadShed === 'auto';
-  const autoLoadShed = acDc === 'DC' ? '80% for DC' : '5% for AC';
 
   return (
     <section id="outage-risk" className="grid max-w-xl gap-4">
@@ -65,35 +60,10 @@ export function OutageRisk(): ReactElement {
           step={0.01}
         />
       ) : null}
-      {loadShedAutomatic ? (
-        <p className="text-sm text-slate-600">
-          Load-shed fraction is automatic ({autoLoadShed}). Enter a percent to override.
-        </p>
-      ) : (
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="min-w-0 flex-1">
-            <PercentageField
-              path={LOAD_SHED_PATH}
-              label="Load-shed fraction (%)"
-              helpText={LOAD_SHED_HELP}
-            />
-          </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => setFieldValue(LOAD_SHED_PATH, 'auto')}>
-            Use automatic
-          </Button>
-        </div>
-      )}
-      {loadShedAutomatic ? (
-        <PercentageField
-          path={LOAD_SHED_PATH}
-          label="Load-shed fraction (%)"
-          helpText={LOAD_SHED_HELP}
-        />
-      ) : null}
-      <CurrencyField
-        path={`${OUTAGE}.redispatch_cost_per_mwh`}
-        label="Redispatch cost ($/MWh)"
-        helpText="Congestion premium for rerouting power during an outage."
+      <PercentageField
+        path={LOAD_SHED_PATH}
+        label="Load-shed fraction (%)"
+        helpText={LOAD_SHED_HELP}
       />
       <PercentageField
         path={`${OUTAGE}.risk_growth_rate`}

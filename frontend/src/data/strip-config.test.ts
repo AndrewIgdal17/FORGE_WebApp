@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 
-import { getStripConfig, readFigureValue } from '@/data/strip-config';
+import { STRIP_CONFIG, getStripConfig, readFigureValue } from '@/data/strip-config';
 import { SUNZIA_DELAY2_BLOCK } from '@/lib/delay-comparison.fixtures';
 
 it('delay strips show the direct cost and the total cost of delay (acceptance 8)', () => {
@@ -18,4 +18,19 @@ it('no web-owned label reads Base Delay (acceptance 9)', () => {
   const sources = import.meta.glob('../**/*.{ts,tsx}', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
   const hits = Object.entries(sources).filter(([f, s]) => !f.endsWith('.test.ts') && /Base Delay/.test(s)).map(([f]) => f);
   expect(hits).toEqual([]);
+});
+
+it('economic-details strip is removed; system-constraints leads with energy benefits (Spec 18)', () => {
+  expect(STRIP_CONFIG['economic-details']).toBeUndefined();
+  const labels = STRIP_CONFIG['system-constraints']!.figures.map((f) => f.label);
+  expect(labels.slice(0, 2)).toEqual(['Delivered Energy PV', 'Capacity Value PV']);
+});
+
+it('outage-risk strip lists load shed and redispatch PV after outage total', () => {
+  const labels = STRIP_CONFIG['outage-risk']!.figures.map((f) => f.label);
+  expect(labels).toContain('Load Shed PV');
+  expect(labels).toContain('Redispatch PV');
+  const outageIdx = labels.indexOf('Outage PV');
+  expect(labels.indexOf('Load Shed PV')).toBeGreaterThan(outageIdx);
+  expect(labels.indexOf('Redispatch PV')).toBeGreaterThan(outageIdx);
 });

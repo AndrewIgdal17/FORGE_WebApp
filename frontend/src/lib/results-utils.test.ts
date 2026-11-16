@@ -14,7 +14,7 @@ import {
   deriveTaxonomyResults,
   readCategoryTotal,
 } from '@/lib/results-utils';
-import { pvHeading, withLegacyItems } from '@/components/results/taxonomy-view';
+import { pvHeading, withLegacyItems, withRetiredItems } from '@/components/results/taxonomy-view';
 import * as formatModule from '@/lib/format';
 import * as resultsModule from '@/lib/results-utils';
 import * as taxonomyModule from '@/components/results/taxonomy-view';
@@ -280,7 +280,17 @@ describe('reporting categories (Spec 15)', () => {
     expect(CATEGORY_LABELS.emissions).toBe('Emissions');
     expect(BENEFIT_CATEGORY_LABELS.market).toBe('Market benefits');
     expect(BENEFIT_CATEGORY_LABELS.external).toBe('External benefits');
-    expect(Object.keys(RESULT_CATEGORY)).toHaveLength(23);
+    expect(Object.keys(RESULT_CATEGORY)).toHaveLength(25);
+    expect(RESULT_CATEGORY.outage_load_shed).toEqual({
+      side: 'cost',
+      category: 'external',
+      subgroup: 'risk',
+    });
+    expect(RESULT_CATEGORY.outage_redispatch).toEqual({
+      side: 'cost',
+      category: 'external',
+      subgroup: 'risk',
+    });
     expect(RESULT_CATEGORY.row_holding.category).toBe('delay_period');
     expect(pvHeading('market', 'Benefits')).toContain('Market benefits');
   });
@@ -350,5 +360,69 @@ describe('operating part ids (Task 7)', () => {
     expect(items[0]).toMatchObject({ id: 'oandm', label: 'O&M', category: 'operating' });
 
     expect(withLegacyItems([], buildResultById({ taxonomy_results: [] }))).toHaveLength(0);
+  });
+});
+
+describe('outage split and retired rows (Spec 18 Task 6)', () => {
+  it('excludesNote labels outage redispatch', () => {
+    expect(excludesNote(['outage_redispatch'])).toBe('Excludes: Outage redispatch.');
+  });
+
+  it('deriveTaxonomyResults emits two outage parts when pv_load_shed is present', () => {
+    const rows = deriveTaxonomyResults({
+      costs: { outage: { pv_load_shed: 3, pv_redispatch: 7, pv_cost: 10 } },
+    });
+    const ids = rows.map((r) => (r as { taxonomy_id: string }).taxonomy_id);
+    expect(ids).toContain('outage_load_shed');
+    expect(ids).toContain('outage_redispatch');
+    expect(ids).not.toContain('outage_eac');
+  });
+
+  it('deriveTaxonomyResults keeps outage_eac when split keys are absent', () => {
+    const rows = deriveTaxonomyResults({
+      costs: { outage: { pv_cost: 4 } },
+    });
+    const ids = rows.map((r) => (r as { taxonomy_id: string }).taxonomy_id);
+    expect(ids).toContain('outage_eac');
+    expect(ids).not.toContain('outage_load_shed');
+  });
+
+  it('readCategoryTotal sums split outage rows on external_risk', () => {
+    const results = {
+      taxonomy_results: [
+        { taxonomy_id: 'wildfire_eac', value_pv: 1 },
+        { taxonomy_id: 'outage_load_shed', value_pv: 3 },
+        { taxonomy_id: 'outage_redispatch', value_pv: 2 },
+        { taxonomy_id: 'outage_eac', state: 'does_not_apply', value_pv: null },
+      ],
+    };
+    expect(readCategoryTotal(results, 'external_risk')).toBe(6);
+  });
+
+  it('withRetiredItems adds stored outage_eac when taxonomy omits it', () => {
+    const resultById = buildResultById({
+      taxonomy_results: [{ taxonomy_id: 'outage_eac', value_pv: 7 }],
+    });
+    const items = withRetiredItems([], resultById);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: 'outage_eac',
+      label: 'Expected outage cost',
+      category: 'external',
+      subgroup: 'risk',
+    });
+    expect(
+      readCategoryTotal(
+        {
+          taxonomy_results: [
+            { taxonomy_id: 'wildfire_eac', state: 'does_not_apply', value_pv: null },
+            { taxonomy_id: 'outage_load_shed', state: 'does_not_apply', value_pv: null },
+            { taxonomy_id: 'outage_redispatch', state: 'does_not_apply', value_pv: null },
+            { taxonomy_id: 'outage_eac', value_pv: 7 },
+          ],
+        },
+        'external_risk',
+      ),
+    ).toBe(7);
   });
 });

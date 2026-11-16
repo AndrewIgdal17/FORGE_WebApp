@@ -234,8 +234,8 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
   },
 
   // --- Benefits ---
-  'economic-details': {
-    title: 'Economic details drive loss-compensation benefits',
+  'system-constraints': {
+    title: 'System constraints drive congestion benefits',
     figures: [
       {
         label: 'Delivered Energy PV',
@@ -251,13 +251,6 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         format: 'currency',
         appliesId: 'capacity_value_benefit',
       },
-      { label: 'Outage PV', source: 'path', path: 'bcr.outage_pv', format: 'currency' },
-    ],
-    resultsView: 'r-overview',
-  },
-  'system-constraints': {
-    title: 'System constraints drive congestion benefits',
-    figures: [
       { label: 'Relief MW', source: 'path', path: 'benefits.congestion.relief_mw', format: 'number' },
       {
         label: 'Congestion Benefit PV',
@@ -440,6 +433,18 @@ export const STRIP_CONFIG: Record<string, StripConfig> = {
         format: 'currency',
       },
       { label: 'Outage PV', source: 'path', path: 'bcr.outage_pv', format: 'currency' },
+      {
+        label: 'Load Shed PV',
+        source: 'path',
+        path: 'bcr.outage_load_shed_pv',
+        format: 'currency',
+      },
+      {
+        label: 'Redispatch PV',
+        source: 'path',
+        path: 'bcr.outage_redispatch_pv',
+        format: 'currency',
+      },
       { label: 'Total Risk PV', source: 'path', path: 'summary.total_risk_pv', format: 'currency' },
     ],
     resultsView: 'r-overview',

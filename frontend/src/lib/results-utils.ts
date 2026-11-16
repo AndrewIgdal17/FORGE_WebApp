@@ -94,6 +94,8 @@ export const RESULT_CATEGORY: Record<string, ResultCategoryMeta> = {
   line_loss_converter: { side: 'cost', category: 'operating', subgroup: null },
   wildfire_eac: { side: 'cost', category: 'external', subgroup: 'risk' },
   outage_eac: { side: 'cost', category: 'external', subgroup: 'risk' },
+  outage_load_shed: { side: 'cost', category: 'external', subgroup: 'risk' },
+  outage_redispatch: { side: 'cost', category: 'external', subgroup: 'risk' },
   emissions_comp: { side: 'cost', category: 'external', subgroup: 'emissions' },
   congestion_benefit: { side: 'benefit', category: 'market', subgroup: null },
   delivered_energy_benefit: { side: 'benefit', category: 'market', subgroup: null },
@@ -362,6 +364,8 @@ const OMITTED_LABELS: Record<string, string> = {
   line_loss_conductor: 'Conductor losses',
   delivered_energy_benefit: 'Delivered energy',
   line_loss_converter: 'Converter losses',
+  outage_load_shed: 'Outage load shed',
+  outage_redispatch: 'Outage redispatch',
 };
 
 export function excludesNote(ids: string[]): string {
@@ -503,26 +507,45 @@ export function deriveTaxonomyResults(
       value_annual: readNumber(wf.EAL),
       detail: [],
     },
-    {
-      taxonomy_id: 'outage_eac',
-      value_pv: readNumber(out.pv_cost),
-      value_nominal: readNumber(out.nominal_total),
-      value_annual: readNumber(out.expected_annual_loss),
-      detail: [
-        {
-          dimension: 'component',
-          dimension_key: 'load_shed_per_event',
-          value_pv: 0,
-          value_annual: readNumber(out.cost_loadshed),
-        },
-        {
-          dimension: 'component',
-          dimension_key: 'redispatch_per_event',
-          value_pv: 0,
-          value_annual: readNumber(out.cost_redispatch),
-        },
-      ],
-    },
+    ...(out && Object.prototype.hasOwnProperty.call(out, 'pv_load_shed')
+      ? [
+          {
+            taxonomy_id: 'outage_load_shed',
+            value_pv: readNumber(out.pv_load_shed),
+            value_nominal: readNumber(out.nominal_load_shed),
+            value_annual: readNumber(out.annual_load_shed),
+            detail: [],
+          },
+          {
+            taxonomy_id: 'outage_redispatch',
+            value_pv: readNumber(out.pv_redispatch),
+            value_nominal: readNumber(out.nominal_redispatch),
+            value_annual: readNumber(out.annual_redispatch),
+            detail: [],
+          },
+        ]
+      : [
+          {
+            taxonomy_id: 'outage_eac',
+            value_pv: readNumber(out.pv_cost),
+            value_nominal: readNumber(out.nominal_total),
+            value_annual: readNumber(out.expected_annual_loss),
+            detail: [
+              {
+                dimension: 'component',
+                dimension_key: 'load_shed_per_event',
+                value_pv: 0,
+                value_annual: readNumber(out.cost_loadshed),
+              },
+              {
+                dimension: 'component',
+                dimension_key: 'redispatch_per_event',
+                value_pv: 0,
+                value_annual: readNumber(out.cost_redispatch),
+              },
+            ],
+          },
+        ]),
     {
       taxonomy_id: 'emissions_comp',
       value_pv: readNumber(em.total_pv),

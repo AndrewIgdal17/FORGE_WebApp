@@ -7,7 +7,6 @@ import { ConductorMaintenance } from '@/components/sections/conductor-maintenanc
 import { ConverterDetails } from '@/components/sections/converter-details';
 import { ConverterMaintenance } from '@/components/sections/converter-maintenance';
 import { DelayCosts } from '@/components/sections/delay-costs';
-import { EconomicDetails } from '@/components/sections/economic-details';
 import { EmissionsSection } from '@/components/sections/emissions-section';
 import { EnvCredits } from '@/components/sections/env-credits';
 import { FinancialRates } from '@/components/sections/financial-rates';
@@ -58,8 +57,6 @@ export function SectionDispatcher({
       return <MarketMeasurementsSection />;
     case 'rights-of-way':
       return <RightsOfWay milesFromRoute={milesFromRoute} routeDrawn={routeDrawn} />;
-    case 'economic-details':
-      return <EconomicDetails />;
     case 'system-constraints':
       return <SystemConstraints />;
     case 'rates':

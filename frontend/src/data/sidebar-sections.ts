@@ -51,10 +51,7 @@ export const SIDEBAR_SECTIONS: SidebarSections = {
       id: 'benefits',
       label: 'System Economics',
       color: '#10b981',
-      subItems: [
-        { id: 'economic-details', label: 'Value of Energy' },
-        { id: 'system-constraints', label: 'System Constraints' },
-      ],
+      subItems: [{ id: 'system-constraints', label: 'System Constraints' }],
     },
     {
       id: 'financial',

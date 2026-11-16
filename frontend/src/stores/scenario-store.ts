@@ -176,6 +176,8 @@ const RESULTS_EXPORT_FIELDS: Array<{
   { key: 'total_operational_pv', path: 'summary.total_operational_pv' },
   { key: 'wildfire_pv', path: 'costs.wildfire.pv_cost' },
   { key: 'outage_pv', path: 'costs.outage.pv_cost' },
+  { key: 'outage_load_shed_pv', path: 'bcr.outage_load_shed_pv' },
+  { key: 'outage_redispatch_pv', path: 'bcr.outage_redispatch_pv' },
   { key: 'total_risk_pv', path: 'summary.total_risk_pv' },
   { key: 'delay_pv', path: 'costs.delay.total_pv' },
   { key: 'delay_baseline_years', path: 'delay_comparison.baseline_delay_years' },

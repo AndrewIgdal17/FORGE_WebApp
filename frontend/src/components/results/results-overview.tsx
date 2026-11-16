@@ -21,6 +21,7 @@ import {
   readTaxonomyItems,
   resolveResultById,
   withLegacyItems,
+  withRetiredItems,
   type TaxonomyItemView,
 } from '@/components/results/taxonomy-view';
 import { DELAY_OTHER_VIEW_NOTE, DIRECT_DELAY_LABEL } from '@/lib/delay-comparison';
@@ -954,7 +955,10 @@ export function ResultsOverview({
   const costs = loadCategories(results, categories.costs);
   const benefits = loadCategories(results, categories.benefits);
   const resultById = resolveResultById(results);
-  const taxonomyItems = withLegacyItems(readTaxonomyItems(taxonomy), resultById);
+  const taxonomyItems = withLegacyItems(
+    withRetiredItems(readTaxonomyItems(taxonomy), resultById),
+    resultById,
+  );
   const sideMap = sideMapFromTaxonomy(taxonomy);
 
   function hasLineItems(side: LedgerSide, key: string): boolean {

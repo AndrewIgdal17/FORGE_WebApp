@@ -31,8 +31,8 @@ const NOT_APPLYING = {
 
 describe('benefit strips and applies (Spec 10 rule 8)', () => {
   const figures = [
-    ...STRIP_CONFIG['economic-details'].figures.slice(0, 2),
-    STRIP_CONFIG['system-constraints'].figures[1]!,
+    ...STRIP_CONFIG['system-constraints'].figures.slice(0, 2),
+    STRIP_CONFIG['system-constraints'].figures[3]!,
   ];
   it('a benefit that does not apply reads Does not apply', () => {
     for (const figure of figures) expect(displayFigure(figure, NOT_APPLYING)).toBe('Does not apply');
@@ -172,6 +172,17 @@ describe('net line and converter loss MWh (Task 5)', () => {
         label,
       ).toBe('Not available');
     }
+  });
+});
+
+describe('outage strip redispatch (Spec 18)', () => {
+  const nullRedispatch = {
+    bcr: { outage_load_shed_pv: 100, outage_redispatch_pv: null, outage_pv: 100 },
+  };
+
+  it('shows Not available on Redispatch PV when the spread is missing', () => {
+    const figure = STRIP_CONFIG['outage-risk']!.figures.find((f) => f.label === 'Redispatch PV')!;
+    expect(displayFigure(figure, nullRedispatch)).toBe('Not available');
   });
 });
 

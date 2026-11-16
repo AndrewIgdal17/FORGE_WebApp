@@ -389,6 +389,18 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         format: 'currency',
       },
       {
+        key: 'outage_load_shed_pv',
+        label: 'Outage load shed (PV)',
+        path: 'costs.outage.pv_load_shed',
+        format: 'currency',
+      },
+      {
+        key: 'outage_redispatch_pv',
+        label: 'Outage redispatch (PV)',
+        path: 'costs.outage.pv_redispatch',
+        format: 'currency',
+      },
+      {
         key: 'outage_loadshed_per_event',
         label: 'Outage Load-Shed Cost/Event',
         path: 'costs.outage.cost_loadshed',
