@@ -358,3 +358,26 @@ describe('reporting category overview (Task 5)', () => {
     expect(itemsInCategory(items, 'capital').map((item) => item.id)).toContain('build_conductor');
   });
 });
+
+describe('utility O&M and insurance rows (Task 7)', () => {
+  it('sums line O&M WACC on AC results when converter does not apply', () => {
+    const ac = {
+      taxonomy_results: [
+        { taxonomy_id: 'oandm_line', value_pv_wacc: 80 },
+        { taxonomy_id: 'oandm_converter', state: 'does_not_apply', value_pv_wacc: null },
+      ],
+    };
+    const rows = loadCategories(ac, PERSPECTIVE_CATEGORIES.utility.costs);
+    const oandm = rows.find((r) => r.key === 'oandm')!;
+    expect(oandm.value).toBe(80);
+    expect(oandm.doesNotApply).toBe(false);
+  });
+
+  it('reads legacy oandm WACC when part ids are absent', () => {
+    const legacy = {
+      taxonomy_results: [{ taxonomy_id: 'oandm', value_pv_wacc: 80 }],
+    };
+    const rows = loadCategories(legacy, PERSPECTIVE_CATEGORIES.utility.costs);
+    expect(rows.find((r) => r.key === 'oandm')!.value).toBe(80);
+  });
+});

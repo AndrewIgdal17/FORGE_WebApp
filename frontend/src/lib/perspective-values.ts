@@ -8,25 +8,41 @@ import { buildResultById, rowDoesNotApply } from '@/lib/results-utils';
  * Returns the sum of `value_pv_wacc` over `ids`, or null when any item or its
  * WACC value is missing. It never substitutes the societal value.
  */
+export function resolveWaccIds(
+  results: Record<string, unknown>,
+  ids: readonly string[],
+  legacyIds?: readonly string[],
+): readonly string[] {
+  const rows = results.taxonomy_results;
+  if (!Array.isArray(rows)) return legacyIds ?? ids;
+  const idSet = new Set(ids);
+  const hasPart = rows.some((row) => {
+    if (!row || typeof row !== 'object') return false;
+    const taxonomyId = (row as Record<string, unknown>).taxonomy_id;
+    return typeof taxonomyId === 'string' && idSet.has(taxonomyId);
+  });
+  return hasPart ? ids : (legacyIds ?? ids);
+}
+
 export function waccValueSum(
   results: Record<string, unknown>,
   ids: readonly string[],
 ): number | null {
   const rows = results.taxonomy_results;
   if (!Array.isArray(rows)) return null;
-  const byId = new Map<string, Record<string, unknown>>();
-  for (const row of rows) {
-    if (row && typeof row === 'object') {
-      const record = row as Record<string, unknown>;
-      if (typeof record.taxonomy_id === 'string') byId.set(record.taxonomy_id, record);
-    }
-  }
+  const byId = buildResultById(results);
   let total = 0;
+  let applying = 0;
   for (const id of ids) {
-    const value = byId.get(id)?.value_pv_wacc;
+    const row = byId[id];
+    if (rowDoesNotApply(row)) continue;
+    applying += 1;
+    if (!row) return null;
+    const value = (row as Record<string, unknown>).value_pv_wacc;
     if (typeof value !== 'number' || !Number.isFinite(value)) return null;
     total += value;
   }
+  if (applying === 0) return 0;
   return total;
 }
 

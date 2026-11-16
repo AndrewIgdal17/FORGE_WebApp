@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { waccApplyingValueSum, waccValueSum } from './perspective-values';
+import { OANDM_PART_IDS } from '@/lib/results-utils';
+import { resolveWaccIds, waccApplyingValueSum, waccValueSum } from './perspective-values';
 
 const results = {
   taxonomy_results: [
@@ -24,6 +25,36 @@ describe('waccValueSum', () => {
   it('returns null when an item or the list is missing', () => {
     expect(waccValueSum(results, ['row_rent'])).toBeNull();
     expect(waccValueSum({}, ['oandm'])).toBeNull();
+  });
+
+  it('skips non-applying parts, sums applying line O&M, and returns 0 when all parts do not apply', () => {
+    const partial = {
+      taxonomy_results: [
+        { taxonomy_id: 'oandm_line', value_pv_wacc: 80 },
+        { taxonomy_id: 'oandm_converter', state: 'does_not_apply', value_pv_wacc: null },
+      ],
+    };
+    expect(waccValueSum(partial, OANDM_PART_IDS)).toBe(80);
+
+    const none = {
+      taxonomy_results: [
+        { taxonomy_id: 'oandm_line', state: 'does_not_apply', value_pv_wacc: null },
+        { taxonomy_id: 'oandm_converter', state: 'does_not_apply', value_pv_wacc: null },
+      ],
+    };
+    expect(waccValueSum(none, OANDM_PART_IDS)).toBe(0);
+  });
+});
+
+describe('resolveWaccIds', () => {
+  it('falls back to legacy ids when no part rows exist', () => {
+    expect(
+      resolveWaccIds(
+        { taxonomy_results: [{ taxonomy_id: 'oandm', value_pv_wacc: 80 }] },
+        OANDM_PART_IDS,
+        ['oandm'],
+      ),
+    ).toEqual(['oandm']);
   });
 });
 

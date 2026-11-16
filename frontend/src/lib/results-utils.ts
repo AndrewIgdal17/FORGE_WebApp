@@ -1,3 +1,5 @@
+import type { TaxonomyItemView } from '@/components/results/taxonomy-view';
+
 export const COMPOSITION_COLORS: string[] = [
   '#0066cc',
   '#2563eb',
@@ -58,6 +60,21 @@ type ResultCategoryMeta = {
   subgroup: 'risk' | 'emissions' | null;
 };
 
+export const OANDM_PART_IDS = ['oandm_line', 'oandm_converter'] as const;
+export const INSURANCE_PART_IDS = ['insurance_line', 'insurance_converter'] as const;
+
+export const OPERATING_PART_LABELS: Record<string, string> = {
+  oandm_line: 'Line O&M',
+  oandm_converter: 'Converter O&M',
+  insurance_line: 'Line insurance',
+  insurance_converter: 'Converter insurance',
+};
+
+export const LEGACY_TAXONOMY_ITEMS: TaxonomyItemView[] = [
+  { id: 'oandm', label: 'O&M', category: 'operating', subgroup: null, displayOrder: 1 },
+  { id: 'insurance', label: 'Insurance', category: 'operating', subgroup: null, displayOrder: 2 },
+];
+
 export const RESULT_CATEGORY: Record<string, ResultCategoryMeta> = {
   build_conductor: { side: 'cost', category: 'capital', subgroup: null },
   build_structure: { side: 'cost', category: 'capital', subgroup: null },
@@ -67,7 +84,11 @@ export const RESULT_CATEGORY: Record<string, ResultCategoryMeta> = {
   base_delay: { side: 'cost', category: 'delay_period', subgroup: null },
   row_holding: { side: 'cost', category: 'delay_period', subgroup: null },
   oandm: { side: 'cost', category: 'operating', subgroup: null },
+  oandm_line: { side: 'cost', category: 'operating', subgroup: null },
+  oandm_converter: { side: 'cost', category: 'operating', subgroup: null },
   insurance: { side: 'cost', category: 'operating', subgroup: null },
+  insurance_line: { side: 'cost', category: 'operating', subgroup: null },
+  insurance_converter: { side: 'cost', category: 'operating', subgroup: null },
   row_rent: { side: 'cost', category: 'operating', subgroup: null },
   line_loss_conductor: { side: 'cost', category: 'operating', subgroup: null },
   line_loss_converter: { side: 'cost', category: 'operating', subgroup: null },

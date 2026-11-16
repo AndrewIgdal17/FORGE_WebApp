@@ -7,12 +7,14 @@ import { cardValues } from '@/components/results/taxonomy-view';
 import {
   BENEFIT_CATEGORY_LABELS,
   CATEGORY_LABELS,
+  LEGACY_TAXONOMY_ITEMS,
+  OPERATING_PART_LABELS,
   RESULT_CATEGORY,
   buildResultById,
   deriveTaxonomyResults,
   readCategoryTotal,
 } from '@/lib/results-utils';
-import { pvHeading } from '@/components/results/taxonomy-view';
+import { pvHeading, withLegacyItems } from '@/components/results/taxonomy-view';
 import * as formatModule from '@/lib/format';
 import * as resultsModule from '@/lib/results-utils';
 import * as taxonomyModule from '@/components/results/taxonomy-view';
@@ -278,8 +280,75 @@ describe('reporting categories (Spec 15)', () => {
     expect(CATEGORY_LABELS.emissions).toBe('Emissions');
     expect(BENEFIT_CATEGORY_LABELS.market).toBe('Market benefits');
     expect(BENEFIT_CATEGORY_LABELS.external).toBe('External benefits');
-    expect(Object.keys(RESULT_CATEGORY)).toHaveLength(19);
+    expect(Object.keys(RESULT_CATEGORY)).toHaveLength(23);
     expect(RESULT_CATEGORY.row_holding.category).toBe('delay_period');
     expect(pvHeading('market', 'Benefits')).toContain('Market benefits');
+  });
+});
+
+describe('operating part ids (Task 7)', () => {
+  const operatingMeta = { side: 'cost' as const, category: 'operating' as const, subgroup: null };
+
+  it('maps the four part ids and legacy oandm and insurance to operating', () => {
+    for (const id of [
+      'oandm_line',
+      'oandm_converter',
+      'insurance_line',
+      'insurance_converter',
+      'oandm',
+      'insurance',
+    ]) {
+      expect(RESULT_CATEGORY[id]).toEqual(operatingMeta);
+    }
+    expect(OPERATING_PART_LABELS).toEqual({
+      oandm_line: 'Line O&M',
+      oandm_converter: 'Converter O&M',
+      insurance_line: 'Line insurance',
+      insurance_converter: 'Converter insurance',
+    });
+    expect(LEGACY_TAXONOMY_ITEMS).toEqual([
+      { id: 'oandm', label: 'O&M', category: 'operating', subgroup: null, displayOrder: 1 },
+      { id: 'insurance', label: 'Insurance', category: 'operating', subgroup: null, displayOrder: 2 },
+    ]);
+  });
+
+  it('sums four new operating rows and legacy oandm plus insurance rows', () => {
+    const fourParts = {
+      taxonomy_results: [
+        { taxonomy_id: 'oandm_line', value_pv: 10 },
+        { taxonomy_id: 'oandm_converter', value_pv: 20 },
+        { taxonomy_id: 'insurance_line', value_pv: 3 },
+        { taxonomy_id: 'insurance_converter', value_pv: 7 },
+        { taxonomy_id: 'oandm', state: 'does_not_apply', value_pv: null },
+        { taxonomy_id: 'insurance', state: 'does_not_apply', value_pv: null },
+        { taxonomy_id: 'row_rent', state: 'does_not_apply', value_pv: null },
+        { taxonomy_id: 'line_loss_conductor', state: 'does_not_apply', value_pv: null },
+        { taxonomy_id: 'line_loss_converter', state: 'does_not_apply', value_pv: null },
+      ],
+    };
+    expect(readCategoryTotal(fourParts, 'operating')).toBe(40);
+
+    const legacy = {
+      taxonomy_results: [
+        { taxonomy_id: 'oandm', value_pv: 5 },
+        { taxonomy_id: 'insurance', value_pv: 3 },
+        { taxonomy_id: 'row_rent', state: 'does_not_apply', value_pv: null },
+        { taxonomy_id: 'oandm_line', state: 'does_not_apply', value_pv: null },
+        { taxonomy_id: 'oandm_converter', state: 'does_not_apply', value_pv: null },
+        { taxonomy_id: 'insurance_line', state: 'does_not_apply', value_pv: null },
+        { taxonomy_id: 'insurance_converter', state: 'does_not_apply', value_pv: null },
+        { taxonomy_id: 'line_loss_conductor', state: 'does_not_apply', value_pv: null },
+        { taxonomy_id: 'line_loss_converter', state: 'does_not_apply', value_pv: null },
+      ],
+    };
+    expect(readCategoryTotal(legacy, 'operating')).toBe(8);
+  });
+
+  it('withLegacyItems adds legacy O&M when results carry oandm but taxonomy does not', () => {
+    const items = withLegacyItems([], buildResultById({ taxonomy_results: [{ taxonomy_id: 'oandm', value_pv: 1 }] }));
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ id: 'oandm', label: 'O&M', category: 'operating' });
+
+    expect(withLegacyItems([], buildResultById({ taxonomy_results: [] }))).toHaveLength(0);
   });
 });

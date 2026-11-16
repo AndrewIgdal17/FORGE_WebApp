@@ -3,6 +3,7 @@ import { humanizeLabel } from '@/lib/format';
 import {
   BENEFIT_CATEGORY_LABELS,
   CATEGORY_LABELS,
+  LEGACY_TAXONOMY_ITEMS,
   buildResultById,
   deriveTaxonomyResults,
   readNumber,
@@ -71,6 +72,17 @@ export function resolveResultById(
   const existing = results.taxonomy_results;
   if (Array.isArray(existing) && existing.length > 0) return buildResultById(results);
   return buildResultById({ taxonomy_results: deriveTaxonomyResults(results) });
+}
+
+export function withLegacyItems(
+  items: TaxonomyItemView[],
+  resultById: Record<string, unknown>,
+): TaxonomyItemView[] {
+  const existing = new Set(items.map((item) => item.id));
+  const appended = LEGACY_TAXONOMY_ITEMS.filter(
+    (legacy) => legacy.id in resultById && !existing.has(legacy.id),
+  );
+  return appended.length === 0 ? items : [...items, ...appended];
 }
 
 export function readTaxonomyItems(

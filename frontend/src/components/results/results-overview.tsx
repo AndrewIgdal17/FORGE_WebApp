@@ -20,6 +20,7 @@ import {
   positiveItems,
   readTaxonomyItems,
   resolveResultById,
+  withLegacyItems,
   type TaxonomyItemView,
 } from '@/components/results/taxonomy-view';
 import { DELAY_OTHER_VIEW_NOTE, DIRECT_DELAY_LABEL } from '@/lib/delay-comparison';
@@ -28,6 +29,8 @@ import {
   BENEFIT_CATEGORY_LABELS,
   CATEGORY_LABELS,
   DOES_NOT_APPLY,
+  INSURANCE_PART_IDS,
+  OANDM_PART_IDS,
   REPORTING_PATHS,
   excludesNote,
   itemDoesNotApply,
@@ -38,7 +41,7 @@ import {
   type ReportingKey,
 } from '@/lib/results-utils';
 import { getValueAtPath } from '@/lib/path';
-import { waccApplyingValueSum, waccValueSum } from '@/lib/perspective-values';
+import { resolveWaccIds, waccApplyingValueSum, waccValueSum } from '@/lib/perspective-values';
 import { cn } from '@/lib/utils';
 
 export interface ResultsOverviewProps {
@@ -53,6 +56,8 @@ export interface PerspectiveCategoryItem {
   path: string;
   /** Utility and ratepayer items: the taxonomy items whose WACC present values sum to this row. */
   waccIds?: readonly string[];
+  /** When part rows are absent, sum these legacy taxonomy ids instead. */
+  legacyWaccIds?: readonly string[];
   /** Societal category rows resolved via `readCategoryTotal` (Spec 15). */
   reportingKey?: ReportingKey;
 }
@@ -109,8 +114,20 @@ export const PERSPECTIVE_CATEGORIES: Record<
   ratepayer: {
     costs: [
       { key: 'capital_recovery', label: 'Capital Recovery', path: 'bcr.capital_recovery_pv', waccIds: ['capital_recovery'] },
-      { key: 'oandm', label: 'O&M', path: 'bcr.oandm_pv', waccIds: ['oandm'] },
-      { key: 'insurance', label: 'Insurance', path: 'bcr.insurance_pv', waccIds: ['insurance'] },
+      {
+        key: 'oandm',
+        label: 'O&M',
+        path: 'bcr.oandm_pv',
+        waccIds: OANDM_PART_IDS,
+        legacyWaccIds: ['oandm'],
+      },
+      {
+        key: 'insurance',
+        label: 'Insurance',
+        path: 'bcr.insurance_pv',
+        waccIds: INSURANCE_PART_IDS,
+        legacyWaccIds: ['insurance'],
+      },
       { key: 'row_rent', label: 'ROW Rent', path: 'bcr.row_rent_pv', waccIds: ['row_rent'] },
       { key: 'conductor_loss', label: 'Conductor Losses', path: 'bcr.conductor_loss_pv', waccIds: ['line_loss_conductor'] },
       { key: 'converter_loss', label: 'Converter Losses', path: 'bcr.converter_loss_pv', waccIds: ['line_loss_converter'] },
@@ -127,16 +144,40 @@ export const PERSPECTIVE_CATEGORIES: Record<
   utility: {
     costs: [
       { key: 'capital_recovery', label: 'Capital Recovery', path: 'bcr.capital_recovery_pv', waccIds: ['capital_recovery'] },
-      { key: 'oandm', label: 'O&M', path: 'bcr.oandm_pv', waccIds: ['oandm'] },
-      { key: 'insurance', label: 'Insurance', path: 'bcr.insurance_pv', waccIds: ['insurance'] },
+      {
+        key: 'oandm',
+        label: 'O&M',
+        path: 'bcr.oandm_pv',
+        waccIds: OANDM_PART_IDS,
+        legacyWaccIds: ['oandm'],
+      },
+      {
+        key: 'insurance',
+        label: 'Insurance',
+        path: 'bcr.insurance_pv',
+        waccIds: INSURANCE_PART_IDS,
+        legacyWaccIds: ['insurance'],
+      },
       { key: 'row_rent', label: 'ROW Rent', path: 'bcr.row_rent_pv', waccIds: ['row_rent'] },
       { key: 'delay', label: DIRECT_DELAY_LABEL, path: 'bcr.delay_cost_pv', waccIds: ['base_delay'] },
       { key: 'holding', label: 'ROW Holding Cost', path: 'bcr.holding_pv', waccIds: ['row_holding'] },
     ],
     benefits: [
       { key: 'capital_recovery', label: 'Capital Recovery', path: 'bcr.capital_recovery_pv', waccIds: ['capital_recovery'] },
-      { key: 'oandm', label: 'O&M', path: 'bcr.oandm_pv', waccIds: ['oandm'] },
-      { key: 'insurance', label: 'Insurance', path: 'bcr.insurance_pv', waccIds: ['insurance'] },
+      {
+        key: 'oandm',
+        label: 'O&M',
+        path: 'bcr.oandm_pv',
+        waccIds: OANDM_PART_IDS,
+        legacyWaccIds: ['oandm'],
+      },
+      {
+        key: 'insurance',
+        label: 'Insurance',
+        path: 'bcr.insurance_pv',
+        waccIds: INSURANCE_PART_IDS,
+        legacyWaccIds: ['insurance'],
+      },
       { key: 'row_rent', label: 'ROW Rent', path: 'bcr.row_rent_pv', waccIds: ['row_rent'] },
     ],
   },
@@ -256,6 +297,32 @@ function magnitude(value: number | null): number {
   return value === null ? -1 : Math.abs(value);
 }
 
+function waccCategoryValue(
+  results: Record<string, unknown>,
+  item: PerspectiveCategoryItem,
+): number | null {
+  if (!item.waccIds) return readNumber(results, item.path);
+  if (item.legacyWaccIds) {
+    return waccValueSum(
+      results,
+      resolveWaccIds(results, item.waccIds, item.legacyWaccIds),
+    );
+  }
+  if (item.waccIds.length > 1) return waccApplyingValueSum(results, item.waccIds);
+  return waccValueSum(results, item.waccIds);
+}
+
+function waccRowDoesNotApply(
+  results: Record<string, unknown>,
+  item: PerspectiveCategoryItem,
+): boolean {
+  if (item.legacyWaccIds && item.waccIds) {
+    const ids = resolveWaccIds(results, item.waccIds, item.legacyWaccIds);
+    return ids.length > 0 && ids.every((id) => itemDoesNotApply(results, id));
+  }
+  return item.waccIds?.length === 1 && itemDoesNotApply(results, item.waccIds[0]!);
+}
+
 export function loadCategories(
   results: Record<string, unknown>,
   items: PerspectiveCategoryItem[],
@@ -266,13 +333,8 @@ export function loadCategories(
       label: item.label,
       value: item.reportingKey
         ? readCategoryTotal(results, item.reportingKey)
-        : item.waccIds
-          ? item.waccIds.length > 1
-            ? waccApplyingValueSum(results, item.waccIds)
-            : waccValueSum(results, item.waccIds)
-          : readNumber(results, item.path),
-      doesNotApply:
-        item.waccIds?.length === 1 && itemDoesNotApply(results, item.waccIds[0]!),
+        : waccCategoryValue(results, item),
+      doesNotApply: waccRowDoesNotApply(results, item),
     }))
     .sort((left, right) => magnitude(right.value) - magnitude(left.value));
 }
@@ -622,20 +684,20 @@ export function sideMapFromTaxonomy(
 }
 
 /**
- * Keys in ITEM_ID_BY_KEY resolve to a single taxonomy item by id, skipping
- * the side filter (required because capital_recovery is side "transfer" and
- * ATRR items appear on both the cost and benefit sides of the utility
- * perspective). All other keys match taxonomy category + side.
+ * Keys in ITEM_IDS_BY_KEY resolve to taxonomy items by id, skipping the side
+ * filter (required because capital_recovery is side "transfer" and ATRR items
+ * appear on both the cost and benefit sides of the utility perspective). All
+ * other keys match taxonomy category + side.
  */
-const ITEM_ID_BY_KEY: Record<string, string> = {
-  delay:            'base_delay',
-  holding:          'row_holding',
-  capital_recovery: 'capital_recovery',
-  oandm:            'oandm',
-  insurance:        'insurance',
-  row_rent:         'row_rent',
-  conductor_loss:   'line_loss_conductor',
-  converter_loss:   'line_loss_converter',
+const ITEM_IDS_BY_KEY: Record<string, readonly string[]> = {
+  delay: ['base_delay'],
+  holding: ['row_holding'],
+  capital_recovery: ['capital_recovery'],
+  oandm: [...OANDM_PART_IDS, 'oandm'],
+  insurance: [...INSURANCE_PART_IDS, 'insurance'],
+  row_rent: ['row_rent'],
+  conductor_loss: ['line_loss_conductor'],
+  converter_loss: ['line_loss_converter'],
 };
 
 export function itemsForCategory(
@@ -644,8 +706,8 @@ export function itemsForCategory(
   side: LedgerSide,
   key: string,
 ): TaxonomyItemView[] {
-  const itemId = ITEM_ID_BY_KEY[key];
-  if (itemId) return items.filter((item) => item.id === itemId);
+  const itemIds = ITEM_IDS_BY_KEY[key];
+  if (itemIds) return items.filter((item) => itemIds.includes(item.id));
   const category = key;
   return items
     .filter((item) => {
@@ -892,7 +954,7 @@ export function ResultsOverview({
   const costs = loadCategories(results, categories.costs);
   const benefits = loadCategories(results, categories.benefits);
   const resultById = resolveResultById(results);
-  const taxonomyItems = readTaxonomyItems(taxonomy);
+  const taxonomyItems = withLegacyItems(readTaxonomyItems(taxonomy), resultById);
   const sideMap = sideMapFromTaxonomy(taxonomy);
 
   function hasLineItems(side: LedgerSide, key: string): boolean {
