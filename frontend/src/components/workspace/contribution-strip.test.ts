@@ -4,7 +4,7 @@ vi.mock('@/lib/supabase', () => ({
   supabase: { from: vi.fn(), auth: { getSession: vi.fn() } },
 }));
 
-import { stripGridClass } from '@/components/workspace/contribution-strip';
+import { formatDeltaChipLabel, stripGridClass } from '@/components/workspace/contribution-strip';
 import { STRIP_CONFIG } from '@/data/strip-config';
 
 describe('stripGridClass', () => {
@@ -111,6 +111,19 @@ const LINE_LOSS_LEGACY = {
     },
   },
 };
+
+describe('net MWh delta chip (Spec 17)', () => {
+  it('formats a net-loss comparison delta in MWh, not dollars', () => {
+    const figure = figureByLabel(
+      'conductor-details',
+      'Net change in conductor losses (MWh/yr)',
+    );
+    const label = formatDeltaChipLabel(-120, 0, figure);
+    expect(label).not.toBeNull();
+    expect(label).not.toMatch(/\$/);
+    expect(label).toContain('MWh');
+  });
+});
 
 describe('net line and converter loss MWh (Task 5)', () => {
   it('labels net conductor and converter figures and shows savings for negative net', () => {

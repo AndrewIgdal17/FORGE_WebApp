@@ -82,21 +82,37 @@ function figureColor(figure: StripFigure, value: number | null): string {
   return value >= 1 ? 'text-green-600' : 'text-red-600';
 }
 
+export function formatDeltaChipLabel(
+  current: number,
+  saved: number,
+  figure: StripFigure,
+): string | null {
+  const delta = current - saved;
+  if (Math.abs(delta) < 0.005) return null;
+
+  const isRatio = figure.format === 'ratio';
+  if (isRatio) {
+    return (delta > 0 ? '+' : '') + formatNumber(delta, 3);
+  }
+  if (figure.format === 'number') {
+    return formatSignedNumberValue(delta, figureDecimals(figure)) + figureUnit(figure);
+  }
+  if (figure.format === 'netMwh') {
+    return formatNetMwhYrChange(delta);
+  }
+  return formatSignedCurrencyValue(delta, 0);
+}
+
 function DeltaChip({ current, saved, figure }: {
   current: number | null;
   saved: number | null;
   figure: StripFigure;
 }): ReactElement | null {
   if (current === null || saved === null) return null;
+  const label = formatDeltaChipLabel(current, saved, figure);
+  if (label === null) return null;
   const delta = current - saved;
-  if (Math.abs(delta) < 0.005) return null;
-
   const isRatio = figure.format === 'ratio';
-  const label = isRatio
-    ? (delta > 0 ? '+' : '') + formatNumber(delta, 3)
-    : figure.format === 'number'
-      ? formatSignedNumberValue(delta, figureDecimals(figure)) + figureUnit(figure)
-      : formatSignedCurrencyValue(delta, 0);
   const color = isRatio
     ? (delta > 0 ? 'text-green-600' : 'text-red-600')
     : (delta > 0 ? 'text-red-600' : 'text-green-600'); // higher cost = bad
