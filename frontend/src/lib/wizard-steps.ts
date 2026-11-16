@@ -34,6 +34,7 @@ export const WIZARD_PATH = {
   capacityGate: `${CAPACITY_VALUE}.applicability_gate`,
   capacityCredit: `${CAPACITY_VALUE}.capacity_credit`,
   capacityPrice: `${CAPACITY_VALUE}.capacity_price`,
+  directDelayCost: '05_delays.annual_base_delay_cost',
 } as const;
 
 export type StepKind = 'name' | 'project' | 'timeline' | 'benefits';
@@ -75,6 +76,7 @@ export function stepFields(step: StepKind): string[] {
         WIZARD_PATH.delayYears,
         WIZARD_PATH.constructionYears,
         WIZARD_PATH.projectLifetime,
+        WIZARD_PATH.directDelayCost,
       ];
     case 'benefits':
       return [
@@ -92,6 +94,10 @@ export function stepFields(step: StepKind): string[] {
         WIZARD_PATH.capacityPrice,
       ];
   }
+}
+
+export function needsDirectDelayCost(delayYears: number | null): boolean {
+  return delayYears != null && delayYears > 0;
 }
 
 /** `before_route` entries whose path this step owns, in API order. */

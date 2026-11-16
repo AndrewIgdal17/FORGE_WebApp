@@ -37,6 +37,7 @@ import { cn } from '@/lib/utils';
 import {
   STEP_ORDER,
   WIZARD_PATH,
+  needsDirectDelayCost,
   projectTypes,
   stepBlocked,
 } from '@/lib/wizard-steps';
@@ -71,6 +72,7 @@ interface WizardState {
   oldConductorType: string;
   oldConverterType: string;
   delayYears: number | null;
+  directDelayCost: number | null;
   constructionYears: number | null;
   projectLifetime: number | null;
   sendingSource: SendingSource;
@@ -141,6 +143,7 @@ function createInitialState(): WizardState {
     oldConductorType: '',
     oldConverterType: '',
     delayYears: null,
+    directDelayCost: null,
     constructionYears: null,
     projectLifetime: null,
     sendingSource: 'margin',
@@ -297,14 +300,18 @@ function projectStepValid(
 }
 
 function timelineStepValid(state: WizardState): boolean {
-  return (
+  const base =
     state.delayYears != null &&
     state.delayYears >= 0 &&
     state.constructionYears != null &&
     state.constructionYears >= 0 &&
     state.projectLifetime != null &&
-    state.projectLifetime >= 1
-  );
+    state.projectLifetime >= 1;
+  if (!base) return false;
+  if (needsDirectDelayCost(state.delayYears)) {
+    return state.directDelayCost != null && state.directDelayCost >= 0;
+  }
+  return true;
 }
 
 function localStepValid(
@@ -329,6 +336,9 @@ function wizardChanges(state: WizardState): Record<string, unknown> {
     [WIZARD_PATH.projectType]: state.projectType,
     [WIZARD_PATH.capacityMw]: state.capacityMw,
     [WIZARD_PATH.delayYears]: state.delayYears,
+    ...(needsDirectDelayCost(state.delayYears)
+      ? { [WIZARD_PATH.directDelayCost]: state.directDelayCost }
+      : {}),
     [WIZARD_PATH.constructionYears]: state.constructionYears,
     [WIZARD_PATH.projectLifetime]: state.projectLifetime,
     [WIZARD_PATH.sendingSource]: state.sendingSource,
@@ -384,6 +394,9 @@ function mergeWizardIntoSnapshot(
   setValueAtPath(full, WIZARD_PATH.projectType, state.projectType);
   setValueAtPath(full, WIZARD_PATH.constructionYears, state.constructionYears);
   setValueAtPath(full, WIZARD_PATH.delayYears, state.delayYears);
+  if (needsDirectDelayCost(state.delayYears)) {
+    setValueAtPath(full, WIZARD_PATH.directDelayCost, state.directDelayCost);
+  }
   setValueAtPath(full, WIZARD_PATH.projectLifetime, state.projectLifetime);
   setValueAtPath(full, WIZARD_PATH.sendingSource, state.sendingSource);
   setValueAtPath(full, WIZARD_PATH.utilization, state.utilization ?? 0.7);
@@ -441,6 +454,9 @@ function placedPaths(kind: StepKind, state: WizardState): Set<string> {
     placed.add(WIZARD_PATH.delayYears);
     placed.add(WIZARD_PATH.constructionYears);
     placed.add(WIZARD_PATH.projectLifetime);
+    if (needsDirectDelayCost(state.delayYears)) {
+      placed.add(WIZARD_PATH.directDelayCost);
+    }
   }
   if (kind === 'benefits') {
     if (state.projectType === 'greenfield' && state.sendingSource === 'margin') {
@@ -928,6 +944,22 @@ function TimelineStep({
           onChange({ delayYears: delayYears != null ? Math.max(0, delayYears) : null })
         }
       />
+      {needsDirectDelayCost(state.delayYears) ? (
+        <DecimalField
+          id="wizard-direct-delay-cost"
+          label="Annual direct delay cost ($/year)"
+          value={state.directDelayCost}
+          min={0}
+          hint="No default. Enter 0 if there is none."
+          message={messageFor(blocked, WIZARD_PATH.directDelayCost)}
+          onChange={(directDelayCost) =>
+            onChange({
+              directDelayCost:
+                directDelayCost != null ? Math.max(0, directDelayCost) : null,
+            })
+          }
+        />
+      ) : null}
       <IntegerField
         id="wizard-construction-years"
         label="Construction years"

@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { RequiredField, RequiredResponse } from './api';
-import { STEP_ORDER, projectTypes, stepBlocked, stepFields } from './wizard-steps';
+import {
+  STEP_ORDER,
+  needsDirectDelayCost,
+  projectTypes,
+  stepBlocked,
+  stepFields,
+} from './wizard-steps';
 
 const PROJECT = '01_project_technical_details.project';
 const TIMELINE = '01_project_technical_details.timeline';
@@ -12,6 +18,7 @@ const CAPACITY_VALUE = '20_capacity_value';
 const DELAY = `${TIMELINE}.delay_years`;
 const CONSTRUCTION = `${TIMELINE}.construction_years`;
 const LIFETIME = `${TIMELINE}.project_lifetime`;
+const DIRECT_DELAY_COST = '05_delays.annual_base_delay_cost';
 const FLOW = `${GREENFIELD}.constraints.flow_factor`;
 const CONTRACT = `${PROJECT}.dedicated_resource.contract_price_per_mwh`;
 const CO2E = `${PROJECT}.dedicated_resource.emission_rate_kg_per_mwh.co2e`;
@@ -64,8 +71,13 @@ describe('stepFields', () => {
     );
   });
 
-  it('gives the timeline step delay, construction, and lifetime', () => {
-    expect(stepFields('timeline')).toEqual([DELAY, CONSTRUCTION, LIFETIME]);
+  it('gives the timeline step delay, construction, lifetime, and direct delay cost', () => {
+    expect(stepFields('timeline')).toEqual([
+      DELAY,
+      CONSTRUCTION,
+      LIFETIME,
+      DIRECT_DELAY_COST,
+    ]);
   });
 
   it('gives the benefits step the flow share and the dedicated paths', () => {
@@ -83,6 +95,14 @@ describe('stepFields', () => {
       `${CAPACITY_VALUE}.capacity_credit`,
       `${CAPACITY_VALUE}.capacity_price`,
     ]);
+  });
+});
+
+describe('needsDirectDelayCost', () => {
+  it('is true only when delay years is above zero', () => {
+    expect(needsDirectDelayCost(null)).toBe(false);
+    expect(needsDirectDelayCost(0)).toBe(false);
+    expect(needsDirectDelayCost(2)).toBe(true);
   });
 });
 
@@ -118,5 +138,12 @@ describe('stepBlocked', () => {
       'Construction Years is required.',
       'Project Lifetime (Years) is required.',
     ]);
+  });
+
+  it('returns the direct delay cost entry when the timeline step owns it', () => {
+    const direct = requiredField(DIRECT_DELAY_COST, 'Annual direct delay cost');
+    expect(
+      stepBlocked('timeline', { before_route: [direct], after_route: [] }),
+    ).toEqual([direct]);
   });
 });

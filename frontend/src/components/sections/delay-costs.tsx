@@ -1,7 +1,23 @@
 import type { ReactElement } from 'react';
 import { CurrencyField } from '@/components/form/currency-field';
+import { useFormStore } from '@/stores/form-store';
+
+const DELAY_YEARS = '01_project_technical_details.timeline.delay_years';
+
+const DIRECT_DELAY_HELP =
+  'Direct spending each year of the delay: legal, administrative, project-management and regulatory. No default: enter 0 if there is none.';
+
+export function directDelayCostLabel(delayYears: unknown): string {
+  const base = 'Annual direct delay cost ($/year)';
+  if (typeof delayYears === 'number' && delayYears > 0) {
+    return `${base}, required`;
+  }
+  return base;
+}
 
 export function DelayCosts(): ReactElement {
+  const delayYears = useFormStore((state) => state.getFieldValue(DELAY_YEARS));
+
   return (
     <section id="delay-costs" className="grid max-w-xl gap-4">
       <div>
@@ -12,8 +28,9 @@ export function DelayCosts(): ReactElement {
       </div>
       <CurrencyField
         path="05_delays.annual_base_delay_cost"
-        label="Annual base delay cost ($/year)"
-        helpText="Legal, administrative, project-management, and regulatory spend during permitting delay."
+        label={directDelayCostLabel(delayYears)}
+        helpText={DIRECT_DELAY_HELP}
+        nullable
       />
     </section>
   );
