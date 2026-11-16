@@ -7,18 +7,240 @@ export const COMPOSITION_COLORS: string[] = [
 ];
 
 export const CATEGORY_LABELS: Record<string, string> = {
-  hard: 'Hard Costs',
-  soft: 'Soft Costs',
-  risk: 'Risk Costs',
-  emissions: 'Line Loss Compensation Emissions',
-  remedial: 'Remedial Benefits',
-  enabling: 'Enabling Benefits',
-  avoided_emissions: 'Avoided Emissions',
+  capital: 'Capital costs',
+  delay_period: 'Delay-period costs',
+  operating: 'Operating costs',
+  external: 'External costs',
+  risk: 'Risk',
+  emissions: 'Emissions',
   transfer: 'Revenue (Transfer)',
   reporting: 'Transfers & Reporting',
 };
 
-export const COST_CATEGORY_ORDER: string[] = ['hard', 'soft', 'risk', 'emissions'];
+export const COST_CATEGORY_ORDER: string[] = [
+  'capital',
+  'delay_period',
+  'operating',
+  'external',
+];
+
+export const BENEFIT_CATEGORY_LABELS: Record<string, string> = {
+  market: 'Market benefits',
+  external: 'External benefits',
+};
+
+export const BENEFIT_CATEGORY_ORDER: string[] = ['market', 'external'];
+
+export type ReportingKey =
+  | 'capital'
+  | 'delay_period'
+  | 'operating'
+  | 'external'
+  | 'external_risk'
+  | 'external_emissions'
+  | 'market'
+  | 'external_benefits';
+
+export const REPORTING_PATHS: Record<ReportingKey, string> = {
+  capital: 'bcr.capital_costs_pv',
+  delay_period: 'bcr.delay_period_costs_pv',
+  operating: 'bcr.operating_costs_pv',
+  external: 'bcr.external_costs_pv',
+  external_risk: 'bcr.external_risk_costs_pv',
+  external_emissions: 'bcr.external_emissions_costs_pv',
+  market: 'bcr.benefits_market_pv',
+  external_benefits: 'bcr.benefits_external_pv',
+};
+
+type ResultCategoryMeta = {
+  side: 'cost' | 'benefit';
+  category: 'capital' | 'delay_period' | 'operating' | 'external' | 'market';
+  subgroup: 'risk' | 'emissions' | null;
+};
+
+export const RESULT_CATEGORY: Record<string, ResultCategoryMeta> = {
+  build_conductor: { side: 'cost', category: 'capital', subgroup: null },
+  build_structure: { side: 'cost', category: 'capital', subgroup: null },
+  build_converter: { side: 'cost', category: 'capital', subgroup: null },
+  row_acquisition: { side: 'cost', category: 'capital', subgroup: null },
+  env_mitigation: { side: 'cost', category: 'capital', subgroup: null },
+  base_delay: { side: 'cost', category: 'delay_period', subgroup: null },
+  row_holding: { side: 'cost', category: 'delay_period', subgroup: null },
+  oandm: { side: 'cost', category: 'operating', subgroup: null },
+  insurance: { side: 'cost', category: 'operating', subgroup: null },
+  row_rent: { side: 'cost', category: 'operating', subgroup: null },
+  line_loss_conductor: { side: 'cost', category: 'operating', subgroup: null },
+  line_loss_converter: { side: 'cost', category: 'operating', subgroup: null },
+  wildfire_eac: { side: 'cost', category: 'external', subgroup: 'risk' },
+  outage_eac: { side: 'cost', category: 'external', subgroup: 'risk' },
+  emissions_comp: { side: 'cost', category: 'external', subgroup: 'emissions' },
+  congestion_benefit: { side: 'benefit', category: 'market', subgroup: null },
+  delivered_energy_benefit: { side: 'benefit', category: 'market', subgroup: null },
+  capacity_value_benefit: { side: 'benefit', category: 'market', subgroup: null },
+  avoided_emissions_benefit: {
+    side: 'benefit',
+    category: 'external',
+    subgroup: null,
+  },
+};
+
+function readPath(results: Record<string, unknown>, path: string): unknown {
+  let node: unknown = results;
+  for (const part of path.split('.')) {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return undefined;
+    node = (node as Record<string, unknown>)[part];
+  }
+  return node;
+}
+
+function usesStoredCategoryTotals(results: Record<string, unknown>): boolean {
+  const bcr = results.bcr;
+  if (!bcr || typeof bcr !== 'object' || Array.isArray(bcr)) return false;
+  return Object.prototype.hasOwnProperty.call(bcr, 'delay_period_costs_pv');
+}
+
+function rowUnavailable(row: unknown): boolean {
+  if (!row || typeof row !== 'object') return false;
+  const record = row as Record<string, unknown>;
+  if (record.available === false) return true;
+  if (record.state === 'not_available') return true;
+  return false;
+}
+
+function matchesReportingKey(
+  meta: ResultCategoryMeta,
+  key: ReportingKey,
+): boolean {
+  switch (key) {
+    case 'capital':
+      return meta.side === 'cost' && meta.category === 'capital';
+    case 'delay_period':
+      return meta.side === 'cost' && meta.category === 'delay_period';
+    case 'operating':
+      return meta.side === 'cost' && meta.category === 'operating';
+    case 'external':
+      return meta.side === 'cost' && meta.category === 'external';
+    case 'external_risk':
+      return (
+        meta.side === 'cost'
+        && meta.category === 'external'
+        && meta.subgroup === 'risk'
+      );
+    case 'external_emissions':
+      return (
+        meta.side === 'cost'
+        && meta.category === 'external'
+        && meta.subgroup === 'emissions'
+      );
+    case 'market':
+      return meta.side === 'benefit' && meta.category === 'market';
+    case 'external_benefits':
+      return meta.side === 'benefit' && meta.category === 'external';
+    default:
+      return false;
+  }
+}
+
+function taxonomyIdsForKey(key: ReportingKey): string[] {
+  return Object.entries(RESULT_CATEGORY)
+    .filter(([, meta]) => matchesReportingKey(meta, key))
+    .map(([id]) => id);
+}
+
+function resolveResultById(results: Record<string, unknown>): Record<string, unknown> {
+  const existing = results.taxonomy_results;
+  if (Array.isArray(existing) && existing.length > 0) return buildResultById(results);
+  return buildResultById({ taxonomy_results: deriveTaxonomyResults(results) });
+}
+
+function legacyCategoryTotal(
+  results: Record<string, unknown>,
+  key: ReportingKey,
+): number | null {
+  const bcr = results.bcr;
+  if (!bcr || typeof bcr !== 'object' || Array.isArray(bcr)) return null;
+  const record = bcr as Record<string, unknown>;
+  const part = (field: string): number | null => {
+    if (!Object.prototype.hasOwnProperty.call(record, field)) return null;
+    return readNumber(record[field]); // legacy stored-result key
+  };
+  if (key === 'market') {
+    const remedial = part('benefits_remedial_pv'); // legacy stored-result key
+    const enabling = part('benefits_enabling_pv'); // legacy stored-result key
+    if (remedial === null || enabling === null) return null;
+    return remedial + enabling;
+  }
+  if (key === 'external_risk') {
+    return part('risk_costs_pv'); // legacy stored-result key
+  }
+  if (key === 'external_emissions') {
+    return part('emissions_costs_pv'); // legacy stored-result key
+  }
+  if (key === 'external') {
+    const risk = part('risk_costs_pv'); // legacy stored-result key
+    const emissions = part('emissions_costs_pv'); // legacy stored-result key
+    if (risk === null || emissions === null) return null;
+    return risk + emissions;
+  }
+  if (key === 'external_benefits') {
+    return part('benefits_avoided_emissions_pv'); // legacy stored-result key
+  }
+  return null;
+}
+
+export function readCategoryTotal(
+  results: Record<string, unknown>,
+  key: ReportingKey,
+): number | null {
+  if (usesStoredCategoryTotals(results)) {
+    const path = REPORTING_PATHS[key];
+    const raw = readPath(results, path);
+    if (raw === undefined || raw === null) return null;
+    return readNumber(raw);
+  }
+
+  const resultById = resolveResultById(results);
+  const ids = taxonomyIdsForKey(key);
+  let sum = 0;
+  let hasValue = false;
+  let applying = 0;
+  let unavailable = 0;
+  let incomplete = false;
+
+  for (const id of ids) {
+    const row = resultById[id];
+    if (rowDoesNotApply(row)) continue;
+    applying += 1;
+    if (!row) {
+      incomplete = true;
+      continue;
+    }
+    if (rowUnavailable(row)) {
+      unavailable += 1;
+      continue;
+    }
+    const pv = readNumber((row as Record<string, unknown>).value_pv);
+    if (pv === null) {
+      incomplete = true;
+      continue;
+    }
+    sum += pv;
+    hasValue = true;
+  }
+
+  if (applying > 0 && unavailable === applying && !hasValue) return null;
+  if (!incomplete) return hasValue ? sum : null;
+
+  const fallbackKeys: ReportingKey[] = [
+    'market',
+    'external_risk',
+    'external_emissions',
+    'external',
+    'external_benefits',
+  ];
+  if (fallbackKeys.includes(key)) return legacyCategoryTotal(results, key);
+  return null;
+}
 
 export function formatCompact(value: number): string {
   const abs = Math.abs(value);

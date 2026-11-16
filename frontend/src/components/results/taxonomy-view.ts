@@ -1,6 +1,7 @@
 import type { TaxonomyDetailRow } from '@/components/results/taxonomy-card';
 import { humanizeLabel } from '@/lib/format';
 import {
+  BENEFIT_CATEGORY_LABELS,
   CATEGORY_LABELS,
   buildResultById,
   deriveTaxonomyResults,
@@ -12,7 +13,7 @@ export interface TaxonomyItemView {
   id: string;
   label: string;
   category: string;
-  subgroup: string;
+  subgroup: string | null;
   displayOrder: number;
 }
 
@@ -85,7 +86,7 @@ export function readTaxonomyItems(
       id: record.id,
       label,
       category: typeof record.category === 'string' ? record.category : '',
-      subgroup: typeof record.subgroup === 'string' ? record.subgroup : '',
+      subgroup: typeof record.subgroup === 'string' ? record.subgroup : null,
       displayOrder: typeof record.display_order === 'number' ? record.display_order : 0,
     });
   }
@@ -196,7 +197,8 @@ export function compositionSegments(
 }
 
 export function pvHeading(key: string, noun: 'Costs' | 'Benefits'): string {
-  const mapped = CATEGORY_LABELS[key];
+  const labels = noun === 'Benefits' ? BENEFIT_CATEGORY_LABELS : CATEGORY_LABELS;
+  const mapped = labels[key];
   const label = mapped ?? humanizeLabel(key || noun);
   if (/\b(costs|benefits)\b/i.test(label)) return `${label} (PV)`;
   return `${label} ${noun} (PV)`;

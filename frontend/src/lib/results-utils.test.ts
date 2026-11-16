@@ -4,7 +4,15 @@ import { describe, expect, it } from 'vitest';
 
 import { TaxonomyCard } from '@/components/results/taxonomy-card';
 import { cardValues } from '@/components/results/taxonomy-view';
-import { buildResultById, deriveTaxonomyResults } from '@/lib/results-utils';
+import {
+  BENEFIT_CATEGORY_LABELS,
+  CATEGORY_LABELS,
+  RESULT_CATEGORY,
+  buildResultById,
+  deriveTaxonomyResults,
+  readCategoryTotal,
+} from '@/lib/results-utils';
+import { pvHeading } from '@/components/results/taxonomy-view';
 import * as formatModule from '@/lib/format';
 import * as resultsModule from '@/lib/results-utils';
 import * as taxonomyModule from '@/components/results/taxonomy-view';
@@ -183,5 +191,95 @@ describe('result nulls', () => {
     expect(excludesNote(ids)).toBe(
       'Excludes: Avoided emissions, Congestion relief, Loss-compensation emissions, Conductor losses.',
     );
+  });
+});
+
+describe('reporting categories (Spec 15)', () => {
+  it('returns stored bcr.capital_costs_pv when delay_period_costs_pv is present, including null', () => {
+    const results = {
+      bcr: {
+        delay_period_costs_pv: 0,
+        capital_costs_pv: null,
+      },
+    };
+    expect(readCategoryTotal(results, 'capital')).toBeNull();
+    expect(readCategoryTotal({ bcr: { delay_period_costs_pv: 1, capital_costs_pv: 42 } }, 'capital')).toBe(42);
+  });
+
+  it('rebuilds capital and delay_period from taxonomy on v5-shaped stored results', () => {
+    const results = {
+      bcr: { capital_costs_pv: 999 },
+      taxonomy_results: [
+        { taxonomy_id: 'build_conductor', value_pv: 50 },
+        { taxonomy_id: 'build_structure', value_pv: 20 },
+        { taxonomy_id: 'build_converter', value_pv: 10 },
+        { taxonomy_id: 'row_acquisition', value_pv: 30 },
+        { taxonomy_id: 'env_mitigation', value_pv: 10 },
+        { taxonomy_id: 'row_holding', value_pv: 7 },
+        { taxonomy_id: 'base_delay', value_pv: 100 },
+      ],
+    };
+    expect(readCategoryTotal(results, 'capital')).toBe(120);
+    expect(readCategoryTotal(results, 'delay_period')).toBe(107);
+  });
+
+  it('uses legacy market keys when item sum is incomplete; capital has no fallback', () => {
+    const marketResults = {
+      bcr: { benefits_remedial_pv: 5, benefits_enabling_pv: 6 },
+      taxonomy_results: [
+        { taxonomy_id: 'delivered_energy_benefit', state: 'does_not_apply', value_pv: 0 },
+        { taxonomy_id: 'capacity_value_benefit', state: 'does_not_apply', value_pv: 0 },
+      ],
+    };
+    expect(readCategoryTotal(marketResults, 'market')).toBe(11);
+
+    const capitalResults = {
+      bcr: { capital_costs_pv: 999 },
+      taxonomy_results: [
+        { taxonomy_id: 'build_structure', value_pv: 20 },
+        { taxonomy_id: 'build_converter', value_pv: 10 },
+        { taxonomy_id: 'row_acquisition', value_pv: 30 },
+        { taxonomy_id: 'env_mitigation', value_pv: 10 },
+      ],
+    };
+    expect(readCategoryTotal(capitalResults, 'capital')).toBeNull();
+  });
+
+  it('skips does_not_apply rows and returns null when every applying row is unavailable', () => {
+    const skipped = {
+      taxonomy_results: [
+        { taxonomy_id: 'build_conductor', state: 'does_not_apply', value_pv: 99 },
+        { taxonomy_id: 'build_structure', value_pv: 21 },
+        { taxonomy_id: 'build_converter', value_pv: 0 },
+        { taxonomy_id: 'row_acquisition', value_pv: 0 },
+        { taxonomy_id: 'env_mitigation', value_pv: 0 },
+      ],
+    };
+    expect(readCategoryTotal(skipped, 'capital')).toBe(21);
+
+    const unavailable = {
+      taxonomy_results: [
+        { taxonomy_id: 'build_conductor', state: 'not_available', available: false, value_pv: null },
+        { taxonomy_id: 'build_structure', state: 'not_available', available: false, value_pv: null },
+        { taxonomy_id: 'build_converter', state: 'not_available', available: false, value_pv: null },
+        { taxonomy_id: 'row_acquisition', state: 'not_available', available: false, value_pv: null },
+        { taxonomy_id: 'env_mitigation', state: 'not_available', available: false, value_pv: null },
+      ],
+    };
+    expect(readCategoryTotal(unavailable, 'capital')).toBeNull();
+  });
+
+  it('exposes exact category labels and RESULT_CATEGORY metadata', () => {
+    expect(CATEGORY_LABELS.capital).toBe('Capital costs');
+    expect(CATEGORY_LABELS.delay_period).toBe('Delay-period costs');
+    expect(CATEGORY_LABELS.operating).toBe('Operating costs');
+    expect(CATEGORY_LABELS.external).toBe('External costs');
+    expect(CATEGORY_LABELS.risk).toBe('Risk');
+    expect(CATEGORY_LABELS.emissions).toBe('Emissions');
+    expect(BENEFIT_CATEGORY_LABELS.market).toBe('Market benefits');
+    expect(BENEFIT_CATEGORY_LABELS.external).toBe('External benefits');
+    expect(Object.keys(RESULT_CATEGORY)).toHaveLength(19);
+    expect(RESULT_CATEGORY.row_holding.category).toBe('delay_period');
+    expect(pvHeading('market', 'Benefits')).toContain('Market benefits');
   });
 });

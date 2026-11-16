@@ -25,7 +25,7 @@ export interface TaxonomyItem {
   id: string;
   side: string;
   category: string;
-  subgroup: string;
+  subgroup: string | null;
   label: string;
   discount_rate: string | null;
   condition: string | null;
