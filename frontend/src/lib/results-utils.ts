@@ -84,6 +84,27 @@ export const RESULT_CATEGORY: Record<string, ResultCategoryMeta> = {
   },
 };
 
+export function resolvedTaxonomyCategory(id: string, apiCategory: string): string {
+  return RESULT_CATEGORY[id]?.category ?? apiCategory;
+}
+
+export function resolvedTaxonomySubgroup(
+  id: string,
+  apiSubgroup: string | null,
+): string | null {
+  return RESULT_CATEGORY[id]?.subgroup ?? apiSubgroup;
+}
+
+export function resolvedTaxonomySide(
+  id: string,
+  apiSide: string | undefined,
+): 'cost' | 'benefit' | undefined {
+  const mapped = RESULT_CATEGORY[id];
+  if (mapped) return mapped.side;
+  if (apiSide === 'cost' || apiSide === 'benefit') return apiSide;
+  return undefined;
+}
+
 function readPath(results: Record<string, unknown>, path: string): unknown {
   let node: unknown = results;
   for (const part of path.split('.')) {

@@ -32,6 +32,9 @@ import {
   excludesNote,
   itemDoesNotApply,
   readCategoryTotal,
+  resolvedTaxonomyCategory,
+  resolvedTaxonomySide,
+  resolvedTaxonomySubgroup,
   type ReportingKey,
 } from '@/lib/results-utils';
 import { getValueAtPath } from '@/lib/path';
@@ -576,7 +579,9 @@ const TOTAL_PATHS: Record<PerspectiveKey, { costs: string; benefits: string }> =
   },
 };
 
-function sideById(taxonomy: Record<string, unknown> | undefined): Map<string, string> {
+export function sideMapFromTaxonomy(
+  taxonomy: Record<string, unknown> | undefined,
+): Map<string, string> {
   const map = new Map<string, string>();
   const raw = taxonomy?.items;
   if (!Array.isArray(raw)) return map;
@@ -607,7 +612,7 @@ const ITEM_ID_BY_KEY: Record<string, string> = {
   converter_loss:   'line_loss_converter',
 };
 
-function itemsForCategory(
+export function itemsForCategory(
   items: TaxonomyItemView[],
   sides: Map<string, string>,
   side: LedgerSide,
@@ -617,7 +622,11 @@ function itemsForCategory(
   if (itemId) return items.filter((item) => item.id === itemId);
   const category = key;
   return items
-    .filter((item) => item.category === category && sides.get(item.id) === side)
+    .filter((item) => {
+      const itemSide = resolvedTaxonomySide(item.id, sides.get(item.id));
+      const itemCategory = resolvedTaxonomyCategory(item.id, item.category);
+      return itemCategory === category && itemSide === side;
+    })
     .sort((left, right) => left.displayOrder - right.displayOrder);
 }
 
@@ -625,8 +634,18 @@ export function externalAccordionSubgroupHeadings(
   matched: TaxonomyItemView[],
 ): string[] {
   const headings: string[] = [];
-  if (matched.some((item) => item.subgroup === 'risk')) headings.push(CATEGORY_LABELS.risk);
-  if (matched.some((item) => item.subgroup === 'emissions')) {
+  if (
+    matched.some(
+      (item) => resolvedTaxonomySubgroup(item.id, item.subgroup) === 'risk',
+    )
+  ) {
+    headings.push(CATEGORY_LABELS.risk);
+  }
+  if (
+    matched.some(
+      (item) => resolvedTaxonomySubgroup(item.id, item.subgroup) === 'emissions',
+    )
+  ) {
     headings.push(CATEGORY_LABELS.emissions);
   }
   return headings;
@@ -635,10 +654,12 @@ export function externalAccordionSubgroupHeadings(
 function subgroupSections(
   matched: TaxonomyItemView[],
 ): Array<{ heading: string | null; items: TaxonomyItemView[] }> {
-  const risk = matched.filter((item) => item.subgroup === 'risk');
-  const emissions = matched.filter((item) => item.subgroup === 'emissions');
+  const subgroup = (item: TaxonomyItemView): string | null =>
+    resolvedTaxonomySubgroup(item.id, item.subgroup);
+  const risk = matched.filter((item) => subgroup(item) === 'risk');
+  const emissions = matched.filter((item) => subgroup(item) === 'emissions');
   const rest = matched.filter(
-    (item) => item.subgroup !== 'risk' && item.subgroup !== 'emissions',
+    (item) => subgroup(item) !== 'risk' && subgroup(item) !== 'emissions',
   );
   const sections: Array<{ heading: string | null; items: TaxonomyItemView[] }> = [];
   if (risk.length > 0) sections.push({ heading: CATEGORY_LABELS.risk, items: risk });
@@ -846,7 +867,7 @@ export function ResultsOverview({
   const benefits = loadCategories(results, categories.benefits);
   const resultById = resolveResultById(results);
   const taxonomyItems = readTaxonomyItems(taxonomy);
-  const sideMap = sideById(taxonomy);
+  const sideMap = sideMapFromTaxonomy(taxonomy);
 
   function hasLineItems(side: LedgerSide, key: string): boolean {
     return itemsForCategory(taxonomyItems, sideMap, side, key).length > 0;

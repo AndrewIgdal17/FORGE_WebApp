@@ -6,6 +6,7 @@ import {
   buildResultById,
   deriveTaxonomyResults,
   readNumber,
+  resolvedTaxonomyCategory,
   rowDoesNotApply,
 } from '@/lib/results-utils';
 
@@ -105,7 +106,9 @@ export function itemsInCategory(
   category: string,
 ): TaxonomyItemView[] {
   return items
-    .filter((item) => item.category === category)
+    .filter(
+      (item) => resolvedTaxonomyCategory(item.id, item.category) === category,
+    )
     .sort((a, b) => a.displayOrder - b.displayOrder);
 }
 

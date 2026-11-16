@@ -10,11 +10,15 @@ import {
   adjustedRatio,
   categoryValueText,
   externalAccordionSubgroupHeadings,
+  itemsForCategory,
   loadCategories,
   readTotal,
+  sideMapFromTaxonomy,
 } from '@/components/results/results-overview';
+import { itemsInCategory, pvHeading, readTaxonomyItems } from '@/components/results/taxonomy-view';
 import { DELAY_OTHER_VIEW_NOTE, DIRECT_DELAY_LABEL } from '@/lib/delay-comparison';
 import { SUNZIA_DELAY2_BLOCK } from '@/lib/delay-comparison.fixtures';
+import { CATEGORY_LABELS } from '@/lib/results-utils';
 
 const results: Record<string, unknown> = {
   bcr: {
@@ -275,5 +279,42 @@ describe('reporting category overview (Task 5)', () => {
       })),
     );
     expect(headings).toEqual(['Risk', 'Emissions']);
+  });
+
+  const V5_LIVE_TAXONOMY = {
+    items: [
+      { id: 'build_conductor', label: 'Conductor', category: 'hard', subgroup: null, side: 'cost', display_order: 1 },
+      { id: 'wildfire_eac', label: 'Wildfire', category: 'risk', subgroup: null, side: 'cost', display_order: 2 },
+      { id: 'outage_eac', label: 'Outage', category: 'risk', subgroup: null, side: 'cost', display_order: 3 },
+      { id: 'emissions_comp', label: 'Emissions', category: 'emissions', subgroup: null, side: 'cost', display_order: 4 },
+      { id: 'congestion_benefit', label: 'Congestion', category: 'remedial', subgroup: null, side: 'benefit', display_order: 5 },
+    ],
+  };
+
+  it('ignores live v5 taxonomy categories when grouping drill-down', () => {
+    const html = decodeText(
+      renderToStaticMarkup(
+        createElement(ResultsOverview, {
+          results: V5_SOCIETAL,
+          perspective: 'societal',
+          taxonomy: V5_LIVE_TAXONOMY,
+        }),
+      ),
+    );
+    expect(html).toContain(CATEGORY_LABELS.capital);
+    expect(html).toContain('Market benefits');
+    const items = readTaxonomyItems(V5_LIVE_TAXONOMY);
+    const sides = sideMapFromTaxonomy(V5_LIVE_TAXONOMY);
+    const external = itemsForCategory(items, sides, 'cost', 'external');
+    expect(externalAccordionSubgroupHeadings(external)).toEqual(['Risk', 'Emissions']);
+    expect(itemsForCategory(items, sides, 'cost', 'capital').map((item) => item.id)).toContain(
+      'build_conductor',
+    );
+    expect(itemsForCategory(items, sides, 'benefit', 'market').map((item) => item.id)).toContain(
+      'congestion_benefit',
+    );
+    expect(pvHeading('capital', 'Costs')).toBe('Capital costs (PV)');
+    expect(itemsInCategory(items, 'hard')).toHaveLength(0);
+    expect(itemsInCategory(items, 'capital').map((item) => item.id)).toContain('build_conductor');
   });
 });

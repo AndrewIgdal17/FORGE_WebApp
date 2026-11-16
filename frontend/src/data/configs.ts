@@ -248,24 +248,6 @@ export const COMPARISON_METRICS: ComparisonMetricGroup[] = [
         reportingKey: 'external_benefits',
       },
       {
-        key: 'benefits_remedial_pv',
-        label: 'Remedial Benefits',
-        path: 'bcr.benefits_remedial_pv',
-        format: 'currency',
-      },
-      {
-        key: 'benefits_enabling_pv',
-        label: 'Enabling Benefits',
-        path: 'bcr.benefits_enabling_pv',
-        format: 'currency',
-      },
-      {
-        key: 'benefits_avoided_emissions_pv',
-        label: 'Avoided Emissions Benefits',
-        path: 'bcr.benefits_avoided_emissions_pv',
-        format: 'currency',
-      },
-      {
         key: 'congestion_pv',
         label: 'Congestion Benefits',
         path: 'bcr.congestion_benefit_pv',
