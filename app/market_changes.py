@@ -20,8 +20,8 @@ HOURS_SENDING = (
 )
 ENERGY = "01_project_technical_details.market_measurements.receiving_energy_value_per_mwh"
 
-# These markets are unmeasured as a whole. MISO is unmeasured zone by zone.
-_ISO_WIDE = frozenset({"PJM", "SPP", "ERCOT"})
+# PJM and ERCOT are unmeasured as a whole. MISO and SPP are unmeasured zone by zone.
+_ISO_WIDE = frozenset({"PJM", "ERCOT"})
 
 
 class ArchiveIncomplete(Exception):

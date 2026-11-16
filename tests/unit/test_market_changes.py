@@ -146,20 +146,84 @@ def test_acceptance_same_zone_shows_zero_congestion_relief():
 def test_acceptance_different_markets_spp_not_available():
     measured, status = market_changes(
         _end("MISO", "LRZ1", True),
-        _end("SPP", None, False),
+        _end("SPP", "OKGE", True),
+        energy=_energy("40"),
     )
     assert set(measured) == set(PATHS)
     assert status["spread"]["status"] == "different_markets"
+    assert status["spread"]["reason"] == "The ends are in MISO and SPP."
+    assert measured[SPREAD] is None
+    assert measured[HOURS_RECEIVING] is None
+    assert measured[HOURS_SENDING] is None
+    assert status["receiving_energy_value"]["status"] == "measured"
+    assert status["receiving_energy_value"]["reason"] == "Receiving end is in OKGE."
+    assert measured[ENERGY] == 40.0
+
+
+def test_spp_okge_to_wr_is_measured():
+    measured, status = market_changes(
+        _end("SPP", "OKGE", True),
+        _end("SPP", "WR", True),
+        _pair("3.5", 100, 50),
+        _energy("21"),
+    )
+    assert status["spread"] == {
+        "status": "measured",
+        "reason": "Both ends are in SPP.",
+    }
+    assert measured[SPREAD] == 3.5
+    assert measured[HOURS_RECEIVING] == 100
+    assert measured[HOURS_SENDING] == 50
+    assert measured[ENERGY] == 21.0
+
+
+def test_spp_same_area_is_same_zone():
+    measured, status = market_changes(
+        _end("SPP", "OKGE", True),
+        _end("SPP", "OKGE", True),
+        _pair("0", 0, 0),
+        _energy("10"),
+    )
+    assert status["spread"] == {
+        "status": "same_zone",
+        "reason": "Both ends are in OKGE.",
+    }
+    assert measured[SPREAD] == 0.0
+    assert measured[HOURS_RECEIVING] == 0
+    assert measured[HOURS_SENDING] == 0
+    assert status["receiving_energy_value"]["status"] == "measured"
+    assert measured[ENERGY] == 10.0
+
+
+def test_spp_with_no_area_is_not_available():
+    measured, status = market_changes(
+        _end("SPP", "OKGE", True),
+        _end("SPP", None, False),
+    )
+    assert status["spread"]["status"] == "market_not_measured"
+    assert status["spread"]["reason"] == (
+        "Receiving end is in SPP; FORGE has no SPP congestion prices yet."
+    )
     assert measured[SPREAD] is None
     assert measured[HOURS_RECEIVING] is None
     assert measured[HOURS_SENDING] is None
     assert status["receiving_energy_value"]["status"] == "market_not_measured"
-    assert measured[ENERGY] is None
-    assert "SPP" in status["spread"]["reason"]
-    assert "SPP" in status["receiving_energy_value"]["reason"]
-    assert status["spread"]["reason"] == "The ends are in MISO and SPP."
     assert status["receiving_energy_value"]["reason"] == (
         "Receiving end is in SPP; FORGE has no SPP energy value yet."
+    )
+    assert measured[ENERGY] is None
+
+
+def test_unpriced_spp_area_names_the_area_not_the_iso():
+    _, status = market_changes(
+        _end("SPP", "OKGE", True),
+        _end("SPP", "WR", False),
+    )
+    assert status["spread"]["reason"] == (
+        "Receiving end is in WR; FORGE has no WR congestion prices yet."
+    )
+    assert status["receiving_energy_value"]["reason"] == (
+        "Receiving end is in WR; FORGE has no WR energy value yet."
     )
 
 
