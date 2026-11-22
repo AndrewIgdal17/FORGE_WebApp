@@ -7,7 +7,7 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 import { DelayComparisonCard } from '@/components/results/delay-comparison';
-import { DELAY_FOOTNOTE, DELAY_ROWS } from '@/lib/delay-comparison';
+import { DELAY_ROWS } from '@/lib/delay-comparison';
 import { CTT_ACTUAL_DELAY2_BLOCK, SUNZIA_DELAY2_BLOCK } from '@/lib/delay-comparison.fixtures';
 
 function render(results: Record<string, unknown>): string {
@@ -19,16 +19,14 @@ function count(html: string, needle: string): number {
 }
 
 describe('DelayComparisonCard', () => {
-  it('SunZia_Delay2: not available rows, partial total with excludes (acceptance 1)', () => {
+  it('SunZia_Delay2: not available rows and a partial total, with no excludes or footnote (the headline names them)', () => {
     const html = render({ delay_comparison: SUNZIA_DELAY2_BLOCK });
     expect(html).toContain('Cost of delay');
     expect(html).toContain('Compared with the same project built on time (this project: 2-year delay).');
     expect(count(html, 'Not available')).toBe(3);
     expect(html).toContain('-$541,002,928');
-    expect(html).toContain('Excludes: Avoided emissions, Congestion relief, Loss-compensation emissions, Conductor losses, Converter losses.');
-    expect(html).not.toContain('Excludes: Avoided emissions, Congestion relief.'); // row is Not available, so no note (rule 4)
-    // React 19 escapes the apostrophe, so assert the footnote in pieces.
-    for (const part of DELAY_FOOTNOTE.split("'")) expect(html).toContain(part);
+    expect(html).not.toContain('Excludes');
+    expect(html).not.toContain('Reported beside the ratio');
   });
   it('CTT v4 block: values, measured zero, no excludes (acceptance 2)', () => {
     const html = render({ delay_comparison: CTT_ACTUAL_DELAY2_BLOCK });
@@ -54,9 +52,10 @@ describe('DelayComparisonCard', () => {
     expect(count(html, 'Not available')).toBe(4);
     expect(html).not.toContain('$0');
   });
-  it('partial forgone: number with its excludes note (review focus 2)', () => {
+  it('partial forgone: number without an excludes note (review focus 2)', () => {
     const html = render({ delay_comparison: { ...SUNZIA_DELAY2_BLOCK, delay_cost_avoid: 1000, delay_cost_forgone: 1000 } });
-    expect(html).toContain('Excludes: Avoided emissions, Congestion relief.');
+    expect(html).toContain('$1,000');
+    expect(html).not.toContain('Excludes');
   });
   it('empty omitted lists: no excludes note (review focus 3)', () => {
     const html = render({ delay_comparison: { ...CTT_ACTUAL_DELAY2_BLOCK, omitted: { delay_cost_forgone: [], delta_nb_delay: [] } } });

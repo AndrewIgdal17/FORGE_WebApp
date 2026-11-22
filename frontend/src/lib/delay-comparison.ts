@@ -50,9 +50,6 @@ export const DELAY_ROWS: ReadonlyArray<{
   },
 ];
 
-export const DELAY_FOOTNOTE =
-  "Reported beside the ratio, not inside it: the project's results already reflect its delay.";
-
 export const DELAY_NOT_AVAILABLE = 'Cost of delay: Not available.';
 
 export const DELAY_OTHER_VIEW_NOTE =

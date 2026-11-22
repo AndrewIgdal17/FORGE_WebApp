@@ -2,31 +2,14 @@ import type { ReactElement } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   DELAY_CARD_TITLE,
-  DELAY_FOOTNOTE,
   DELAY_NOT_AVAILABLE,
   DELAY_ROWS,
   baselineSentence,
   equalBaselineSentence,
   readDelayComparison,
-  type DelayComparisonView,
 } from '@/lib/delay-comparison';
 import { formatResultCurrency } from '@/lib/format';
-import { DOES_NOT_APPLY, excludesNote } from '@/lib/results-utils';
-
-const NOTE_CLASS = 'text-sm italic text-slate-600';
-
-function rowExcludes(
-  view: DelayComparisonView,
-  key: (typeof DELAY_ROWS)[number]['key'],
-): string | null {
-  if (key === 'forgone' && view.omittedForgone.length > 0 && view.forgone !== null) {
-    return excludesNote(view.omittedForgone);
-  }
-  if (key === 'total' && view.omittedTotal.length > 0 && view.total !== null) {
-    return excludesNote(view.omittedTotal);
-  }
-  return null;
-}
+import { DOES_NOT_APPLY } from '@/lib/results-utils';
 
 export function DelayComparisonCard({
   results,
@@ -51,9 +34,7 @@ export function DelayComparisonCard({
           <p className="text-sm text-slate-600">{equalBaselineSentence(view)}</p>
         ) : (
           <div className="space-y-2">
-            {DELAY_ROWS.map((row) => {
-              const note = view.notApplying.has(row.key) ? null : rowExcludes(view, row.key);
-              return (
+            {DELAY_ROWS.map((row) => (
                 <div key={row.key}>
                   <div className="flex items-baseline justify-between gap-3">
                     <span
@@ -68,13 +49,10 @@ export function DelayComparisonCard({
                         : formatResultCurrency(view[row.key])}
                     </span>
                   </div>
-                  {note ? <p className={NOTE_CLASS}>{note}</p> : null}
                 </div>
-              );
-            })}
+            ))}
           </div>
         )}
-        <p className={NOTE_CLASS}>{DELAY_FOOTNOTE}</p>
       </CardContent>
     </Card>
   );
