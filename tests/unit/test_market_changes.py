@@ -65,8 +65,8 @@ def test_acceptance_measured_west_to_nyc():
 
     import forge
 
-    if forge.calculator_info()["version"] != "6.0.0":
-        pytest.skip("v6.0.0 is not installed")
+    if forge.calculator_info()["version"] != "6.0.1":
+        pytest.skip("v6.0.1 is not installed")
 
     template = forge.get_defaults_template()
     project = template["01_project_technical_details"]["project"]

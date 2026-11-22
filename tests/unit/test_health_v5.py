@@ -1,11 +1,11 @@
-"""The web app requirement pins calculator v6.0.0 and the price layer keys."""
+"""The web app requirement pins calculator v6.0.1 and the price layer keys."""
 
 from pathlib import Path
 
 
 def test_acceptance_health_v5_and_price_layer_releases():
     text = Path("pyproject.toml").read_text()
-    assert "git+https://github.com/AndrewIgdal17/FORGE.git@v6.0.0" in text
+    assert "git+https://github.com/AndrewIgdal17/FORGE.git@v6.0.1" in text
     from app.layer_releases import layer_releases
 
     labels = layer_releases(
