@@ -7,7 +7,7 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 import { TaxonomyCard } from '@/components/results/taxonomy-card';
-import { DOES_NOT_APPLY, cardValues } from '@/components/results/taxonomy-view';
+import { DOES_NOT_APPLY, cardValues, itemPresentValue, positiveItems } from '@/components/results/taxonomy-view';
 
 function render(label: string, values: ReturnType<typeof cardValues>): string {
   return renderToStaticMarkup(
@@ -65,5 +65,22 @@ describe('TaxonomyCard and applies (Spec 10)', () => {
   it('state measured overrides a stale applies flag', () => {
     const values = cardValues({ row_rent: { state: 'measured', applies: false, value_pv: 5 } }, 'row_rent');
     expect(values.doesNotApply).toBe(false);
+  });
+});
+
+describe('item values follow the perspective rate (SunZia ratepayer view)', () => {
+  const byId = {
+    oandm_line: { taxonomy_id: 'oandm_line', state: 'measured', value_pv: 683_804_522, value_pv_wacc: 358_422_283 },
+    capital_recovery: { taxonomy_id: 'capital_recovery', state: 'measured', value_pv: null, value_pv_wacc: 2_850_880_679 },
+  };
+  it('societal cards show the social-rate value', () => {
+    expect(cardValues(byId, 'oandm_line').pvValue).toBe(683_804_522);
+    expect(itemPresentValue(byId, 'oandm_line')).toBe(683_804_522);
+  });
+  it('utility and ratepayer cards show the WACC value, so they add to the category', () => {
+    expect(cardValues(byId, 'oandm_line', 'wacc').pvValue).toBe(358_422_283);
+    expect(cardValues(byId, 'capital_recovery', 'wacc').pvValue).toBe(2_850_880_679);
+    expect(itemPresentValue(byId, 'capital_recovery', 'wacc')).toBe(2_850_880_679);
+    expect(positiveItems([{ id: 'capital_recovery', label: 'CR', category: 'capital', subgroup: null, displayOrder: 0 }], byId, true, 'wacc')).toHaveLength(1);
   });
 });

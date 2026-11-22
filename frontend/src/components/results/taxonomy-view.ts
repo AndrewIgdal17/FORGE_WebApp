@@ -61,9 +61,12 @@ function finiteNumber(value: unknown): number | undefined {
   return undefined;
 }
 
-function presentValue(row: Record<string, unknown> | null): number | null {
+/** Social-rate present value (societal view) or real-WACC present value (utility, ratepayer). */
+export type ValueRate = 'social' | 'wacc';
+
+function presentValue(row: Record<string, unknown> | null, rate: ValueRate = 'social'): number | null {
   if (!row) return null;
-  return readNumber(row.value_pv);
+  return readNumber(rate === 'wacc' ? row.value_pv_wacc : row.value_pv);
 }
 
 export function resolveResultById(
@@ -130,8 +133,9 @@ export function readTaxonomyItems(
 export function itemPresentValue(
   resultById: Record<string, unknown>,
   id: string,
+  rate: ValueRate = 'social',
 ): number | null {
-  return presentValue(asRecord(resultById[id]));
+  return presentValue(asRecord(resultById[id]), rate);
 }
 
 export function itemsInCategory(
@@ -188,13 +192,14 @@ function detailRows(row: Record<string, unknown> | null): TaxonomyDetailRow[] {
 export function cardValues(
   resultById: Record<string, unknown>,
   id: string,
+  rate: ValueRate = 'social',
 ): TaxonomyCardValues {
   const row = asRecord(resultById[id]);
   const annual = finiteNumber(row?.value_annual);
   return {
     annualValue: annual,
     nominalValue: finiteNumber(row?.value_nominal),
-    pvValue: presentValue(row),
+    pvValue: presentValue(row, rate),
     detailRows: detailRows(row),
     missingHover: missingInputsHover(row?.missing_inputs),
     doesNotApply: rowDoesNotApply(row),
@@ -205,12 +210,13 @@ export function positiveItems(
   items: TaxonomyItemView[],
   resultById: Record<string, unknown>,
   sortByValue: boolean,
+  rate: ValueRate = 'social',
 ): TaxonomyItemView[] {
-  const visible = items.filter((item) => itemPresentValue(resultById, item.id) !== null);
+  const visible = items.filter((item) => itemPresentValue(resultById, item.id, rate) !== null);
   if (sortByValue) {
     visible.sort((a, b) => {
-      const left = itemPresentValue(resultById, a.id);
-      const right = itemPresentValue(resultById, b.id);
+      const left = itemPresentValue(resultById, a.id, rate);
+      const right = itemPresentValue(resultById, b.id, rate);
       if (left === null || right === null) return 0;
       return right - left;
     });

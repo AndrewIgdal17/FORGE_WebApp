@@ -18,6 +18,7 @@ import {
   cardValues,
   itemPresentValue,
   positiveItems,
+  type ValueRate,
   readTaxonomyItems,
   resolveResultById,
   withLegacyItems,
@@ -810,6 +811,7 @@ function CategoryAccordions({
   onToggle,
   excluded,
   onToggleExcluded,
+  rate,
 }: {
   title: string;
   rows: CategoryAmount[];
@@ -822,6 +824,7 @@ function CategoryAccordions({
   onToggle: (key: string) => void;
   excluded: Set<string>;
   onToggleExcluded: (key: string, include: boolean) => void;
+  rate: ValueRate;
 }): ReactElement {
   return (
     <section className="space-y-3">
@@ -839,8 +842,8 @@ function CategoryAccordions({
               : 0;
         const matched = itemsForCategory(taxonomyItems, sides, side, row.key);
         const taxonomyCards = (items: TaxonomyItemView[]): TaxonomyItemView[] => [
-          ...positiveItems(items, resultById, true),
-          ...items.filter((item) => itemPresentValue(resultById, item.id) === null),
+          ...positiveItems(items, resultById, true, rate),
+          ...items.filter((item) => itemPresentValue(resultById, item.id, rate) === null),
         ];
         const cards = taxonomyCards(matched);
         const sections =
@@ -913,7 +916,7 @@ function CategoryAccordions({
                         </h3>
                       ) : null}
                       {section.items.map((item, index) => {
-                        const values = cardValues(resultById, item.id);
+                        const values = cardValues(resultById, item.id, rate);
                         return (
                           <TaxonomyCard
                             key={item.id}
@@ -1099,6 +1102,7 @@ export function ResultsOverview({
         onToggle={toggleOpen}
         excluded={excluded}
         onToggleExcluded={toggleExcluded}
+        rate={perspective === 'societal' ? 'social' : 'wacc'}
       />
       <CategoryAccordions
         title="Benefits"
@@ -1112,6 +1116,7 @@ export function ResultsOverview({
         onToggle={toggleOpen}
         excluded={excluded}
         onToggleExcluded={toggleExcluded}
+        rate={perspective === 'societal' ? 'social' : 'wacc'}
       />
     </div>
   );
