@@ -27,8 +27,9 @@ export default function LandingPage(): ReactElement {
             Full-cost benefit-cost analysis for transmission projects
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-slate-600">
-            The Framework for Open Reproducible Grid Economics covers 24 cost and benefit
-            categories across capital, operational, delay, emissions, and risk.
+            The Framework for Open Reproducible Grid Economics prices 22 cost and benefit
+            items: capital, delay-period, operating, and external costs, and market and
+            external benefits.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button
@@ -66,7 +67,7 @@ export default function LandingPage(): ReactElement {
           <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h3 className="text-lg font-semibold text-slate-900">What it does</h3>
             <ul className="mt-4 list-disc space-y-1.5 pl-5 leading-relaxed text-slate-600">
-              <li>24 cost and benefit categories</li>
+              <li>22 cost and benefit items</li>
               <li>4 BCR perspectives (societal, ratepayer, utility, custom)</li>
               <li>Taxonomy-driven input forms</li>
               <li>Auditable calculations and exports</li>
