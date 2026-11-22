@@ -169,7 +169,10 @@ function detailLabel(record: Record<string, unknown>): string {
   return key ? humanizeLabel(key) : 'Component';
 }
 
-function detailRows(row: Record<string, unknown> | null): TaxonomyDetailRow[] {
+function detailRows(
+  row: Record<string, unknown> | null,
+  rate: ValueRate = 'social',
+): TaxonomyDetailRow[] {
   if (!row) return [];
   const raw = row.detail_rows ?? row.detail;
   if (!Array.isArray(raw)) return [];
@@ -178,8 +181,10 @@ function detailRows(row: Record<string, unknown> | null): TaxonomyDetailRow[] {
     const record = asRecord(entry);
     if (!record) continue;
     const nominal = finiteNumber(record.value_nominal);
-    let pv = finiteNumber(record.value_pv);
-    if (pv == null) pv = finiteNumber(record.value);
+    // A stored result from before 6.0.1 has no WACC value on its detail rows;
+    // it shows no PV rather than the social-rate one.
+    let pv = finiteNumber(rate === 'wacc' ? record.value_pv_wacc : record.value_pv);
+    if (pv == null && rate === 'social') pv = finiteNumber(record.value);
     rows.push({
       label: detailLabel(record),
       nominal,
@@ -200,7 +205,7 @@ export function cardValues(
     annualValue: annual,
     nominalValue: finiteNumber(row?.value_nominal),
     pvValue: presentValue(row, rate),
-    detailRows: detailRows(row),
+    detailRows: detailRows(row, rate),
     missingHover: missingInputsHover(row?.missing_inputs),
     doesNotApply: rowDoesNotApply(row),
   };

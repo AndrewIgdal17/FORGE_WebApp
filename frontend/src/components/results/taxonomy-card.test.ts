@@ -84,3 +84,32 @@ describe('item values follow the perspective rate (SunZia ratepayer view)', () =
     expect(positiveItems([{ id: 'capital_recovery', label: 'CR', category: 'capital', subgroup: null, displayOrder: 0 }], byId, true, 'wacc')).toHaveLength(1);
   });
 });
+
+describe('detail rows follow the perspective rate', () => {
+  const byId = {
+    oandm_line: {
+      taxonomy_id: 'oandm_line',
+      state: 'measured',
+      value_pv: 600,
+      value_pv_wacc: 300,
+      detail: [
+        { dimension: 'component', dimension_key: 'base', value_pv: 500, value_pv_wacc: 250 },
+        { dimension: 'component', dimension_key: 'vegetation', value_pv: 100, value_pv_wacc: 50 },
+      ],
+    },
+    stored_v6: {
+      taxonomy_id: 'stored_v6',
+      value_pv: 10,
+      value_pv_wacc: 5,
+      detail: [{ dimension: 'component', dimension_key: 'vegetation', value_pv: 10 }],
+    },
+  };
+  it('societal rows show social values and wacc rows show WACC values', () => {
+    expect(cardValues(byId, 'oandm_line').detailRows.map((r) => r.pv)).toEqual([500, 100]);
+    expect(cardValues(byId, 'oandm_line', 'wacc').detailRows.map((r) => r.pv)).toEqual([250, 50]);
+  });
+  it('a row without a WACC value shows no PV in a WACC view', () => {
+    expect(cardValues(byId, 'stored_v6', 'wacc').detailRows[0]!.pv).toBeUndefined();
+  });
+});
+
