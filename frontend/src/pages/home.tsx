@@ -129,10 +129,10 @@ export default function HomePage(): ReactElement {
                 variant="outline"
                 size="lg"
                 disabled={!hasScenarios}
-                onClick={() => navigate('/app/scenarios-manager')}
+                onClick={() => navigate('/app/projects')}
                 className="h-10 flex-1 border-slate-300 bg-white text-sm text-slate-600 hover:border-forge-primary hover:text-forge-primary disabled:border-slate-200 disabled:text-slate-400"
               >
-                Go to Scenarios
+                Go to Projects
               </Button>
             </div>
           </div>

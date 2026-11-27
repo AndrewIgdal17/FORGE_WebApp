@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 const NAV_LINKS = [
   { href: '/app', label: 'Home' },
   { href: '/app/workspace', label: 'Workspace' },
-  { href: '/app/scenarios-manager', label: 'Scenarios' },
+  { href: '/app/projects', label: 'Projects' },
 ] as const;
 
 const ADMIN_EMAIL = 'andrewigdal17@gmail.com';
