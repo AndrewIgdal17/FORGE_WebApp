@@ -206,13 +206,22 @@ def test_prefill_nearest_class_150_to_161():
     assert prefill(150, is_dc=False)["old_capacity_mw"] == 460
 
 
-def test_prefill_tie_goes_higher():
-    """Between 115 and 138, 127 is nearer 138 than 115 (higher class on close calls)."""
+def test_prefill_nearest_class_127_to_138():
+    """127 kV is nearer the 138 kV class than 115 kV."""
     assert prefill(127, is_dc=False)["old_capacity_mw"] == 394
+
+
+def test_prefill_tie_goes_higher():
+    """92 kV is equidistant from 69 and 115; tie goes to the higher class (115 → 329 MW)."""
+    assert prefill(92, is_dc=False)["old_capacity_mw"] == 329
 
 
 def test_prefill_dc_only_old_ac_dc():
     assert prefill(None, is_dc=True) == {"old_ac_dc": "DC"}
+
+
+def test_prefill_dc_with_voltage_emits_only_old_ac_dc():
+    assert prefill(500, is_dc=True) == {"old_ac_dc": "DC"}
 
 
 def test_prefill_none_voltage_not_dc():
