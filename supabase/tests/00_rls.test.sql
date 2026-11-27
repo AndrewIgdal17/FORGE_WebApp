@@ -27,13 +27,6 @@ values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'user-a@test.local'),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'user-b@test.local');
 
-insert into public.scenario (id, user_id, name, source, defaults_id, changes)
-values
-  ('11111111-0000-0000-0000-000000000001',
-   'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a scenario', 'manual', 'd1', '{}'),
-  ('11111111-0000-0000-0000-000000000002',
-   'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'b scenario', 'manual', 'd1', '{}');
-
 insert into public.project (
   id, user_id, name, sending_name, receiving_name, sending_point, receiving_point
 )
@@ -52,6 +45,15 @@ values
    'Rio Grande',
    ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
    ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326));
+
+insert into public.scenario (id, user_id, name, source, defaults_id, changes, project_id)
+values
+  ('11111111-0000-0000-0000-000000000001',
+   'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a scenario', 'manual', 'd1', '{}',
+   '33333333-0000-0000-0000-000000000001'),
+  ('11111111-0000-0000-0000-000000000002',
+   'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'b scenario', 'manual', 'd1', '{}',
+   '33333333-0000-0000-0000-000000000002');
 
 -- ---------------------------------------------------------------------------
 -- Requirement 6: creating a user in auth.users creates a profile row
@@ -111,8 +113,9 @@ select is(
 );
 
 select throws_ok(
-  $$ insert into public.scenario (user_id, name, source, defaults_id, changes)
-     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'x', 'manual', 'd1', '{}') $$,
+  $$ insert into public.scenario (user_id, name, source, defaults_id, changes, project_id)
+     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'x', 'manual', 'd1', '{}',
+             '33333333-0000-0000-0000-000000000001') $$,
   '42501',
   null,
   'authenticated user cannot insert into scenario'
@@ -260,14 +263,16 @@ set local role forge_api;
 set local request.jwt.claim.sub = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 select lives_ok(
-  $$ insert into public.scenario (user_id, name, source, defaults_id, changes)
-     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'forge_api for A', 'manual', 'd1', '{}') $$,
+  $$ insert into public.scenario (user_id, name, source, defaults_id, changes, project_id)
+     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'forge_api for A', 'manual', 'd1', '{}',
+             '33333333-0000-0000-0000-000000000001') $$,
   'forge_api acting for A can insert a scenario owned by A'
 );
 
 select throws_ok(
-  $$ insert into public.scenario (user_id, name, source, defaults_id, changes)
-     values ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'forge_api for B', 'manual', 'd1', '{}') $$,
+  $$ insert into public.scenario (user_id, name, source, defaults_id, changes, project_id)
+     values ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'forge_api for B', 'manual', 'd1', '{}',
+             '33333333-0000-0000-0000-000000000002') $$,
   '42501',
   null,
   'forge_api acting for A cannot insert a scenario owned by B'
@@ -361,8 +366,9 @@ update public.profiles set username = 'Alice'
 where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 select throws_ok(
-  $$ insert into public.scenario (user_id, name, source, defaults_id, changes, results)
-     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'partial', 'manual', 'd1', '{}', '{}') $$,
+  $$ insert into public.scenario (user_id, name, source, defaults_id, changes, results, project_id)
+     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'partial', 'manual', 'd1', '{}', '{}',
+             '33333333-0000-0000-0000-000000000001') $$,
   '23514',
   null,
   'scenario rejects results set without calculator/inputs_id/computed_at'
@@ -371,18 +377,20 @@ select throws_ok(
 select throws_ok(
   $$ insert into public.scenario
        (user_id, name, source, defaults_id, changes,
-        results, calculator, inputs_id, computed_at, calc_error)
+        results, calculator, inputs_id, computed_at, calc_error, project_id)
      values
        ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'both', 'manual', 'd1', '{}',
-        '{}', '{}', 'i1', now(), 'boom') $$,
+        '{}', '{}', 'i1', now(), 'boom',
+        '33333333-0000-0000-0000-000000000001') $$,
   '23514',
   null,
   'scenario rejects results coexisting with calc_error'
 );
 
 select throws_ok(
-  $$ insert into public.scenario (user_id, name, source, defaults_id, changes)
-     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'bad source', 'not-a-real-source', 'd1', '{}') $$,
+  $$ insert into public.scenario (user_id, name, source, defaults_id, changes, project_id)
+     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'bad source', 'not-a-real-source', 'd1', '{}',
+             '33333333-0000-0000-0000-000000000001') $$,
   '23514',
   null,
   'scenario rejects an unknown source value'

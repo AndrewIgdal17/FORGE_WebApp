@@ -20,7 +20,26 @@ values
   ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'route-a@test.local'),
   ('dddddddd-dddd-dddd-dddd-dddddddddddd', 'route-b@test.local');
 
-insert into public.scenario (id, user_id, name, source, defaults_id, changes, route)
+insert into public.project (
+  id, user_id, name, sending_name, receiving_name, sending_point, receiving_point
+)
+values
+  ('33333333-0000-0000-0000-000000000011',
+   'cccccccc-cccc-cccc-cccc-cccccccccccc',
+   'c project',
+   'Laredo',
+   'Rio Grande',
+   ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
+   ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326)),
+  ('33333333-0000-0000-0000-000000000012',
+   'dddddddd-dddd-dddd-dddd-dddddddddddd',
+   'd project',
+   'Laredo',
+   'Rio Grande',
+   ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
+   ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326));
+
+insert into public.scenario (id, user_id, name, source, defaults_id, changes, route, project_id)
 values (
   '22222222-0000-0000-0000-000000000001',
   'cccccccc-cccc-cccc-cccc-cccccccccccc',
@@ -28,17 +47,19 @@ values (
   'manual',
   'd1',
   '{}',
-  ST_GeomFromGeoJSON('{"type":"MultiLineString","coordinates":[[[-111.54,32.87],[-105.59,34.35]]]}')
+  ST_GeomFromGeoJSON('{"type":"MultiLineString","coordinates":[[[-111.54,32.87],[-105.59,34.35]]]}'),
+  '33333333-0000-0000-0000-000000000011'
 );
 
-insert into public.scenario (id, user_id, name, source, defaults_id, changes)
+insert into public.scenario (id, user_id, name, source, defaults_id, changes, project_id)
 values (
   '22222222-0000-0000-0000-000000000002',
   'dddddddd-dddd-dddd-dddd-dddddddddddd',
   'other',
   'manual',
   'd1',
-  '{}'
+  '{}',
+  '33333333-0000-0000-0000-000000000012'
 );
 
 -- ---------------------------------------------------------------------------

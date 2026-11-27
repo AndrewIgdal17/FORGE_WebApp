@@ -81,10 +81,27 @@ async def test_forge_api_transaction_sets_rls_claim(pool, real_user_id):
 async def test_forge_api_transaction_rolls_back_on_error(pool, real_user_id):
     with pytest.raises(RuntimeError):
         async with db.forge_api_transaction(real_user_id) as conn:
-            await conn.execute(
-                "insert into public.scenario (user_id, name, source, defaults_id, changes) "
-                "values ($1, 'temp', 'manual', 'sha256:test', '{}'::jsonb)",
+            project_id = await conn.fetchval(
+                """
+                insert into public.project (
+                    user_id, name, sending_name, receiving_name,
+                    sending_point, receiving_point
+                )
+                values (
+                    $1, 'temp', 'Sending', 'Receiving',
+                    ST_SetSRID(ST_MakePoint(-97.74, 30.27), 4326),
+                    ST_SetSRID(ST_MakePoint(-96.80, 32.78), 4326)
+                )
+                returning id
+                """,
                 real_user_id,
+            )
+            await conn.execute(
+                "insert into public.scenario "
+                "(user_id, name, source, defaults_id, changes, project_id) "
+                "values ($1, 'temp', 'manual', 'sha256:test', '{}'::jsonb, $2)",
+                real_user_id,
+                project_id,
             )
             raise RuntimeError("force rollback")
 
