@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactElement } from 'react';
+import {
+  ScenarioTabs,
+  type ScenarioTabsProps,
+} from '@/components/projects/scenario-tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { BcrScoreboard } from '@/components/workspace/bcr-scoreboard';
@@ -19,6 +23,9 @@ export interface WorkspaceHeaderProps {
   canCalculate?: boolean;
   onCalculate?: () => void;
   onCreate?: () => void;
+  /** Id from `?project=`. Tabs mount only when this is set. */
+  locationProjectId?: string | null;
+  scenarioTabs?: ScenarioTabsProps | null;
 }
 
 export function WorkspaceHeader({
@@ -35,6 +42,8 @@ export function WorkspaceHeader({
   canCalculate = false,
   onCalculate,
   onCreate,
+  locationProjectId = null,
+  scenarioTabs = null,
 }: WorkspaceHeaderProps): ReactElement {
   const hasScenario = scenarioName.trim().length > 0;
   const [editing, setEditing] = useState(false);
@@ -99,6 +108,11 @@ export function WorkspaceHeader({
 
   return (
     <header className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2">
+      {locationProjectId && scenarioTabs ? (
+        <div className="w-full basis-full border-b border-slate-100 pb-2">
+          <ScenarioTabs {...scenarioTabs} />
+        </div>
+      ) : null}
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {editing ? (
           <Input

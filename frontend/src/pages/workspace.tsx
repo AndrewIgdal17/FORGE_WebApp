@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { FormEvent, ReactElement } from 'react';
 import { LegacyBanner } from '@/components/results/legacy-banner';
 import { showLegacyBanner } from '@/lib/legacy';
-import type { ReactElement } from 'react';
 import type { MultiLineString } from 'geojson';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { AuthGuard } from '@/components/auth-guard';
 import { AppNav } from '@/components/layout/app-nav';
@@ -16,8 +17,20 @@ import { terrainsForConstruction, terrainMilesPath } from '@/components/sections
 import { ContentHeader } from '@/components/sidebar/content-header';
 import { Sidebar } from '@/components/sidebar/sidebar';
 import type { SubItemValidation } from '@/components/sidebar/sidebar-item';
+import { newScenarioFromDefaults } from '@/components/projects/scenario-tabs';
 import { ContributionStrip } from '@/components/workspace/contribution-strip';
 import { WorkspaceHeader } from '@/components/workspace/workspace-header';
+import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { SIDEBAR_SECTIONS } from '@/data/sidebar-sections';
 import { useAuth } from '@/hooks/use-auth';
 import { useNavigation } from '@/hooks/use-navigation';
@@ -35,7 +48,7 @@ import { canCalculate, canDraw, panelFields } from '@/lib/required-gates';
 import { getValueAtPath } from '@/lib/path';
 import { isMultiLineString, scenarioMapRoute } from '@/lib/route-geometry';
 import { useFormStore } from '@/stores/form-store';
-import { useProjectStore } from '@/stores/project-store';
+import { isProjectReadOnly, useProjectStore } from '@/stores/project-store';
 import type { Project } from '@/stores/project-store';
 import {
   exportAsCsv,
@@ -369,8 +382,21 @@ function WorkspaceBody(): ReactElement {
   const { session } = useAuth();
   const currentUserId = session?.user?.id ?? null;
   const renameScenario = useScenarioStore((state) => state.renameScenario);
+  const duplicateScenario = useScenarioStore((state) => state.duplicateScenario);
+  const deleteScenario = useScenarioStore((state) => state.deleteScenario);
   const setUnsavedChanges = useScenarioStore((state) => state.setUnsavedChanges);
   const savedResults = useScenarioStore((state) => state.savedResults);
+
+  const navigate = useNavigate();
+  const projects = useProjectStore((state) => state.projects);
+  const setBase = useProjectStore((state) => state.setBase);
+  const [locationProjectId, setLocationProjectId] = useState<string | null>(() => {
+    const value = new URLSearchParams(window.location.search).get('project');
+    return value ? value : null;
+  });
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const [ready, setReady] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -396,6 +422,14 @@ function WorkspaceBody(): ReactElement {
   function updateDrawn(next: ScenarioGeometry | undefined): void {
     drawnRef.current = next;
     setDrawn(next);
+  }
+
+  function goToWorkspace(projectId: string, scenarioId: string): void {
+    const next = workspaceUrl(projectId, scenarioId);
+    if (`${window.location.pathname}${window.location.search}` !== next) {
+      window.history.replaceState(null, '', next);
+    }
+    setLocationProjectId((current) => (current === projectId ? current : projectId));
   }
 
   const activeScenario = scenarios.find((scenario) => scenario.id === activeScenarioId) ?? null;
@@ -593,12 +627,7 @@ function WorkspaceBody(): ReactElement {
             toast.error('That scenario is not in this project.');
           } else {
             applyScenarioRef.current(match);
-            if (match.project_id) {
-              const next = workspaceUrl(match.project_id, match.id);
-              if (`${window.location.pathname}${window.location.search}` !== next) {
-                window.history.replaceState(null, '', next);
-              }
-            }
+            if (match.project_id) goToWorkspace(match.project_id, match.id);
           }
         } else {
           const active = useScenarioStore.getState().getActiveScenario();
@@ -674,7 +703,7 @@ function WorkspaceBody(): ReactElement {
         toast.error('The copied project has no scenario.');
         return;
       }
-      window.history.replaceState(null, '', workspaceUrl(copy.id, scenario.id));
+      goToWorkspace(copy.id, scenario.id);
       setDraft(null);
       updateDrawn(undefined);
       applyScenario(scenario);
@@ -684,6 +713,18 @@ function WorkspaceBody(): ReactElement {
     } finally {
       savingRef.current = false;
     }
+  }
+
+  function offerProjectDuplicate(projectId: string): void {
+    toast('This project is read-only. Duplicate the project to edit your own copy.', {
+      duration: Number.POSITIVE_INFINITY,
+      action: {
+        label: 'Duplicate project',
+        onClick: () => {
+          void openProjectCopy(projectId);
+        },
+      },
+    });
   }
 
   async function handleSave(): Promise<void> {
@@ -704,15 +745,7 @@ function WorkspaceBody(): ReactElement {
       .getState()
       .scenarios.filter((item) => item.project_id === project.id);
     if (saveAction(project, inProject, currentUserId ?? '') === 'offer_duplicate') {
-      toast('This project is read-only. Duplicate the project to edit your own copy.', {
-        duration: Number.POSITIVE_INFINITY,
-        action: {
-          label: 'Duplicate project',
-          onClick: () => {
-            void openProjectCopy(project.id);
-          },
-        },
-      });
+      offerProjectDuplicate(project.id);
       return;
     }
     const requiredNow = requiredRef.current;
@@ -732,7 +765,7 @@ function WorkspaceBody(): ReactElement {
     try {
       const changes = useFormStore.getState().getChanges();
       await saveScenario(active.id, changes, active.revision, drawn, rowWidthFt);
-      window.history.replaceState(null, '', workspaceUrl(project.id, active.id));
+      goToWorkspace(project.id, active.id);
       updateDrawn(undefined);
       baselineRef.current = JSON.stringify(changes);
       const latest = JSON.stringify(useFormStore.getState().getChanges());
@@ -879,9 +912,7 @@ function WorkspaceBody(): ReactElement {
       setDraft(null);
       updateDrawn(undefined);
       applyScenario(scenario);
-      if (scenario.project_id) {
-        window.history.replaceState(null, '', workspaceUrl(scenario.project_id, scenario.id));
-      }
+      if (scenario.project_id) goToWorkspace(scenario.project_id, scenario.id);
       toast.success(draft.project_id ? 'Scenario created' : 'Project created');
     } catch (error) {
       toast.error(errorMessage(error));
@@ -930,6 +961,139 @@ function WorkspaceBody(): ReactElement {
     openInputsSubItem(target.sectionId, target.subItemId);
   }
 
+  const locationProject =
+    locationProjectId === null
+      ? null
+      : projects.find((item) => item.id === locationProjectId) ?? null;
+  const projectScenarios = locationProject
+    ? scenarios.filter((item) => item.project_id === locationProject.id)
+    : [];
+  const projectReadOnly = locationProject
+    ? isProjectReadOnly(locationProject, projectScenarios, currentUserId ?? '')
+    : false;
+  const pendingDelete =
+    scenarios.find((item) => item.id === pendingDeleteId) ?? null;
+  const renameTrimmed = renameValue.trim();
+
+  function handleSelectTab(id: string): void {
+    if (!locationProject) return;
+    const scenario = scenarios.find(
+      (item) => item.id === id && item.project_id === locationProject.id,
+    );
+    if (!scenario) return;
+    setDraft(null);
+    updateDrawn(undefined);
+    applyScenario(scenario);
+    goToWorkspace(locationProject.id, scenario.id);
+  }
+
+  async function handleDuplicateTab(id: string): Promise<void> {
+    if (!locationProject || !id) return;
+    if (projectReadOnly) {
+      offerProjectDuplicate(locationProject.id);
+      return;
+    }
+    try {
+      const copy = await duplicateScenario(id);
+      setDraft(null);
+      updateDrawn(undefined);
+      applyScenario(copy);
+      if (copy.project_id) goToWorkspace(copy.project_id, copy.id);
+      toast.success('Scenario duplicated');
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  }
+
+  function handleNewScenario(): void {
+    if (!locationProject) return;
+    if (projectReadOnly) {
+      offerProjectDuplicate(locationProject.id);
+      return;
+    }
+    const pending = newScenarioFromDefaults(
+      locationProject.id,
+      projectScenarios.map((item) => item.name),
+    );
+    useScenarioStore.getState().setPendingDraft(pending);
+    if (!useFormStore.getState().defaults) return;
+    const consumed = useScenarioStore.getState().consumePendingDraft();
+    if (!consumed) return;
+    beginImportedDraft(consumed);
+  }
+
+  async function handleMakeBase(id: string): Promise<void> {
+    if (!locationProject || projectReadOnly) return;
+    try {
+      await setBase(locationProject.id, id, locationProject.revision);
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  }
+
+  function handleTabRename(id: string): void {
+    if (!locationProject || projectReadOnly) return;
+    const scenario = projectScenarios.find((item) => item.id === id);
+    if (!scenario) return;
+    setRenamingId(id);
+    setRenameValue(scenario.name);
+  }
+
+  async function submitTabRename(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!renamingId) return;
+    const name = renameValue.trim();
+    if (!name) return;
+    const scenario = useScenarioStore.getState().scenarios.find((item) => item.id === renamingId);
+    if (!scenario) return;
+    try {
+      if (name !== scenario.name) {
+        await renameScenario(scenario.id, name, scenario.revision);
+      }
+      setRenamingId(null);
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  }
+
+  function handleTabDelete(id: string): void {
+    if (!locationProject || projectReadOnly || projectScenarios.length <= 1) return;
+    setPendingDeleteId(id);
+  }
+
+  async function confirmTabDelete(): Promise<void> {
+    if (!pendingDeleteId || !locationProject) return;
+    const id = pendingDeleteId;
+    const projectId = locationProject.id;
+    const deletedWasActive = activeScenarioId === id;
+    try {
+      await deleteScenario(id);
+      await useProjectStore.getState().loadProjects();
+      if (deletedWasActive) {
+        const remaining = useScenarioStore
+          .getState()
+          .scenarios.filter((item) => item.project_id === projectId);
+        const projectNow =
+          useProjectStore.getState().projects.find((item) => item.id === projectId) ??
+          locationProject;
+        const next = scenarioForWorkspace(projectNow, remaining);
+        if (next) {
+          setDraft(null);
+          updateDrawn(undefined);
+          applyScenario(next);
+          goToWorkspace(projectId, next.id);
+        }
+      }
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  }
+
+  function handleCompare(): void {
+    if (!locationProjectId) return;
+    navigate(`/app/projects/${locationProjectId}/compare`);
+  }
+
   return (
     <div className="flex h-screen flex-col bg-slate-50">
       <AppNav />
@@ -951,6 +1115,24 @@ function WorkspaceBody(): ReactElement {
             canCalculate={calculationAllowed}
             onCalculate={() => { void runCalculation(); }}
             onCreate={() => { void handleCreate(); }}
+            locationProjectId={locationProjectId}
+            scenarioTabs={
+              locationProject
+                ? {
+                    project: locationProject,
+                    scenarios: projectScenarios,
+                    activeId: activeScenarioId ?? '',
+                    readOnly: projectReadOnly,
+                    onSelect: handleSelectTab,
+                    onDuplicate: (id) => { void handleDuplicateTab(id); },
+                    onNew: handleNewScenario,
+                    onMakeBase: (id) => { void handleMakeBase(id); },
+                    onRename: handleTabRename,
+                    onDelete: handleTabDelete,
+                    onCompare: handleCompare,
+                  }
+                : null
+            }
           />
           <BeforeCalculationPanel fields={missingForCalculation} onOpen={openRequiredField} />
           <div className="flex min-h-0 flex-1">
@@ -1026,6 +1208,52 @@ function WorkspaceBody(): ReactElement {
         onOpenChange={setWizardOpen}
         defaultsSnapshot={defaults}
         onComplete={handleWizardComplete}
+      />
+      <Dialog
+        open={renamingId !== null}
+        onOpenChange={(open) => {
+          if (!open) setRenamingId(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename Scenario</DialogTitle>
+          </DialogHeader>
+          <form className="grid gap-4" onSubmit={(event) => { void submitTabRename(event); }}>
+            <div className="grid gap-2">
+              <Label htmlFor="rename-tab-scenario-name">Name</Label>
+              <Input
+                id="rename-tab-scenario-name"
+                value={renameValue}
+                onChange={(event) => setRenameValue(event.target.value)}
+                autoComplete="off"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setRenamingId(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!renameTrimmed}>
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteId(null);
+        }}
+        title="Delete Scenario"
+        description={
+          pendingDelete
+            ? `Delete "${pendingDelete.name}"? This cannot be undone.`
+            : 'Delete this scenario? This cannot be undone.'
+        }
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => { void confirmTabDelete(); }}
       />
     </div>
   );
