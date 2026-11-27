@@ -1,7 +1,6 @@
 """Terminal snap and mismatch checks for project routes. No database."""
 
 import copy
-import math
 
 import pytest
 
