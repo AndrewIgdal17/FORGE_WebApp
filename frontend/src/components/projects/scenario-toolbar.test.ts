@@ -60,6 +60,7 @@ function sampleScenario(
     route: null,
     route_geojson: null,
     segments: null,
+    line_selection: null,
   };
 }
 

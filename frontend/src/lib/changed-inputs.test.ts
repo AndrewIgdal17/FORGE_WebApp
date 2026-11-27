@@ -36,6 +36,7 @@ function scenario(partial: {
     route: null,
     route_geojson: partial.route_geojson ?? null,
     segments: null,
+    line_selection: null,
   };
 }
 

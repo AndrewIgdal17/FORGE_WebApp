@@ -67,6 +67,7 @@ function scenario(id: string, name: string, results: Record<string, unknown>): S
     route: null,
     route_geojson: null,
     segments: null,
+    line_selection: null,
   };
 }
 

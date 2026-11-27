@@ -241,6 +241,7 @@ function acScenario(results: Record<string, unknown>): Scenario {
     route: null,
     route_geojson: null,
     segments: null,
+    line_selection: null,
   };
 }
 

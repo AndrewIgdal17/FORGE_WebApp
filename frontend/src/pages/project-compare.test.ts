@@ -34,6 +34,7 @@ function scenario(
     route: null,
     route_geojson: null,
     segments: null,
+    line_selection: null,
   };
 }
 

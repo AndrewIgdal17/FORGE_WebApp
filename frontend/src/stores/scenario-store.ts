@@ -52,11 +52,8 @@ export interface Scenario {
   /** Stored GeoJSON from `scenario_read.route_geojson`. Null when the row has no route. */
   route_geojson: unknown;
   segments: unknown[] | null;
-  /**
-   * From `scenario_read.line_selection`. Null when none is stored.
-   * Omitted only in partial test fixtures; loaded rows always set this field.
-   */
-  line_selection?: LineSelection | null;
+  /** From `scenario_read.line_selection`. Null when none is stored. */
+  line_selection: LineSelection | null;
 }
 
 export interface ScenarioGeometry {
