@@ -8,6 +8,8 @@ import { toast } from 'sonner';
 import { AuthGuard } from '@/components/auth-guard';
 import { AppNav } from '@/components/layout/app-nav';
 import { MapPanel } from '@/components/map/MapPanel';
+import type { TerminalMarkerSpec } from '@/components/map/terminal-markers';
+import type { DrawTerminals } from '@/hooks/use-route-draw';
 import type { PerspectiveKey } from '@/components/results/perspective-toggle';
 import { PerspectiveToggle } from '@/components/results/perspective-toggle';
 import { ResultsDispatcher } from '@/components/results/results-dispatcher';
@@ -58,7 +60,7 @@ import {
   useScenarioStore,
   workspaceUrl,
 } from '@/stores/scenario-store';
-import type { Scenario, ScenarioDraft, ScenarioGeometry } from '@/stores/scenario-store';
+import type { DraftTerminal, Scenario, ScenarioDraft, ScenarioGeometry } from '@/stores/scenario-store';
 
 interface WizardDraft {
   name: string;
@@ -74,9 +76,33 @@ const MILES_TOLERANCE = 0.5;
 const ZONE_COUNT = 15;
 const ROUTE_REQUIRED = 'A drawn route inside the lower 48 is required.';
 const WIDTH_REQUIRED = 'row_width_ft must be a positive number';
+const NO_TERMINAL_MARKERS: TerminalMarkerSpec[] = [];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isLonLatPair(value: unknown): value is [number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    typeof value[0] === 'number' &&
+    typeof value[1] === 'number' &&
+    Number.isFinite(value[0]) &&
+    Number.isFinite(value[1])
+  );
+}
+
+function projectDrawTerminals(project: Project): DrawTerminals | null {
+  if (!isLonLatPair(project.sending_point) || !isLonLatPair(project.receiving_point)) {
+    return null;
+  }
+  return {
+    sending: project.sending_point,
+    receiving: project.receiving_point,
+    sendingName: project.sending_name,
+    receivingName: project.receiving_name,
+  };
 }
 
 function isBlank(value: unknown): boolean {
@@ -401,6 +427,8 @@ function WorkspaceBody(): ReactElement {
   const [ready, setReady] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [draft, setDraft] = useState<WizardDraft | null>(null);
+  const [terminalPick, setTerminalPick] = useState<'sending' | 'receiving' | null>(null);
+  const [pendingSending, setPendingSending] = useState<DraftTerminal | null>(null);
   const [calculationStatus, setCalculationStatus] = useState('Not calculated');
   const [perspective, setPerspective] = useState<PerspectiveKey>('societal');
   const [drawn, setDrawn] = useState<ScenarioGeometry | undefined>(undefined);
@@ -704,7 +732,7 @@ function WorkspaceBody(): ReactElement {
         return;
       }
       goToWorkspace(copy.id, scenario.id);
-      setDraft(null);
+      abandonDraft();
       updateDrawn(undefined);
       applyScenario(scenario);
       toast.success(`Opened your copy: ${copy.name}`);
@@ -847,10 +875,35 @@ function WorkspaceBody(): ReactElement {
     });
     loadScenarioChanges(diffChanges(snapshot, fullInputs));
     setDraft({ name, source, fullInputs });
+    setPendingSending(null);
+    setTerminalPick('sending');
     lastStatusRef.current = 'Not calculated';
     setCalculationStatus('Not calculated');
     openInputsSubItem('routing', 'route');
     void refreshRequired();
+  }
+
+  function abandonDraft(): void {
+    setDraft(null);
+    setPendingSending(null);
+    setTerminalPick(null);
+  }
+
+  function handlePickTerminal(terminal: DraftTerminal): void {
+    if (terminalPick === 'sending') {
+      setPendingSending(terminal);
+      setTerminalPick('receiving');
+      return;
+    }
+    if (terminalPick !== 'receiving') return;
+    const sending = pendingSending;
+    if (!sending) return;
+    setDraft((current) => {
+      if (!current || current.project_id) return current;
+      return { ...current, terminals: { sending, receiving: terminal } };
+    });
+    setPendingSending(null);
+    setTerminalPick(null);
   }
 
   function handleWizardComplete(
@@ -909,7 +962,7 @@ function WorkspaceBody(): ReactElement {
         toast.error('Pick the sending and receiving terminals before creating this project.');
         return;
       }
-      setDraft(null);
+      abandonDraft();
       updateDrawn(undefined);
       applyScenario(scenario);
       if (scenario.project_id) goToWorkspace(scenario.project_id, scenario.id);
@@ -965,6 +1018,33 @@ function WorkspaceBody(): ReactElement {
     locationProjectId === null
       ? null
       : projects.find((item) => item.id === locationProjectId) ?? null;
+  const pickingNewProject = terminalPick !== null && draft !== null && !draft.project_id;
+  const mapTerminals = useMemo((): DrawTerminals | null => {
+    if (pickingNewProject) return null;
+    if (draft?.terminals) {
+      const { sending, receiving } = draft.terminals;
+      if (!isLonLatPair(sending.point) || !isLonLatPair(receiving.point)) return null;
+      return {
+        sending: sending.point,
+        receiving: receiving.point,
+        sendingName: sending.name,
+        receivingName: receiving.name,
+      };
+    }
+    return locationProject ? projectDrawTerminals(locationProject) : null;
+  }, [pickingNewProject, draft, locationProject]);
+  const terminalMarkers = useMemo((): TerminalMarkerSpec[] => {
+    if (mapTerminals) {
+      return [
+        { role: 'sending', name: mapTerminals.sendingName, point: mapTerminals.sending },
+        { role: 'receiving', name: mapTerminals.receivingName, point: mapTerminals.receiving },
+      ];
+    }
+    if (pendingSending && isLonLatPair(pendingSending.point)) {
+      return [{ role: 'sending', name: pendingSending.name, point: pendingSending.point }];
+    }
+    return NO_TERMINAL_MARKERS;
+  }, [mapTerminals, pendingSending]);
   const projectScenarios = locationProject
     ? scenarios.filter((item) => item.project_id === locationProject.id)
     : [];
@@ -981,7 +1061,7 @@ function WorkspaceBody(): ReactElement {
       (item) => item.id === id && item.project_id === locationProject.id,
     );
     if (!scenario) return;
-    setDraft(null);
+    abandonDraft();
     updateDrawn(undefined);
     applyScenario(scenario);
     goToWorkspace(locationProject.id, scenario.id);
@@ -995,7 +1075,7 @@ function WorkspaceBody(): ReactElement {
     }
     try {
       const copy = await duplicateScenario(id);
-      setDraft(null);
+      abandonDraft();
       updateDrawn(undefined);
       applyScenario(copy);
       if (copy.project_id) goToWorkspace(copy.project_id, copy.id);
@@ -1078,7 +1158,7 @@ function WorkspaceBody(): ReactElement {
           locationProject;
         const next = scenarioForWorkspace(projectNow, remaining);
         if (next) {
-          setDraft(null);
+          abandonDraft();
           updateDrawn(undefined);
           applyScenario(next);
           goToWorkspace(projectId, next.id);
@@ -1150,12 +1230,16 @@ function WorkspaceBody(): ReactElement {
                   <div className="relative flex-1 min-h-0 overflow-hidden">
                     <MapPanel
                       createMode={draft !== null}
-                      drawingEnabled={drawingEnabled}
+                      drawingEnabled={drawingEnabled && !pickingNewProject}
                       existingRoute={
                         draft ? scenarioMapRoute(drawn ?? null) : scenarioMapRoute(activeScenario)
                       }
                       onRouteChange={handleRouteChange}
                       onAnalyzed={() => { void refreshRequired(); }}
+                      terminalMarkers={terminalMarkers}
+                      drawTerminals={mapTerminals}
+                      terminalPick={pickingNewProject ? terminalPick : null}
+                      onPickTerminal={handlePickTerminal}
                     />
                   </div>
                 ) : (

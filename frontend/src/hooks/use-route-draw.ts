@@ -10,6 +10,12 @@ import {
 } from 'terra-draw';
 import type { GeoJSONStoreFeatures, SnapToCustom, TerraDrawEventListeners } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
+import {
+  TERMINAL_TOLERANCE_M,
+  haversineM,
+  routeEndsMatch,
+  routeFinishMessage,
+} from '@/lib/terminals';
 
 type FeatureId = string | number;
 
@@ -26,11 +32,32 @@ export interface EndpointSubstations {
   receiving: SubstationIdentity | null;
 }
 
+export interface DrawTerminals {
+  sending: [number, number];
+  receiving: [number, number];
+  sendingName: string;
+  receivingName: string;
+}
+
+export interface RouteDrawOptions {
+  terminals?: DrawTerminals | null;
+  onTerminalMismatch?: (message: string) => void;
+}
+
+export interface SubstationHit {
+  gid: number;
+  name: string | null;
+  voltage_kv: string | null;
+  point: [number, number];
+}
+
 export interface RouteDraw {
   mode: DrawMode;
   setMode: (mode: DrawMode) => void;
   routeGeoJSON: MultiLineString | null;
   endpointSubstations: EndpointSubstations;
+  /** False when a finished line does not meet the project's terminals. */
+  terminalEndsOk: boolean;
   undo: () => void;
   redo: () => void;
   reset: () => void;
@@ -43,7 +70,7 @@ const DRAW_MODE: DrawMode = 'linestring';
 const EDIT_MODE: DrawMode = 'select';
 const SUBSTATION_HIT_LAYER = 'ref.substations_display-hit';
 const HIT_PADDING_PX = 6;
-const SNAP_MIN_ZOOM = 13.5;
+export const SUBSTATION_SNAP_MIN_ZOOM = 13.5;
 const NO_SUBSTATIONS: EndpointSubstations = { sending: null, receiving: null };
 
 function textProp(value: unknown): string | null {
@@ -64,35 +91,11 @@ function gidProp(value: unknown): number | null {
   return null;
 }
 
-function substationSnapTarget(
+export function substationHitAt(
   map: MapLibreMap,
-  x: number,
-  y: number,
-): Position | undefined {
-  if (map.getZoom() < SNAP_MIN_ZOOM) return undefined;
-  if (map.isStyleLoaded() !== true || !map.getLayer(SUBSTATION_HIT_LAYER)) return undefined;
-  const features = map.queryRenderedFeatures(
-    [
-      [x - HIT_PADDING_PX, y - HIT_PADDING_PX],
-      [x + HIT_PADDING_PX, y + HIT_PADDING_PX],
-    ],
-    { layers: [SUBSTATION_HIT_LAYER] },
-  );
-  for (const feature of features) {
-    if (feature.geometry.type !== 'Point') continue;
-    const [longitude, latitude] = feature.geometry.coordinates;
-    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) continue;
-    return [longitude, latitude];
-  }
-  return undefined;
-}
-
-function substationAt(map: MapLibreMap, position: Position): SubstationIdentity | null {
-  if (!map.getLayer(SUBSTATION_HIT_LAYER)) return null;
-  const longitude = position[0];
-  const latitude = position[1];
-  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null;
-  const point = map.project([longitude, latitude]);
+  point: { x: number; y: number },
+): SubstationHit | null {
+  if (map.isStyleLoaded() !== true || !map.getLayer(SUBSTATION_HIT_LAYER)) return null;
   const features = map.queryRenderedFeatures(
     [
       [point.x - HIT_PADDING_PX, point.y - HIT_PADDING_PX],
@@ -100,16 +103,66 @@ function substationAt(map: MapLibreMap, position: Position): SubstationIdentity 
     ],
     { layers: [SUBSTATION_HIT_LAYER] },
   );
-  const feature = features[0];
-  if (!feature) return null;
-  const properties = feature.properties ?? {};
-  const gid = gidProp(properties.gid) ?? gidProp(feature.id);
-  if (gid === null) return null;
-  return {
-    gid,
-    name: textProp(properties.name),
-    voltage_kv: textProp(properties.voltage_kv),
-  };
+  for (const feature of features) {
+    if (feature.geometry.type !== 'Point') continue;
+    const [longitude, latitude] = feature.geometry.coordinates;
+    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) continue;
+    const properties = feature.properties ?? {};
+    const gid = gidProp(properties.gid) ?? gidProp(feature.id);
+    if (gid === null) continue;
+    return {
+      gid,
+      name: textProp(properties.name),
+      voltage_kv: textProp(properties.voltage_kv),
+      point: [longitude, latitude],
+    };
+  }
+  return null;
+}
+
+function substationSnapTarget(
+  map: MapLibreMap,
+  x: number,
+  y: number,
+): Position | undefined {
+  if (map.getZoom() < SUBSTATION_SNAP_MIN_ZOOM) return undefined;
+  const hit = substationHitAt(map, { x, y });
+  return hit ? hit.point : undefined;
+}
+
+function substationAt(map: MapLibreMap, position: Position): SubstationIdentity | null {
+  const longitude = position[0];
+  const latitude = position[1];
+  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null;
+  const point = map.project([longitude, latitude]);
+  const hit = substationHitAt(map, point);
+  if (!hit) return null;
+  return { gid: hit.gid, name: hit.name, voltage_kv: hit.voltage_kv };
+}
+
+function snapToTerminals(
+  terminals: DrawTerminals | null,
+  event: { lng: number; lat: number },
+  context: { currentCoordinate?: number } | undefined,
+): Position | undefined {
+  if (!terminals) return undefined;
+  if (context?.currentCoordinate === 0) {
+    return [terminals.sending[0], terminals.sending[1]];
+  }
+  if (!Number.isFinite(event.lng) || !Number.isFinite(event.lat)) return undefined;
+  const click: [number, number] = [event.lng, event.lat];
+  if (haversineM(click, terminals.receiving) <= TERMINAL_TOLERANCE_M) {
+    return [terminals.receiving[0], terminals.receiving[1]];
+  }
+  return undefined;
+}
+
+function endsWithinTerminals(
+  terminals: DrawTerminals | null,
+  route: MultiLineString | null,
+): boolean {
+  if (!terminals || !route) return true;
+  return routeEndsMatch(route, terminals.sending, terminals.receiving).ok;
 }
 
 function substationsFor(map: MapLibreMap, route: MultiLineString): EndpointSubstations {
@@ -187,9 +240,15 @@ function readDrawing(draw: TerraDraw): boolean {
   return draw.getMode() === DRAW_MODE && draw.getModeState() === 'drawing';
 }
 
-function createDraw(map: MapLibreMap): TerraDraw {
-  const toCustom: SnapToCustom = (event) =>
-    substationSnapTarget(map, event.containerX, event.containerY);
+function createDraw(
+  map: MapLibreMap,
+  terminalsRef: { readonly current: DrawTerminals | null },
+): TerraDraw {
+  const toCustom: SnapToCustom = (event, context) => {
+    const terminal = snapToTerminals(terminalsRef.current, event, context);
+    if (terminal) return terminal;
+    return substationSnapTarget(map, event.containerX, event.containerY);
+  };
 
   return new TerraDraw({
     adapter: new TerraDrawMapLibreGLAdapter({ map }),
@@ -242,14 +301,38 @@ function createDraw(map: MapLibreMap): TerraDraw {
   });
 }
 
-export function useRouteDraw(map: MapLibreMap | null): RouteDraw {
+export function useRouteDraw(
+  map: MapLibreMap | null,
+  options?: RouteDrawOptions,
+): RouteDraw {
   const drawRef = useRef<TerraDraw | null>(null);
   const pendingMode = useRef<DrawMode>(DRAW_MODE);
+  const terminalsRef = useRef<DrawTerminals | null>(options?.terminals ?? null);
+  terminalsRef.current = options?.terminals ?? null;
+  const onMismatchRef = useRef(options?.onTerminalMismatch);
+  onMismatchRef.current = options?.onTerminalMismatch;
+  const lastMismatchRef = useRef<string | null>(null);
   const [mode, setModeState] = useState<DrawMode>(DRAW_MODE);
   const [routeGeoJSON, setRouteGeoJSON] = useState<MultiLineString | null>(null);
   const [endpointSubstations, setEndpointSubstations] =
     useState<EndpointSubstations>(NO_SUBSTATIONS);
+  const [terminalEndsOk, setTerminalEndsOk] = useState(true);
   const [isDrawing, setIsDrawing] = useState(false);
+
+  const noteMismatch = useCallback((route: MultiLineString | null) => {
+    const terminals = terminalsRef.current;
+    if (!terminals || !route) return;
+    const match = routeEndsMatch(route, terminals.sending, terminals.receiving);
+    if (match.ok) {
+      lastMismatchRef.current = null;
+      return;
+    }
+    const name = match.end === 'sending' ? terminals.sendingName : terminals.receivingName;
+    const message = routeFinishMessage(match.end, name);
+    if (lastMismatchRef.current === message) return;
+    lastMismatchRef.current = message;
+    onMismatchRef.current?.(message);
+  }, []);
 
   const publish = useCallback((draw: TerraDraw) => {
     const current = draw.getMode();
@@ -257,6 +340,8 @@ export function useRouteDraw(map: MapLibreMap | null): RouteDraw {
     setIsDrawing(readDrawing(draw));
     const nextRoute = routeGeometry(draw);
     setRouteGeoJSON((currentRoute) => (sameRoute(currentRoute, nextRoute) ? currentRoute : nextRoute));
+    const ok = endsWithinTerminals(terminalsRef.current, nextRoute);
+    setTerminalEndsOk((currentOk) => (currentOk === ok ? currentOk : ok));
   }, []);
 
   useEffect(() => {
@@ -264,7 +349,7 @@ export function useRouteDraw(map: MapLibreMap | null): RouteDraw {
 
     let cancelled = false;
     let adjusting = false;
-    const draw = createDraw(map);
+    const draw = createDraw(map, terminalsRef);
     drawRef.current = draw;
 
     const rejectExtraLines = (): boolean => {
@@ -310,6 +395,7 @@ export function useRouteDraw(map: MapLibreMap | null): RouteDraw {
         }
         refreshEndpoints();
         publish(draw);
+        noteMismatch(routeGeometry(draw));
       });
     };
 
@@ -318,6 +404,7 @@ export function useRouteDraw(map: MapLibreMap | null): RouteDraw {
       if (draw.getMode() === EDIT_MODE) {
         refreshEndpoints();
         publish(draw);
+        noteMismatch(routeGeometry(draw));
         return;
       }
       if (type === 'create') {
@@ -359,7 +446,7 @@ export function useRouteDraw(map: MapLibreMap | null): RouteDraw {
       if (draw.enabled) draw.stop();
       if (drawRef.current === draw) drawRef.current = null;
     };
-  }, [map, publish]);
+  }, [map, noteMismatch, publish]);
 
   const setMode = useCallback(
     (next: DrawMode) => {
@@ -398,6 +485,8 @@ export function useRouteDraw(map: MapLibreMap | null): RouteDraw {
       setIsDrawing(false);
       setRouteGeoJSON(null);
       setEndpointSubstations(NO_SUBSTATIONS);
+      setTerminalEndsOk(true);
+      lastMismatchRef.current = null;
       return;
     }
     draw.clear();
@@ -407,7 +496,19 @@ export function useRouteDraw(map: MapLibreMap | null): RouteDraw {
     setIsDrawing(false);
     setRouteGeoJSON(null);
     setEndpointSubstations(NO_SUBSTATIONS);
+    setTerminalEndsOk(true);
+    lastMismatchRef.current = null;
   }, []);
 
-  return { mode, setMode, routeGeoJSON, endpointSubstations, undo, redo, reset, isDrawing };
+  return {
+    mode,
+    setMode,
+    routeGeoJSON,
+    endpointSubstations,
+    terminalEndsOk,
+    undo,
+    redo,
+    reset,
+    isDrawing,
+  };
 }

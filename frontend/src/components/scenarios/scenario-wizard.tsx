@@ -120,7 +120,8 @@ const STEP_COPY: Record<StepKind, { title: string; description: string }> = {
   },
   benefits: {
     title: 'Benefits setup',
-    description: 'Sending-end source and the benefit inputs the route cannot supply.',
+    description:
+      'Sending-end source and the benefit inputs the route cannot supply. The next screen asks for the two terminals.',
   },
 };
 
