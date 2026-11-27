@@ -6,13 +6,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { formatNumber } from '@/lib/format';
 import type { Project } from '@/stores/project-store';
 
 export interface ProjectCardProps {
   project: Project;
   scenarioCount: number;
-  baseRatio: number | null;
   ownerName: string;
   isOwner: boolean;
   onOpen: (project: Project) => void;
@@ -21,15 +19,9 @@ export interface ProjectCardProps {
   onDelete: (project: Project) => void;
 }
 
-function societalRatioLabel(baseRatio: number | null): string {
-  if (baseRatio === null) return 'Societal ratio not available';
-  return `Societal ratio ${formatNumber(baseRatio, 2)}`;
-}
-
 export function ProjectCard({
   project,
   scenarioCount,
-  baseRatio,
   ownerName,
   isOwner,
   onOpen,
@@ -49,7 +41,6 @@ export function ProjectCard({
             {scenarioCount} scenario{scenarioCount === 1 ? '' : 's'}
             {ownerName ? ` · ${ownerName}` : ''}
           </CardDescription>
-          <p className="mt-1 text-xs text-slate-600">{societalRatioLabel(baseRatio)}</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5">
           <Button type="button" size="sm" onClick={() => onOpen(project)}>

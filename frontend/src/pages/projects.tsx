@@ -20,7 +20,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from '@/hooks/use-toast';
-import { getValueAtPath } from '@/lib/path';
 import { cn } from '@/lib/utils';
 import { useProjectStore, type Project } from '@/stores/project-store';
 import {
@@ -36,25 +35,6 @@ type OwnerFilter = 'mine' | 'everyone';
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return 'Something went wrong';
-}
-
-function readSocietalRatio(results: Record<string, unknown> | null): number | null {
-  if (!results) return null;
-  const value = getValueAtPath(results, 'bcr.bcr_societal');
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function baseRatioForProject(project: Project, scenarios: Scenario[]): number | null {
-  const inProject = scenarios.filter((item) => item.project_id === project.id);
-  if (project.base_scenario_id) {
-    const base = inProject.find((item) => item.id === project.base_scenario_id);
-    if (base) return readSocietalRatio(base.results);
-  }
-  const oldest =
-    [...inProject].sort(
-      (a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
-    )[0] ?? null;
-  return oldest ? readSocietalRatio(oldest.results) : null;
 }
 
 function ownerNameForProject(project: Project, scenarios: Scenario[]): string {
@@ -305,7 +285,6 @@ export default function ProjectsPage(): ReactElement {
                       key={project.id}
                       project={project}
                       scenarioCount={scenarioCountByProject.get(project.id) ?? 0}
-                      baseRatio={baseRatioForProject(project, scenarios)}
                       ownerName={ownerNameForProject(project, scenarios)}
                       isOwner={currentUserId !== null && project.user_id === currentUserId}
                       onOpen={openProject}

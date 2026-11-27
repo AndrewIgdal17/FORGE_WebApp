@@ -30,7 +30,6 @@ function sampleProject(overrides: Partial<Project> = {}): Project {
 
 function renderCard(
   overrides: {
-    baseRatio?: number | null;
     isOwner?: boolean;
   } = {},
 ): string {
@@ -39,7 +38,6 @@ function renderCard(
     createElement(ProjectCard, {
       project: sampleProject(),
       scenarioCount: 2,
-      baseRatio: 'baseRatio' in overrides ? (overrides.baseRatio ?? null) : 1.42,
       ownerName: 'andy',
       isOwner: overrides.isOwner ?? true,
       onOpen: noop,
@@ -51,10 +49,18 @@ function renderCard(
 }
 
 describe('ProjectCard', () => {
-  it('renders not available for baseRatio null', () => {
-    const html = renderCard({ baseRatio: null });
-    expect(html).toContain('Societal ratio not available');
-    expect(html).not.toMatch(/Societal ratio 0/);
+  it('renders name, terminals, scenario count, and owner', () => {
+    const html = renderCard();
+    expect(html).toContain('SunZia');
+    expect(html).toContain('Sub A');
+    expect(html).toContain('Sub B');
+    expect(html).toContain('2 scenarios');
+    expect(html).toContain('andy');
+  });
+
+  it('does not show a ratio', () => {
+    const html = renderCard();
+    expect(html).not.toMatch(/ratio/i);
   });
 
   it('hides Rename and Delete when isOwner is false', () => {
