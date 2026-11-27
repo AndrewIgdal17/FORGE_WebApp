@@ -541,6 +541,45 @@ describe('saveScenario', () => {
   });
 });
 
+describe('saveScenario line_selection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useScenarioStore.setState({
+      scenarios: [
+        {
+          ...acScenario({}),
+          id: 's1',
+          project_id: 'p1',
+          route_geojson: LINE,
+          route: LINE as unknown as Record<string, unknown>,
+          revision: 2,
+        },
+      ],
+    });
+    vi.mocked(updateScenario).mockResolvedValue(
+      scenarioResponse({ id: 's1', revision: 3 }),
+    );
+  });
+
+  it('sends line_selection when lineSelection is provided', async () => {
+    const lineSelection = { gids: [101, 102], stretch_end: null };
+    await useScenarioStore
+      .getState()
+      .saveScenario('s1', {}, 2, undefined, 215, lineSelection);
+
+    expect(updateScenario).toHaveBeenCalledTimes(1);
+    const payload = vi.mocked(updateScenario).mock.calls[0]?.[1];
+    expect(payload?.line_selection).toEqual(lineSelection);
+  });
+
+  it('omits line_selection when lineSelection is not provided', async () => {
+    await useScenarioStore.getState().saveScenario('s1', {}, 2, undefined, 215);
+
+    const payload = vi.mocked(updateScenario).mock.calls[0]?.[1];
+    expect(payload).not.toHaveProperty('line_selection');
+  });
+});
+
 describe('duplicateScenario', () => {
   beforeEach(() => {
     vi.clearAllMocks();

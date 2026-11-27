@@ -157,6 +157,56 @@ export interface ProjectResponse {
   updated_at: string;
 }
 
+export type LineConnector = {
+  end: 'sending' | 'receiving';
+  length_m: number;
+  coordinates: [number, number][];
+};
+
+export type LineSelection = {
+  gids: number[];
+  stretch_end: [number, number] | null;
+  connectors?: LineConnector[];
+  corridors_release?: string;
+};
+
+export type LineSelectionIn = {
+  gids: number[];
+  stretch_end: [number, number] | null;
+};
+
+export type AssembleLinePiece = {
+  gid: number;
+  voltage_kv: number | null;
+  sub_1: string | null;
+  sub_2: string | null;
+  source: string;
+  miles: number;
+};
+
+export type AssemblePrefill = Partial<{
+  old_ac_dc: 'AC' | 'DC';
+  old_capacity_mw: number;
+  old_conductor_type: string;
+}>;
+
+export type AssembleResponse = {
+  route: MultiLineString;
+  connectors: LineConnector[];
+  pieces: AssembleLinePiece[];
+  prefill: AssemblePrefill;
+  corridors_release: string;
+};
+
+export type LineAssembleRequest = {
+  gids: number[];
+  sending: [number, number];
+  receiving: [number, number];
+  sending_gid?: number;
+  receiving_gid?: number;
+  stretch_end?: [number, number] | null;
+};
+
 export interface ScenarioCreate {
   name: string;
   source: string;
@@ -166,6 +216,7 @@ export interface ScenarioCreate {
   segments?: unknown[] | null;
   row_width_ft: number;
   project_id?: string;
+  line_selection?: LineSelectionIn | null;
 }
 
 export interface ScenarioUpdate {
@@ -176,6 +227,7 @@ export interface ScenarioUpdate {
   route?: Record<string, unknown> | null;
   segments?: unknown[] | null;
   row_width_ft?: number;
+  line_selection?: LineSelectionIn | null;
 }
 
 export interface ScenarioResponse {
@@ -195,6 +247,7 @@ export interface ScenarioResponse {
   updated_at: string;
   route: Record<string, unknown> | null;
   segments: unknown[] | null;
+  line_selection?: LineSelection | null;
 }
 
 export class ApiError extends Error {
@@ -322,6 +375,13 @@ export async function requiredInputs(
 }
 
 const ANALYZE_TIMEOUT_MS = 30_000;
+
+export async function assembleLine(body: LineAssembleRequest): Promise<AssembleResponse> {
+  return apiFetch<AssembleResponse>('/api/lines/assemble', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
 
 export async function analyzeRoute(
   route: MultiLineString,

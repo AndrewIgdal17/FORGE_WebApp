@@ -15,7 +15,7 @@ import {
   getDefaults,
   updateScenario as updateScenarioApi,
 } from '@/lib/api';
-import type { ScenarioResponse, TerminalIn } from '@/lib/api';
+import type { LineSelection, LineSelectionIn, ScenarioResponse, TerminalIn } from '@/lib/api';
 import { acceptedForge, diffChanges, forgeDocument } from '@/lib/changes';
 import { csvEscape, parseCsvLine } from '@/lib/csv';
 import { flattenObject, getValueAtPath, setValueAtPath } from '@/lib/path';
@@ -52,6 +52,11 @@ export interface Scenario {
   /** Stored GeoJSON from `scenario_read.route_geojson`. Null when the row has no route. */
   route_geojson: unknown;
   segments: unknown[] | null;
+  /**
+   * From `scenario_read.line_selection`. Null when none is stored.
+   * Omitted only in partial test fixtures; loaded rows always set this field.
+   */
+  line_selection?: LineSelection | null;
 }
 
 export interface ScenarioGeometry {
@@ -91,6 +96,7 @@ interface ScenarioStore {
     route?: Record<string, unknown> | null,
     segments?: unknown[] | null,
     rowWidthFt?: number,
+    lineSelection?: LineSelectionIn,
   ) => Promise<Scenario>;
   createProjectWithScenario: (
     draft: ScenarioDraft,
@@ -98,6 +104,7 @@ interface ScenarioStore {
     route: Record<string, unknown> | null,
     segments: unknown[] | null | undefined,
     rowWidthFt?: number,
+    lineSelection?: LineSelectionIn,
   ) => Promise<{ project: Project; scenario: Scenario }>;
   saveScenario: (
     id: string,
@@ -105,6 +112,7 @@ interface ScenarioStore {
     revision: number,
     geometry?: ScenarioGeometry,
     rowWidthFt?: number,
+    lineSelection?: LineSelectionIn,
   ) => Promise<Scenario>;
   renameScenario: (
     id: string,
@@ -385,6 +393,60 @@ function readProjectId(value: unknown): string | null {
   return value;
 }
 
+function readLineConnectors(value: unknown): LineSelection['connectors'] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const connectors: NonNullable<LineSelection['connectors']> = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const end = item.end;
+    const length_m = item.length_m;
+    const coordinates = item.coordinates;
+    if (end !== 'sending' && end !== 'receiving') continue;
+    if (typeof length_m !== 'number' || !Number.isFinite(length_m)) continue;
+    if (!Array.isArray(coordinates)) continue;
+    const coords: [number, number][] = [];
+    let valid = true;
+    for (const point of coordinates) {
+      if (!isLonLat(point)) {
+        valid = false;
+        break;
+      }
+      coords.push([point[0], point[1]]);
+    }
+    if (!valid) continue;
+    connectors.push({ end, length_m, coordinates: coords });
+  }
+  return connectors.length > 0 ? connectors : undefined;
+}
+
+function asLineSelection(value: unknown): LineSelection | null {
+  if (value == null) return null;
+  if (!isRecord(value)) return null;
+  const gidsRaw = value.gids;
+  if (!Array.isArray(gidsRaw) || gidsRaw.length === 0) return null;
+  const gids: number[] = [];
+  for (const gid of gidsRaw) {
+    if (typeof gid !== 'number' || !Number.isFinite(gid)) return null;
+    gids.push(gid);
+  }
+  let stretch_end: [number, number] | null = null;
+  if (value.stretch_end != null) {
+    if (!isLonLat(value.stretch_end)) return null;
+    stretch_end = [value.stretch_end[0], value.stretch_end[1]];
+  }
+  const connectors = readLineConnectors(value.connectors);
+  const corridors_release =
+    typeof value.corridors_release === 'string' && value.corridors_release.length > 0
+      ? value.corridors_release
+      : undefined;
+  return {
+    gids,
+    stretch_end,
+    ...(connectors ? { connectors } : {}),
+    ...(corridors_release ? { corridors_release } : {}),
+  };
+}
+
 function withProjectId(scenario: Scenario, projectId: string): Scenario {
   if (scenario.project_id) return scenario;
   return { ...scenario, project_id: projectId };
@@ -417,6 +479,7 @@ function fromResponse(row: ScenarioResponse, ownerUsername?: string): Scenario {
     route_geojson: row.route,
     route: asRoute(row.route) as Record<string, unknown> | null,
     segments: asSegments(row.segments),
+    line_selection: asLineSelection(row.line_selection),
   };
 }
 
@@ -445,6 +508,7 @@ function rowToScenario(
     route_geojson: row.route_geojson ?? null,
     route: asRoute(row.route_geojson) as Record<string, unknown> | null,
     segments: asSegments(row.segments),
+    line_selection: asLineSelection(row.line_selection),
   };
 }
 
@@ -911,7 +975,16 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
     });
   },
 
-  createScenario: async (projectId, name, source, changes, route, segments, rowWidthFt) => {
+  createScenario: async (
+    projectId,
+    name,
+    source,
+    changes,
+    route,
+    segments,
+    rowWidthFt,
+    lineSelection,
+  ) => {
     if (route == null || !positiveWidth(rowWidthFt)) {
       throw new Error(
         route == null
@@ -929,6 +1002,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
       row_width_ft: rowWidthFt,
       project_id: projectId,
       ...(segments !== undefined ? { segments } : {}),
+      ...(lineSelection !== undefined ? { line_selection: lineSelection } : {}),
     });
     const ownerUsername = get().scenarios.find(
       (scenario) => scenario.user_id === row.user_id,
@@ -938,7 +1012,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
     return scenario;
   },
 
-  createProjectWithScenario: async (draft, changes, route, segments, rowWidthFt) => {
+  createProjectWithScenario: async (draft, changes, route, segments, rowWidthFt, lineSelection) => {
     if (!draft.terminals) {
       throw new Error('Terminals are required to create a project.');
     }
@@ -963,6 +1037,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
         route,
         row_width_ft: rowWidthFt,
         ...(segments !== undefined ? { segments } : {}),
+        ...(lineSelection !== undefined ? { line_selection: lineSelection } : {}),
       },
     });
     const project = fromProjectResponse(projectRow);
@@ -981,7 +1056,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
     return { project, scenario };
   },
 
-  saveScenario: async (id, changes, revision, geometry, rowWidthFt) => {
+  saveScenario: async (id, changes, revision, geometry, rowWidthFt, lineSelection) => {
     const current = get().scenarios.find((scenario) => scenario.id === id);
     if (!current?.project_id) {
       throw new Error('This scenario is not in a project, so nothing was saved.');
@@ -1007,6 +1082,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
       ...(geometry
         ? { route: geometry.route, segments: geometry.segments }
         : { route }),
+      ...(lineSelection !== undefined ? { line_selection: lineSelection } : {}),
     });
     const scenario = fromResponse(row, current?.ownerUsername);
     set((state) => ({

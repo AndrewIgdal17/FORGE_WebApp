@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 
 import {
   ApiError,
+  assembleLine,
   createProject,
   deleteProject,
   duplicateProject,
@@ -236,6 +237,61 @@ describe('duplicateProject', () => {
     expect(path).toBe('/api/projects/p1/duplicate');
     expect(init.method).toBe('POST');
     expect(init.body).toBeUndefined();
+  });
+});
+
+describe('assembleLine', () => {
+  beforeEach(() => {
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: { session: { access_token: 'tok' } as never },
+      error: null,
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('posts to /api/lines/assemble with the request body', async () => {
+    const request = {
+      gids: [123, 456],
+      sending: [-97.74, 30.27] as [number, number],
+      receiving: [-97.75, 30.28] as [number, number],
+      sending_gid: 10,
+      stretch_end: null as [number, number] | null,
+    };
+    const responseBody = {
+      route: {
+        type: 'MultiLineString',
+        coordinates: [
+          [
+            [-97.74, 30.27],
+            [-97.75, 30.28],
+          ],
+        ],
+      },
+      connectors: [],
+      pieces: [{ gid: 123, voltage_kv: 138, sub_1: 'A', sub_2: 'B', source: 'hifld', miles: 12.4 }],
+      prefill: { old_ac_dc: 'AC', old_capacity_mw: 394, old_conductor_type: 'Standard Aluminum Conductor' },
+      corridors_release: 'HIFLD 2022 + OSM 2026-10-09',
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(responseBody), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(assembleLine(request)).resolves.toEqual(responseBody);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe('/api/lines/assemble');
+    expect(init.method).toBe('POST');
+    expect(init.body).toBe(JSON.stringify(request));
+    const headers = init.headers as Headers;
+    expect(headers.get('Authorization')).toBe('Bearer tok');
   });
 });
 
