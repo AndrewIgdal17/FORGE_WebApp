@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   hoverCorridorGidFilter,
+  nearestPointOnLine,
   overlappingCandidates,
+  prefillChanges,
   selectionSummary,
+  stretchTerminalName,
   toggleGid,
   type CorridorCandidate,
 } from '@/lib/line-select';
@@ -48,6 +51,63 @@ describe('hoverCorridorGidFilter', () => {
 
   it('matches no feature when hover is cleared', () => {
     expect(hoverCorridorGidFilter(null)).toEqual(['==', ['get', 'gid'], -1]);
+  });
+});
+
+describe('nearestPointOnLine', () => {
+  it('snaps to the closest point on a segment', () => {
+    const coords: [number, number][] = [
+      [0, 0],
+      [10, 0],
+    ];
+    expect(nearestPointOnLine([5, 4], coords)).toEqual([5, 0]);
+  });
+
+  it('returns the sole vertex when the line is one point', () => {
+    expect(nearestPointOnLine([1, 2], [[3, 4]])).toEqual([3, 4]);
+  });
+});
+
+describe('stretchTerminalName', () => {
+  it('includes rounded voltage when present', () => {
+    expect(stretchTerminalName(138.2)).toBe('Point on 138 kV line');
+  });
+
+  it('omits voltage when missing', () => {
+    expect(stretchTerminalName(null)).toBe('Point on line');
+  });
+});
+
+describe('prefillChanges', () => {
+  const paths = {
+    old_ac_dc: '01_project_technical_details.project.old_ac_dc',
+    old_capacity_mw: '01_project_technical_details.project.old_capacity_mw',
+    old_conductor_type: '01_project_technical_details.project.old_conductor_type',
+  };
+
+  it('fills only empty old-line fields', () => {
+    const current = {
+      [paths.old_ac_dc]: 'AC',
+      [paths.old_capacity_mw]: null,
+      [paths.old_conductor_type]: '',
+    };
+    const result = prefillChanges(current, {
+      old_ac_dc: 'DC',
+      old_capacity_mw: 394,
+      old_conductor_type: 'Standard Aluminum Conductor',
+    });
+    expect(result).toEqual({
+      [paths.old_capacity_mw]: 394,
+      [paths.old_conductor_type]: 'Standard Aluminum Conductor',
+    });
+  });
+
+  it('keeps user-entered values', () => {
+    const current = {
+      [paths.old_capacity_mw]: 500,
+    };
+    const result = prefillChanges(current, { old_capacity_mw: 394 });
+    expect(result).toEqual({});
   });
 });
 

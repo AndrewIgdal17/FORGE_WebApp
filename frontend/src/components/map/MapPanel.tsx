@@ -15,7 +15,7 @@ import { LayerPanel } from '@/components/map/LayerPanel';
 import { MapLegend } from '@/components/map/MapLegend';
 import { MapTooltip } from '@/components/map/MapTooltip';
 import { ResetButton } from '@/components/map/ResetButton';
-import { RouteMap } from '@/components/map/RouteMap';
+import { RouteMap, hitLayerId } from '@/components/map/RouteMap';
 import { SatelliteToggle } from '@/components/map/SatelliteToggle';
 import { RouteStats } from '@/components/map/RouteStats';
 import {
@@ -23,7 +23,7 @@ import {
   type TerminalMarkerSpec,
 } from '@/components/map/terminal-markers';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { useLineSelect } from '@/hooks/use-line-select';
+import { corridorCandidateFromFeature, useLineSelect } from '@/hooks/use-line-select';
 import { useRouteAnalyze } from '@/hooks/use-route-analyze';
 import {
   SUBSTATION_SNAP_MIN_ZOOM,
@@ -32,9 +32,30 @@ import {
   type DrawTerminals,
   type EndpointSubstations,
 } from '@/hooks/use-route-draw';
-import { ApiError, assembleLine, type AnalyzeResponse, type AssembleLinePiece, type LineConnector, type LineSelectionIn } from '@/lib/api';
-import { selectionSummary, toggleGid } from '@/lib/line-select';
-import type { CorridorCandidate } from '@/lib/line-select';
+import {
+  ApiError,
+  assembleLine,
+  type AnalyzeResponse,
+  type AssembleLinePiece,
+  type AssembleResponse,
+  type LineConnector,
+  type LineSelectionIn,
+} from '@/lib/api';
+import { getValueAtPath } from '@/lib/path';
+import {
+  coordsFromLineGeometry,
+  missingLineSelectionGids,
+  nearestPointOnLine,
+  OLD_AC_DC_PATH,
+  OLD_CAPACITY_PATH,
+  OLD_CONDUCTOR_PATH,
+  prefillChanges,
+  selectionSummary,
+  stretchTerminalName,
+  toggleGid,
+  useLineDataPrefill,
+  type CorridorCandidate,
+} from '@/lib/line-select';
 import { resolvedRowWidthFt, rowWidthProblem } from '@/lib/analyze-request';
 import { pointTerminalName } from '@/lib/terminals';
 import { useFormStore } from '@/stores/form-store';
@@ -60,6 +81,9 @@ export interface MapPanelProps {
   drawTerminals?: DrawTerminals | null;
   terminalPick?: 'sending' | 'receiving' | null;
   onPickTerminal?: (terminal: DraftTerminal) => void;
+  /** Gids from a stored line selection; used for stale-data notice after tiles load. */
+  storedLineGids?: number[];
+  onLineDataStaleChange?: (stale: boolean) => void;
 }
 
 function pickedSubstationName(name: string | null, gid: number): string {
@@ -82,6 +106,26 @@ function segmentsFor(
       receiving_substation: endpoints.receiving,
     },
   ];
+}
+
+function fieldSnapshot(data: Record<string, unknown>): Record<string, unknown> {
+  return {
+    [OLD_AC_DC_PATH]: getValueAtPath(data, OLD_AC_DC_PATH),
+    [OLD_CAPACITY_PATH]: getValueAtPath(data, OLD_CAPACITY_PATH),
+    [OLD_CONDUCTOR_PATH]: getValueAtPath(data, OLD_CONDUCTOR_PATH),
+  };
+}
+
+function applyAssemblePrefill(prefill: AssembleResponse['prefill']): void {
+  const form = useFormStore.getState();
+  if (!form.data) return;
+  const changes = prefillChanges(fieldSnapshot(form.data), prefill);
+  const marked: string[] = [];
+  for (const [path, value] of Object.entries(changes)) {
+    form.setFieldValue(path, value);
+    marked.push(path);
+  }
+  if (marked.length > 0) useLineDataPrefill.getState().markPaths(marked);
 }
 
 function assembleErrorMessage(error: unknown): string {
@@ -112,6 +156,8 @@ export function MapPanel({
   drawTerminals = null,
   terminalPick = null,
   onPickTerminal,
+  storedLineGids,
+  onLineDataStaleChange,
 }: MapPanelProps): ReactElement {
   const [map, setMap] = useState<MapLibreMap | null>(null);
   const [clearedExisting, setClearedExisting] = useState(false);
@@ -140,6 +186,8 @@ export function MapPanel({
   const [assembling, setAssembling] = useState(false);
   const onLineSelectionCommitRef = useRef(onLineSelectionCommit);
   onLineSelectionCommitRef.current = onLineSelectionCommit;
+  const onLineDataStaleChangeRef = useRef(onLineDataStaleChange);
+  onLineDataStaleChangeRef.current = onLineDataStaleChange;
 
   useEffect(() => {
     setSelectedGids(initialSelectedGids ?? []);
@@ -346,6 +394,27 @@ export function MapPanel({
         });
         return;
       }
+      const corridorLayer = hitLayerId('ref.corridors');
+      if (map.getLayer(corridorLayer)) {
+        const corridorFeatures = map.queryRenderedFeatures([x, y], { layers: [corridorLayer] });
+        const corridorFeature = corridorFeatures[0];
+        if (corridorFeature) {
+          const candidate = corridorCandidateFromFeature(corridorFeature);
+          const coords = coordsFromLineGeometry(corridorFeature.geometry);
+          const lngLat = map.unproject([x, y]);
+          const clickPoint: [number, number] = [lngLat.lng, lngLat.lat];
+          const snapped = coords.length > 0 ? nearestPointOnLine(clickPoint, coords) : clickPoint;
+          const voltage = candidate?.voltage_kv ?? null;
+          event.preventDefault();
+          event.stopPropagation();
+          onPickTerminalRef.current?.({
+            substation_gid: null,
+            name: stretchTerminalName(voltage),
+            point: snapped,
+          });
+          return;
+        }
+      }
       if (map.getZoom() < SUBSTATION_SNAP_MIN_ZOOM) return;
       const lngLat = map.unproject([x, y]);
       if (!Number.isFinite(lngLat.lng) || !Number.isFinite(lngLat.lat)) return;
@@ -356,6 +425,43 @@ export function MapPanel({
     container.addEventListener('click', onClick, true);
     return () => container.removeEventListener('click', onClick, true);
   }, [map, terminalPick]);
+
+  useEffect(() => {
+    if (!map || storedLineGids === undefined || storedLineGids.length === 0) {
+      onLineDataStaleChangeRef.current?.(false);
+      return;
+    }
+    const sourceId = 'ref.corridors';
+    const checkStale = (): void => {
+      if (!map.getSource(sourceId)) {
+        onLineDataStaleChangeRef.current?.(false);
+        return;
+      }
+      let features;
+      try {
+        features = map.querySourceFeatures(sourceId, { sourceLayer: sourceId });
+      } catch {
+        onLineDataStaleChangeRef.current?.(false);
+        return;
+      }
+      const loaded = new Set<number>();
+      for (const feature of features) {
+        const raw = feature.properties?.gid;
+        const gid = typeof raw === 'number' ? raw : Number(raw);
+        if (Number.isFinite(gid)) loaded.add(gid);
+      }
+      const missing = missingLineSelectionGids(storedLineGids, loaded);
+      onLineDataStaleChangeRef.current?.(missing.length > 0);
+    };
+    const onIdle = (): void => {
+      checkStale();
+    };
+    map.on('idle', onIdle);
+    checkStale();
+    return () => {
+      map.off('idle', onIdle);
+    };
+  }, [map, storedLineGids]);
 
   function confirmPoint(): void {
     if (!pointConfirm) return;
@@ -396,6 +502,7 @@ export function MapPanel({
       const summary = selectionSummary(response.pieces, response.connectors);
       setLineSummary(summary);
       setFinishedRoute(response.route);
+      applyAssemblePrefill(response.prefill);
       requestId.current += 1;
       setClearedExisting(true);
       onLineSelectionCommitRef.current?.({

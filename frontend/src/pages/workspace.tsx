@@ -47,6 +47,7 @@ import type { LineSelectionIn, RequiredField, RequiredResponse } from '@/lib/api
 import { diffChanges } from '@/lib/changes';
 import { debounce } from '@/lib/debounce';
 import { duplicateAction } from '@/lib/duplicate-action';
+import { useLineDataPrefill } from '@/lib/line-select';
 import { canCalculate, canDraw, panelFields } from '@/lib/required-gates';
 import { getValueAtPath } from '@/lib/path';
 import { isMultiLineString, scenarioMapRoute } from '@/lib/route-geometry';
@@ -448,6 +449,7 @@ function WorkspaceBody(): ReactElement {
   const [ready, setReady] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [draft, setDraft] = useState<WizardDraft | null>(null);
+  const [lineDataStale, setLineDataStale] = useState(false);
   const [terminalPick, setTerminalPick] = useState<'sending' | 'receiving' | null>(null);
   const [pendingSending, setPendingSending] = useState<DraftTerminal | null>(null);
   const [calculationStatus, setCalculationStatus] = useState('Not calculated');
@@ -511,6 +513,8 @@ function WorkspaceBody(): ReactElement {
     (scenario: Scenario): void => {
       setActiveScenario(scenario.id);
       loadScenarioChanges(scenario.changes);
+      useLineDataPrefill.getState().reset();
+      setLineDataStale(false);
       rememberBaseline();
       const status = scenario.results ? 'Calculated in 0.0s' : 'Not calculated';
       lastStatusRef.current = status;
@@ -956,6 +960,8 @@ function WorkspaceBody(): ReactElement {
       savedResults: null,
     });
     loadScenarioChanges(diffChanges(snapshot, fullInputs));
+    useLineDataPrefill.getState().reset();
+    setLineDataStale(false);
     setDraft({ name, source, fullInputs });
     setPendingSending(null);
     setTerminalPick('sending');
@@ -1374,6 +1380,14 @@ function WorkspaceBody(): ReactElement {
               {view === 'inputs' ? (
                 showRouteMap ? (
                   <div className="relative flex-1 min-h-0 overflow-hidden">
+                    {lineDataStale ? (
+                      <div
+                        className="absolute inset-x-0 top-0 z-30 border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900"
+                        role="status"
+                      >
+                        This line&apos;s data has changed; select it again to update the route
+                      </div>
+                    ) : null}
                     <MapPanel
                       key={activeScenarioId ?? (draft ? 'draft' : 'none')}
                       createMode={draft !== null}
@@ -1396,6 +1410,8 @@ function WorkspaceBody(): ReactElement {
                       drawTerminals={mapTerminals}
                       terminalPick={pickingNewProject ? terminalPick : null}
                       onPickTerminal={handlePickTerminal}
+                      storedLineGids={activeScenario?.line_selection?.gids}
+                      onLineDataStaleChange={setLineDataStale}
                     />
                   </div>
                 ) : (
