@@ -35,11 +35,15 @@ import { canCalculate, canDraw, panelFields } from '@/lib/required-gates';
 import { getValueAtPath } from '@/lib/path';
 import { isMultiLineString, scenarioMapRoute } from '@/lib/route-geometry';
 import { useFormStore } from '@/stores/form-store';
+import { useProjectStore } from '@/stores/project-store';
+import type { Project } from '@/stores/project-store';
 import {
   exportAsCsv,
   exportAsForge,
-  saveCreatesCopy,
+  saveAction,
+  scenarioForWorkspace,
   useScenarioStore,
+  workspaceUrl,
 } from '@/stores/scenario-store';
 import type { Scenario, ScenarioDraft, ScenarioGeometry } from '@/stores/scenario-store';
 
@@ -47,6 +51,8 @@ interface WizardDraft {
   name: string;
   source: string;
   fullInputs: Record<string, unknown>;
+  project_id?: string;
+  terminals?: ScenarioDraft['terminals'];
 }
 
 const PROJECT = '01_project_technical_details.project';
@@ -356,8 +362,10 @@ function WorkspaceBody(): ReactElement {
   const unsavedChanges = useScenarioStore((state) => state.unsavedChanges);
   const setActiveScenario = useScenarioStore((state) => state.setActiveScenario);
   const createScenario = useScenarioStore((state) => state.createScenario);
+  const createProjectWithScenario = useScenarioStore(
+    (state) => state.createProjectWithScenario,
+  );
   const saveScenario = useScenarioStore((state) => state.saveScenario);
-  const saveScenarioAsCopy = useScenarioStore((state) => state.saveScenarioAsCopy);
   const { session } = useAuth();
   const currentUserId = session?.user?.id ?? null;
   const renameScenario = useScenarioStore((state) => state.renameScenario);
@@ -527,7 +535,13 @@ function WorkspaceBody(): ReactElement {
     });
     loadScenarioChanges(imported.changes);
     const fullInputs = useFormStore.getState().data ?? snapshot;
-    setDraft({ name: imported.name, source: imported.source, fullInputs });
+    setDraft({
+      name: imported.name,
+      source: imported.source,
+      fullInputs,
+      project_id: imported.project_id,
+      terminals: imported.terminals,
+    });
     lastStatusRef.current = 'Not calculated';
     setCalculationStatus('Not calculated');
     openInputsSubItem('routing', 'route');
@@ -546,7 +560,10 @@ function WorkspaceBody(): ReactElement {
     async function boot(): Promise<void> {
       try {
         await loadFormDefaults();
-        await useScenarioStore.getState().loadScenarios();
+        await Promise.all([
+          useScenarioStore.getState().loadScenarios(),
+          useProjectStore.getState().loadProjects(),
+        ]);
         if (cancelled) return;
 
         if (useFormStore.getState().defaults) {
@@ -560,13 +577,29 @@ function WorkspaceBody(): ReactElement {
         // `?tutorial=sunzia` is ignored until the tutorial player exists.
         if (params.get('new') === '1') setWizardOpen(true);
 
+        const requestedProject = params.get('project');
         const requestedId = params.get('scenario');
         if (requestedId) {
           const match = useScenarioStore
             .getState()
             .scenarios.find((scenario) => scenario.id === requestedId);
-          if (match) applyScenarioRef.current(match);
-          else toast.error('Scenario not found.');
+          if (!match) {
+            toast.error('Scenario not found.');
+          } else if (
+            requestedProject &&
+            match.project_id &&
+            match.project_id !== requestedProject
+          ) {
+            toast.error('That scenario is not in this project.');
+          } else {
+            applyScenarioRef.current(match);
+            if (match.project_id) {
+              const next = workspaceUrl(match.project_id, match.id);
+              if (`${window.location.pathname}${window.location.search}` !== next) {
+                window.history.replaceState(null, '', next);
+              }
+            }
+          }
         } else {
           const active = useScenarioStore.getState().getActiveScenario();
           if (active) applyScenarioRef.current(active);
@@ -621,9 +654,67 @@ function WorkspaceBody(): ReactElement {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
 
+  async function projectById(projectId: string): Promise<Project | undefined> {
+    const found = (): Project | undefined =>
+      useProjectStore.getState().projects.find((item) => item.id === projectId);
+    const cached = found();
+    if (cached) return cached;
+    await useProjectStore.getState().loadProjects();
+    return found();
+  }
+
+  async function openProjectCopy(projectId: string): Promise<void> {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    try {
+      const copy = await useProjectStore.getState().duplicate(projectId);
+      await useScenarioStore.getState().loadScenarios();
+      const scenario = scenarioForWorkspace(copy, useScenarioStore.getState().scenarios);
+      if (!scenario) {
+        toast.error('The copied project has no scenario.');
+        return;
+      }
+      window.history.replaceState(null, '', workspaceUrl(copy.id, scenario.id));
+      setDraft(null);
+      updateDrawn(undefined);
+      applyScenario(scenario);
+      toast.success(`Opened your copy: ${copy.name}`);
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      savingRef.current = false;
+    }
+  }
+
   async function handleSave(): Promise<void> {
     const active = useScenarioStore.getState().getActiveScenario();
     if (!active || savingRef.current) return;
+    const requestedProject = new URLSearchParams(window.location.search).get('project');
+    const projectId = requestedProject || active.project_id;
+    if (!projectId) {
+      toast.error('This scenario is not in a project, so nothing was saved.');
+      return;
+    }
+    const project = await projectById(projectId);
+    if (!project) {
+      toast.error('This project is not loaded, so nothing was saved.');
+      return;
+    }
+    const inProject = useScenarioStore
+      .getState()
+      .scenarios.filter((item) => item.project_id === project.id);
+    if (saveAction(project, inProject, currentUserId ?? '') === 'offer_duplicate') {
+      toast('This project is read-only. Duplicate the project to edit your own copy.', {
+        duration: Number.POSITIVE_INFINITY,
+        action: {
+          label: 'Duplicate project',
+          onClick: () => {
+            void openProjectCopy(project.id);
+          },
+        },
+      });
+      return;
+    }
     const requiredNow = requiredRef.current;
     const route = calculationRoute(drawn, active);
     if (!requiredNow || !canCalculate(requiredNow, route != null)) return;
@@ -640,22 +731,8 @@ function WorkspaceBody(): ReactElement {
     savingRef.current = true;
     try {
       const changes = useFormStore.getState().getChanges();
-      if (saveCreatesCopy(active, currentUserId)) {
-        // Examples and other users' scenarios are never edited in place.
-        const copy = await saveScenarioAsCopy(active.id, changes, drawn, rowWidthFt);
-        window.history.replaceState(
-          null,
-          '',
-          `/app/workspace?scenario=${encodeURIComponent(copy.id)}`,
-        );
-        updateDrawn(undefined);
-        baselineRef.current = JSON.stringify(changes);
-        const latest = JSON.stringify(useFormStore.getState().getChanges());
-        setUnsavedChanges(latest !== baselineRef.current);
-        toast.success(`Saved as your copy: ${copy.name}`);
-        return;
-      }
       await saveScenario(active.id, changes, active.revision, drawn, rowWidthFt);
+      window.history.replaceState(null, '', workspaceUrl(project.id, active.id));
       updateDrawn(undefined);
       baselineRef.current = JSON.stringify(changes);
       const latest = JSON.stringify(useFormStore.getState().getChanges());
@@ -769,18 +846,43 @@ function WorkspaceBody(): ReactElement {
     if (!form.data || terrainMilesTotal(form.data) <= 0) return;
     savingRef.current = true;
     try {
-      const scenario = await createScenario(
-        draft.name,
-        draft.source,
-        form.getChanges(),
-        plainRoute(route),
-        drawn?.segments ?? null,
-        rowWidthFt,
-      );
+      const changes = form.getChanges();
+      let scenario: Scenario;
+      if (draft.project_id) {
+        scenario = await createScenario(
+          draft.project_id,
+          draft.name,
+          draft.source,
+          changes,
+          plainRoute(route),
+          drawn?.segments ?? null,
+          rowWidthFt,
+        );
+      } else if (draft.terminals) {
+        const created = await createProjectWithScenario(
+          {
+            name: draft.name,
+            source: draft.source,
+            changes,
+            terminals: draft.terminals,
+          },
+          changes,
+          plainRoute(route),
+          drawn?.segments ?? null,
+          rowWidthFt,
+        );
+        scenario = created.scenario;
+      } else {
+        toast.error('Pick the sending and receiving terminals before creating this project.');
+        return;
+      }
       setDraft(null);
       updateDrawn(undefined);
       applyScenario(scenario);
-      toast.success('Scenario created');
+      if (scenario.project_id) {
+        window.history.replaceState(null, '', workspaceUrl(scenario.project_id, scenario.id));
+      }
+      toast.success(draft.project_id ? 'Scenario created' : 'Project created');
     } catch (error) {
       toast.error(errorMessage(error));
     } finally {

@@ -15,10 +15,14 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from '@/hooks/use-toast';
 import { getDefaults } from '@/lib/api';
+import { useProjectStore } from '@/stores/project-store';
 import {
   exportAsCsv,
   exportAsForge,
+  saveAction,
+  scenarioForWorkspace,
   useScenarioStore,
+  workspaceUrl,
   type Scenario,
 } from '@/stores/scenario-store';
 import { ScenarioCard } from '@/components/scenarios/scenario-card';
@@ -74,10 +78,46 @@ export function ScenarioList({
     }
   }
 
+  async function openCopiedProject(projectId: string): Promise<void> {
+    try {
+      const copy = await useProjectStore.getState().duplicate(projectId);
+      await useScenarioStore.getState().loadScenarios();
+      const opened = scenarioForWorkspace(copy, useScenarioStore.getState().scenarios);
+      if (!opened) {
+        toast.error('The copied project has no scenario.');
+        return;
+      }
+      window.location.assign(workspaceUrl(copy.id, opened.id));
+    } catch (error) {
+      toast.error(errorMessage(error, 'Could not duplicate project'));
+    }
+  }
+
   async function handleDuplicate(scenario: Scenario): Promise<void> {
     try {
-      const copy = await duplicateScenario(scenario.id);
-      if (scenario.source === 'paper') onOpen(copy);
+      await useProjectStore.getState().loadProjects();
+      const project = useProjectStore
+        .getState()
+        .projects.find((item) => item.id === scenario.project_id);
+      const inProject = useScenarioStore
+        .getState()
+        .scenarios.filter((item) => item.project_id === scenario.project_id);
+      if (
+        project &&
+        saveAction(project, inProject, currentUserId ?? '') === 'offer_duplicate'
+      ) {
+        toast('This project is read-only. Duplicate the project to edit your own copy.', {
+          duration: Number.POSITIVE_INFINITY,
+          action: {
+            label: 'Duplicate project',
+            onClick: () => {
+              void openCopiedProject(project.id);
+            },
+          },
+        });
+        return;
+      }
+      await duplicateScenario(scenario.id);
     } catch (error) {
       toast.error(errorMessage(error, 'Could not duplicate scenario'));
     }

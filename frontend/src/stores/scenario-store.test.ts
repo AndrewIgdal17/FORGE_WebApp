@@ -11,15 +11,27 @@ vi.mock('@/lib/api', () => ({
   getDefaults: vi.fn(),
   updateScenario: vi.fn(),
   deleteScenario: vi.fn(),
+  createProject: vi.fn(),
+  duplicateScenarioApi: vi.fn(),
 }));
 
+import {
+  createProject,
+  createScenario,
+  duplicateScenarioApi,
+  getDefaults,
+} from '@/lib/api';
+import type { ProjectResponse, ScenarioResponse } from '@/lib/api';
 import { scenarioMapRoute } from '@/lib/route-geometry';
+import { useProjectStore, type Project } from './project-store';
 import {
   asRoute,
   exportAsCsv,
   routePayload,
+  saveAction,
   useScenarioStore,
   type Scenario,
+  type ScenarioDraft,
 } from './scenario-store';
 
 const LINE = {
@@ -173,6 +185,7 @@ function acScenario(results: Record<string, unknown>): Scenario {
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
     user_id: 'user',
+    project_id: 'p-ac',
     route: null,
     route_geojson: null,
     segments: null,
@@ -282,5 +295,219 @@ describe('CSV operating parts (Task 8)', () => {
     );
     expect(csv).toContain('oandm_converter_pv,does not apply,');
     expect(csv).toContain('oandm_line_pv,12345.67,');
+  });
+});
+
+const SEND_POINT: [number, number] = [-97.74, 30.27];
+const RECV_POINT: [number, number] = [-97.75, 30.28];
+
+function ownedProject(overrides: Partial<Project> = {}): Project {
+  return {
+    id: 'p1',
+    user_id: 'andy',
+    name: 'A → B',
+    sending_name: 'Sub A',
+    receiving_name: 'Sub B',
+    sending_substation_gid: 10,
+    receiving_substation_gid: 20,
+    sending_point: SEND_POINT,
+    receiving_point: RECV_POINT,
+    base_scenario_id: 's1',
+    revision: 1,
+    created_at: '2026-11-27T00:00:00Z',
+    updated_at: '2026-11-27T00:00:00Z',
+    ...overrides,
+  };
+}
+
+function projectResponse(): ProjectResponse {
+  return {
+    id: 'p1',
+    user_id: 'user-a',
+    name: 'Sub A → Point at 30.2800, -97.7500',
+    sending_name: 'Sub A',
+    receiving_name: 'Point at 30.2800, -97.7500',
+    sending_substation_gid: 10,
+    receiving_substation_gid: null,
+    sending_point: { type: 'Point', coordinates: SEND_POINT },
+    receiving_point: { type: 'Point', coordinates: RECV_POINT },
+    base_scenario_id: 's-new',
+    revision: 1,
+    created_at: '2026-11-27T00:00:00Z',
+    updated_at: '2026-11-27T00:00:00Z',
+  };
+}
+
+function scenarioResponse(
+  overrides: Partial<ScenarioResponse & { project_id: string }> = {},
+): ScenarioResponse & { project_id: string } {
+  return {
+    id: 's-new',
+    user_id: 'user-a',
+    name: 'Reconductor',
+    source: 'wizard',
+    defaults_id: 'sha256:abc',
+    changes: { '01_project_technical_details.project.capacity_mw': 500 },
+    results: null,
+    calculator: null,
+    inputs_id: null,
+    computed_at: null,
+    calc_error: null,
+    revision: 1,
+    created_at: '2026-11-27T00:00:00Z',
+    updated_at: '2026-11-27T00:00:00Z',
+    route: LINE,
+    segments: null,
+    project_id: 'p1',
+    ...overrides,
+  };
+}
+
+describe('saveAction', () => {
+  const manual = [{ id: 's1', source: 'manual' }];
+
+  it('offers duplicate to a non-owner', () => {
+    expect(saveAction(ownedProject(), manual, 'someone-else')).toBe('offer_duplicate');
+  });
+
+  it('offers duplicate to the owner of a paper project', () => {
+    expect(
+      saveAction(ownedProject(), [{ id: 's1', source: 'paper' }], 'andy'),
+    ).toBe('offer_duplicate');
+  });
+
+  it('saves for the owner of a project with no paper scenario', () => {
+    expect(saveAction(ownedProject(), manual, 'andy')).toBe('save');
+  });
+});
+
+describe('createProjectWithScenario', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useScenarioStore.setState({
+      scenarios: [],
+      activeScenarioId: null,
+      unsavedChanges: false,
+      pendingDraft: null,
+    });
+    useProjectStore.setState({ projects: [], loading: false });
+    vi.mocked(getDefaults).mockResolvedValue({
+      calculator: {
+        package: 'forge',
+        version: 'v6.0.1',
+        commit: null,
+        defaults_id: 'sha256:abc',
+      },
+      defaults: {},
+    });
+  });
+
+  it('sends terminals and the scenario body, and upserts both stores', async () => {
+    const changes = { '01_project_technical_details.project.capacity_mw': 500 };
+    const draft: ScenarioDraft = {
+      name: 'Reconductor',
+      source: 'wizard',
+      changes,
+      terminals: {
+        sending: { substation_gid: 10, name: 'Sub A', point: SEND_POINT },
+        receiving: {
+          substation_gid: null,
+          name: 'Point at 30.2800, -97.7500',
+          point: RECV_POINT,
+        },
+      },
+    };
+    vi.mocked(createProject).mockResolvedValue({
+      project: projectResponse(),
+      scenario: scenarioResponse(),
+    });
+
+    const created = await useScenarioStore
+      .getState()
+      .createProjectWithScenario(draft, changes, LINE, SEGMENTS, 215);
+
+    expect(createProject).toHaveBeenCalledWith({
+      sending: { substation_gid: 10 },
+      receiving: { point: RECV_POINT },
+      scenario: {
+        name: 'Reconductor',
+        source: 'wizard',
+        defaults_id: 'sha256:abc',
+        changes,
+        route: LINE,
+        segments: SEGMENTS,
+        row_width_ft: 215,
+      },
+    });
+    const body = vi.mocked(createProject).mock.calls[0][0];
+    expect(body.scenario).not.toHaveProperty('project_id');
+    expect(body.sending).not.toHaveProperty('point');
+    expect(body.receiving).not.toEqual({ point: [0, 0] });
+    expect(created.project.sending_point).toEqual(SEND_POINT);
+    expect(created.project.receiving_point).toEqual(RECV_POINT);
+    expect(created.scenario.project_id).toBe('p1');
+    expect(useScenarioStore.getState().scenarios.map((row) => row.id)).toContain('s-new');
+    expect(useProjectStore.getState().projects.map((row) => row.id)).toContain('p1');
+    expect(createScenario).not.toHaveBeenCalled();
+  });
+
+  it('does not call createProject when a point terminal has no coordinates', async () => {
+    const draft: ScenarioDraft = {
+      name: 'Broken',
+      source: 'wizard',
+      changes: {},
+      terminals: {
+        sending: { substation_gid: 10, name: 'Sub A', point: SEND_POINT },
+        receiving: {
+          substation_gid: null,
+          name: 'missing',
+          point: undefined as unknown as [number, number],
+        },
+      },
+    };
+
+    await expect(
+      useScenarioStore.getState().createProjectWithScenario(draft, {}, LINE, null, 215),
+    ).rejects.toThrow(/missing or unreadable/);
+    expect(createProject).not.toHaveBeenCalled();
+  });
+});
+
+describe('duplicateScenario', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useScenarioStore.setState({
+      scenarios: [
+        {
+          ...acScenario({}),
+          id: 's1',
+          name: 'SunZia_Delay17',
+          project_id: 'p1',
+          user_id: 'andy',
+        },
+      ],
+    });
+  });
+
+  it('hits /api/scenarios/{id}/duplicate and keeps the server name', async () => {
+    vi.mocked(duplicateScenarioApi).mockResolvedValue(
+      scenarioResponse({
+        id: 's2',
+        name: 'SunZia_Delay17 (2)',
+        source: 'manual',
+        project_id: 'p1',
+        user_id: 'andy',
+      }),
+    );
+
+    const copy = await useScenarioStore.getState().duplicateScenario('s1');
+
+    expect(duplicateScenarioApi).toHaveBeenCalledTimes(1);
+    expect(duplicateScenarioApi).toHaveBeenCalledWith('s1');
+    expect(createScenario).not.toHaveBeenCalled();
+    expect(createProject).not.toHaveBeenCalled();
+    expect(copy.name).toBe('SunZia_Delay17 (2)');
+    expect(copy.project_id).toBe('p1');
+    expect(useScenarioStore.getState().scenarios.map((row) => row.id)).toContain('s2');
   });
 });

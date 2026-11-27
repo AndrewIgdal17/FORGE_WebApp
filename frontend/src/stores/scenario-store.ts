@@ -7,20 +7,26 @@ import {
 } from '@/lib/results-utils';
 import { create } from 'zustand';
 
-import { resolvedRowWidthFt, rowWidthProblem } from '@/lib/analyze-request';
 import {
+  createProject as createProjectApi,
   createScenario as createScenarioApi,
+  deleteScenario as deleteScenarioApi,
+  duplicateScenarioApi,
   getDefaults,
   updateScenario as updateScenarioApi,
-  deleteScenario as deleteScenarioApi,
 } from '@/lib/api';
-import type { ScenarioResponse } from '@/lib/api';
+import type { ScenarioResponse, TerminalIn } from '@/lib/api';
 import { acceptedForge, diffChanges, forgeDocument } from '@/lib/changes';
 import { csvEscape, parseCsvLine } from '@/lib/csv';
-import { loadLookups, type ProjectFields } from '@/lib/lookups';
 import { flattenObject, getValueAtPath, setValueAtPath } from '@/lib/path';
 import { asRoute, routeFromSegments } from '@/lib/route-geometry';
 import { supabase } from '@/lib/supabase';
+import {
+  fromProjectResponse,
+  isProjectReadOnly,
+  useProjectStore,
+  type Project,
+} from '@/stores/project-store';
 
 export { asRoute };
 
@@ -39,6 +45,7 @@ export interface Scenario {
   created_at: string;
   updated_at: string;
   user_id: string;
+  project_id: string;
   ownerUsername?: string;
   route: Record<string, unknown> | null;
   /** Stored GeoJSON from `scenario_read.route_geojson`. Null when the row has no route. */
@@ -51,10 +58,18 @@ export interface ScenarioGeometry {
   segments: unknown[] | null;
 }
 
+export interface DraftTerminal {
+  substation_gid: number | null;
+  name: string;
+  point: [number, number];
+}
+
 export interface ScenarioDraft {
   name: string;
   source: string;
   changes: Record<string, unknown>;
+  project_id?: string;
+  terminals?: { sending: DraftTerminal; receiving: DraftTerminal };
 }
 
 interface ScenarioStore {
@@ -68,6 +83,7 @@ interface ScenarioStore {
   loadScenarios: () => Promise<void>;
   setActiveScenario: (id: string) => void;
   createScenario: (
+    projectId: string,
     name: string,
     source: string,
     changes: Record<string, unknown>,
@@ -75,6 +91,13 @@ interface ScenarioStore {
     segments?: unknown[] | null,
     rowWidthFt?: number,
   ) => Promise<Scenario>;
+  createProjectWithScenario: (
+    draft: ScenarioDraft,
+    changes: Record<string, unknown>,
+    route: Record<string, unknown> | null,
+    segments: unknown[] | null | undefined,
+    rowWidthFt?: number,
+  ) => Promise<{ project: Project; scenario: Scenario }>;
   saveScenario: (
     id: string,
     changes: Record<string, unknown>,
@@ -88,16 +111,6 @@ interface ScenarioStore {
     revision: number,
   ) => Promise<Scenario>;
   duplicateScenario: (id: string) => Promise<Scenario>;
-  /**
-   * Save edits to `id` as a new scenario you own and make it active. The
-   * source row is not written. Used for examples and other users' scenarios.
-   */
-  saveScenarioAsCopy: (
-    id: string,
-    changes: Record<string, unknown>,
-    geometry?: ScenarioGeometry,
-    rowWidthFt?: number,
-  ) => Promise<Scenario>;
   deleteScenario: (id: string) => Promise<void>;
   setUnsavedChanges: (value: boolean) => void;
   setPendingDraft: (draft: ScenarioDraft) => void;
@@ -341,45 +354,38 @@ export function routePayload(
   return { type: rebuilt.type, coordinates: rebuilt.coordinates };
 }
 
-const PROJECT_FIELDS = '01_project_technical_details.project';
-
 function positiveWidth(rowWidthFt: number | undefined): rowWidthFt is number {
   return typeof rowWidthFt === 'number' && rowWidthFt > 0;
 }
 
-function readProjectString(data: Record<string, unknown>, key: string): string {
-  const value = getValueAtPath(data, `${PROJECT_FIELDS}.${key}`);
+function isLonLat(value: unknown): value is [number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    typeof value[0] === 'number' &&
+    typeof value[1] === 'number' &&
+    Number.isFinite(value[0]) &&
+    Number.isFinite(value[1])
+  );
+}
+
+function terminalIn(terminal: DraftTerminal): TerminalIn {
+  if (typeof terminal.substation_gid === 'number') {
+    return { substation_gid: terminal.substation_gid };
+  }
+  if (!isLonLat(terminal.point)) {
+    throw new Error('Terminal point is missing or unreadable');
+  }
+  return { point: [terminal.point[0], terminal.point[1]] };
+}
+
+function readProjectId(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
-function projectFieldsFromDocument(data: Record<string, unknown>): ProjectFields {
-  const capacity = getValueAtPath(data, `${PROJECT_FIELDS}.capacity_mw`);
-  const fields: ProjectFields = {
-    constructionType: readProjectString(data, 'construction_type'),
-    acDc: readProjectString(data, 'ac_dc'),
-    capacityMw:
-      typeof capacity === 'number' && Number.isFinite(capacity) ? capacity : 0,
-    conductorType: readProjectString(data, 'conductor_type'),
-  };
-  const converter = readProjectString(data, 'converter_type');
-  if (converter) fields.converterType = converter;
-  return fields;
-}
-
-function rowWidthForDocument(
-  defaults: Record<string, unknown>,
-  changes: Record<string, unknown>,
-): { width: number | null; problem: string | null } {
-  const data = structuredClone(defaults);
-  for (const [path, value] of Object.entries(changes)) {
-    setValueAtPath(data, path, value);
-  }
-  const fields = projectFieldsFromDocument(data);
-  const lookups = loadLookups(defaults);
-  return {
-    width: resolvedRowWidthFt(fields, lookups),
-    problem: rowWidthProblem(fields, lookups),
-  };
+function withProjectId(scenario: Scenario, projectId: string): Scenario {
+  if (scenario.project_id) return scenario;
+  return { ...scenario, project_id: projectId };
 }
 
 function deepClone<T>(value: T): T {
@@ -402,6 +408,9 @@ function fromResponse(row: ScenarioResponse, ownerUsername?: string): Scenario {
     created_at: row.created_at,
     updated_at: row.updated_at,
     user_id: row.user_id,
+    project_id: readProjectId(
+      (row as ScenarioResponse & { project_id?: unknown }).project_id,
+    ),
     ownerUsername,
     route_geojson: row.route,
     route: asRoute(row.route) as Record<string, unknown> | null,
@@ -429,6 +438,7 @@ function rowToScenario(
     created_at: typeof row.created_at === 'string' ? row.created_at : '',
     updated_at: typeof row.updated_at === 'string' ? row.updated_at : '',
     user_id: userId,
+    project_id: readProjectId(row.project_id),
     ownerUsername: usernames.get(userId),
     route_geojson: row.route_geojson ?? null,
     route: asRoute(row.route_geojson) as Record<string, unknown> | null,
@@ -679,12 +689,36 @@ export function generateScenarioName(
 }
 
 /**
- * True when saving edits to `scenario` must create a copy: examples from the
- * papers are never edited in place, even by their owner, and another user's
- * scenario cannot be written.
+ * Save writes only when the caller owns the project and it holds no paper
+ * scenario. Otherwise the workspace offers to duplicate the project.
  */
-export function saveCreatesCopy(scenario: Scenario, userId: string | null): boolean {
-  return scenario.source === 'paper' || scenario.user_id !== userId;
+export function saveAction(
+  project: Project,
+  scenarios: Array<{ id: string; source: string }>,
+  userId: string,
+): 'save' | 'offer_duplicate' {
+  return isProjectReadOnly(project, scenarios, userId) ? 'offer_duplicate' : 'save';
+}
+
+/** The scenario a duplicated project should open: its base, else the oldest. */
+export function scenarioForWorkspace(
+  project: { id: string; base_scenario_id: string | null },
+  scenarios: Scenario[],
+): Scenario | null {
+  const rows = scenarios.filter((item) => item.project_id === project.id);
+  if (project.base_scenario_id) {
+    const base = rows.find((item) => item.id === project.base_scenario_id);
+    if (base) return base;
+  }
+  return (
+    [...rows].sort(
+      (a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
+    )[0] ?? null
+  );
+}
+
+export function workspaceUrl(projectId: string, scenarioId: string): string {
+  return `/app/workspace?project=${encodeURIComponent(projectId)}&scenario=${encodeURIComponent(scenarioId)}`;
 }
 
 export function getActiveScenario(state: {
@@ -875,7 +909,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
     });
   },
 
-  createScenario: async (name, source, changes, route, segments, rowWidthFt) => {
+  createScenario: async (projectId, name, source, changes, route, segments, rowWidthFt) => {
     if (route == null || !positiveWidth(rowWidthFt)) {
       throw new Error(
         route == null
@@ -891,14 +925,58 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
       changes,
       route,
       row_width_ft: rowWidthFt,
+      project_id: projectId,
       ...(segments !== undefined ? { segments } : {}),
     });
     const ownerUsername = get().scenarios.find(
       (scenario) => scenario.user_id === row.user_id,
     )?.ownerUsername;
-    const scenario = fromResponse(row, ownerUsername);
+    const scenario = withProjectId(fromResponse(row, ownerUsername), projectId);
     set((state) => ({ scenarios: upsertScenario(state.scenarios, scenario) }));
     return scenario;
+  },
+
+  createProjectWithScenario: async (draft, changes, route, segments, rowWidthFt) => {
+    if (!draft.terminals) {
+      throw new Error('Terminals are required to create a project.');
+    }
+    if (route == null || !positiveWidth(rowWidthFt)) {
+      throw new Error(
+        route == null
+          ? 'A drawn route inside the lower 48 is required.'
+          : 'row_width_ft must be a positive number',
+      );
+    }
+    const sending = terminalIn(draft.terminals.sending);
+    const receiving = terminalIn(draft.terminals.receiving);
+    const defaults = await getDefaults();
+    const { project: projectRow, scenario: scenarioRow } = await createProjectApi({
+      sending,
+      receiving,
+      scenario: {
+        name: draft.name,
+        source: draft.source,
+        defaults_id: defaults.calculator.defaults_id,
+        changes,
+        route,
+        row_width_ft: rowWidthFt,
+        ...(segments !== undefined ? { segments } : {}),
+      },
+    });
+    const project = fromProjectResponse(projectRow);
+    useProjectStore.setState((state) => {
+      const index = state.projects.findIndex((item) => item.id === project.id);
+      if (index < 0) return { projects: [...state.projects, project] };
+      const projects = state.projects.slice();
+      projects[index] = project;
+      return { projects };
+    });
+    const ownerUsername = get().scenarios.find(
+      (scenario) => scenario.user_id === scenarioRow.user_id,
+    )?.ownerUsername;
+    const scenario = withProjectId(fromResponse(scenarioRow, ownerUsername), project.id);
+    set((state) => ({ scenarios: upsertScenario(state.scenarios, scenario) }));
+    return { project, scenario };
   },
 
   saveScenario: async (id, changes, revision, geometry, rowWidthFt) => {
@@ -944,54 +1022,13 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
 
   duplicateScenario: async (id) => {
     const source = get().scenarios.find((scenario) => scenario.id === id);
-    if (!source) throw new Error('Scenario not found');
-    const name = generateScenarioName(
-      `${source.name} (copy)`,
-      get().scenarios.map((scenario) => scenario.name),
+    const row = await duplicateScenarioApi(id);
+    const scenario = withProjectId(
+      fromResponse(row, source?.ownerUsername),
+      source?.project_id ?? '',
     );
-    const defaults = await getDefaults();
-    const { width: rowWidthFt, problem } = rowWidthForDocument(
-      defaults.defaults,
-      source.changes,
-    );
-    if (rowWidthFt == null && problem) throw new Error(problem);
-    return get().createScenario(
-      name,
-      'manual',
-      deepClone(source.changes),
-      routePayload(source.route_geojson, source.segments),
-      source.segments == null ? null : deepClone(source.segments),
-      rowWidthFt ?? undefined,
-    );
-  },
-
-  saveScenarioAsCopy: async (id, changes, geometry, rowWidthFt) => {
-    const source = get().scenarios.find((scenario) => scenario.id === id);
-    if (!source) throw new Error('Scenario not found');
-    const name = generateScenarioName(
-      `${source.name} (copy)`,
-      get().scenarios.map((scenario) => scenario.name),
-    );
-    const copy = await get().createScenario(
-      name,
-      'manual',
-      deepClone(changes),
-      geometry !== undefined
-        ? geometry.route
-        : routePayload(source.route_geojson, source.segments),
-      geometry !== undefined
-        ? geometry.segments
-        : source.segments == null
-          ? undefined
-          : deepClone(source.segments),
-      rowWidthFt,
-    );
-    set({
-      activeScenarioId: copy.id,
-      unsavedChanges: false,
-      savedResults: copy.results,
-    });
-    return copy;
+    set((state) => ({ scenarios: upsertScenario(state.scenarios, scenario) }));
+    return scenario;
   },
 
   deleteScenario: async (id) => {

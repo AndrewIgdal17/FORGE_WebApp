@@ -63,6 +63,7 @@ function scenario(id: string, name: string, results: Record<string, unknown>): S
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
     user_id: 'user',
+    project_id: 'p1',
     route: null,
     route_geojson: null,
     segments: null,

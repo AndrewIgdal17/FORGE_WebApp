@@ -16,6 +16,7 @@ function scenario(route: Record<string, unknown> | null, segments: unknown[] | n
     id: 's', name: 'CTT_Actual_Delay2', source: 'user', defaults_id: 'd', changes: {}, results: {},
     calculator: null, inputs_id: null, computed_at: null, calc_error: null, revision: 1,
     created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', user_id: 'u',
+    project_id: 'p1',
     route, route_geojson: null, segments,
   };
 }
