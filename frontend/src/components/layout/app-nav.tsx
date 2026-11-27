@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '@/hooks/use-auth';
 import { readLastWorkspace } from '@/lib/last-workspace';
 import { cn } from '@/lib/utils';
-import { workspaceUrl } from '@/stores/scenario-store';
 
 const NAV_LINK_CLASS =
   'border-b-2 border-transparent px-3 py-2 font-medium text-black/55 no-underline transition-[color,border-color] duration-150 hover:text-black/85';
@@ -63,7 +62,10 @@ export function AppNav(): ReactElement {
   const navigate = useNavigate();
   const username = profile?.username || '';
   const isAdmin = session?.user?.email === ADMIN_EMAIL;
-  const workspace = readLastWorkspace();
+  // The bare URL lets the workspace boot reconcile the remembered value with
+  // loaded projects and scenarios, so a deleted project or scenario never reaches
+  // a stale ?project=&scenario= link.
+  const hasRememberedWorkspace = readLastWorkspace() !== null;
 
   async function handleLogOut(): Promise<void> {
     await signOut();
@@ -89,9 +91,9 @@ export function AppNav(): ReactElement {
           label="Projects"
           active={location.pathname === '/app/projects'}
         />
-        {workspace ? (
+        {hasRememberedWorkspace ? (
           <NavItem
-            href={workspaceUrl(workspace.project, workspace.scenario)}
+            href="/app/workspace"
             label="Workspace"
             active={location.pathname === '/app/workspace'}
           />

@@ -30,6 +30,22 @@ describe('AppNav', () => {
     expect(workspace).toBeGreaterThan(projects);
   });
 
+  it('points an enabled Workspace link at the bare /app/workspace when something is remembered', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => JSON.stringify({ project: 'p1', scenario: 's1' }),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    });
+    try {
+      const html = render();
+      expect(html).toMatch(/href="\/app\/workspace"/);
+      expect(html).not.toContain('/app/workspace?');
+      expect(html).not.toContain('aria-disabled="true"');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('shows Workspace disabled with a hint when nothing is remembered', () => {
     const html = render();
     expect(html).toContain('title="Open a project first"');

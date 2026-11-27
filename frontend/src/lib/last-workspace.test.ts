@@ -232,3 +232,26 @@ describe('workspaceEntry', () => {
     expect(entry('scenario=free', { remembered: null })).toEqual({ kind: 'projects' });
   });
 });
+
+describe('deleted remembered project through the bare visit', () => {
+  it('reconciles to null and sends a bare visit to /app/projects', () => {
+    const scenarios = [scenario('s3', 'p2', '2026-01-01')];
+    const projects = [{ id: 'p2', base_scenario_id: 's3' }];
+    const reconciled = reconcileRemembered(
+      { project: 'gone', scenario: 's1' },
+      projects,
+      scenarios,
+    );
+    expect(reconciled).toBeNull();
+    expect(
+      workspaceEntry({
+        params: new URLSearchParams(''),
+        pendingDraft: false,
+        remembered: reconciled,
+        projectIds: projects.map((item) => item.id),
+        scenarioProjects: new Map([['s3', 'p2']]),
+        projectScenarios: projectScenarioMap(projects, scenarios),
+      }),
+    ).toEqual({ kind: 'projects' });
+  });
+});
