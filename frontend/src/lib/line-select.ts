@@ -163,16 +163,17 @@ export function routeFullyInMapView(
 }
 
 /**
- * Best-effort stale notice: only when the full route is in view, corridor tiles
- * show at least one selected piece, and another stored gid is absent from the view.
+ * Best-effort stale notice: when the full route is in view, corridor features
+ * have rendered in the view, and a stored gid is absent from those features.
  */
 export function lineSelectionStaleInView(
   storedGids: ReadonlyArray<number>,
   renderedGids: ReadonlySet<number>,
   routeFullyInView: boolean,
+  corridorsLoadedInView: boolean,
 ): boolean {
   if (!routeFullyInView || storedGids.length === 0) return false;
-  if (!storedGids.some((gid) => renderedGids.has(gid))) return false;
+  if (!corridorsLoadedInView) return false;
   return storedGids.some((gid) => !renderedGids.has(gid));
 }
 

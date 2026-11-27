@@ -451,7 +451,13 @@ export function MapPanel({
       const routeInView = routeFullyInMapView(existingRoute, (point) =>
         bounds.contains(point),
       );
-      const stale = lineSelectionStaleInView(storedLineGids, rendered, routeInView);
+      const corridorsLoadedInView = features.length > 0;
+      const stale = lineSelectionStaleInView(
+        storedLineGids,
+        rendered,
+        routeInView,
+        corridorsLoadedInView,
+      );
       onLineDataStaleChangeRef.current?.(stale);
     };
     const onIdle = (): void => {

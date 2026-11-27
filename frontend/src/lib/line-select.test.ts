@@ -132,15 +132,21 @@ describe('routeFullyInMapView', () => {
 describe('lineSelectionStaleInView', () => {
   it('does not flag when the route is not fully in view', () => {
     const rendered = new Set([10, 20]);
-    expect(lineSelectionStaleInView([10, 20, 30], rendered, false)).toBe(false);
+    expect(lineSelectionStaleInView([10, 20, 30], rendered, false, true)).toBe(false);
   });
 
-  it('does not flag when no selected piece is rendered yet', () => {
-    expect(lineSelectionStaleInView([10, 20], new Set(), true)).toBe(false);
+  it('does not flag when corridor features have not rendered in the view yet', () => {
+    expect(lineSelectionStaleInView([10, 20], new Set(), true, false)).toBe(false);
+    expect(lineSelectionStaleInView([10], new Set(), true, false)).toBe(false);
   });
 
-  it('flags when the route is in view, some pieces render, and one stored gid is absent', () => {
-    expect(lineSelectionStaleInView([10, 20], new Set([10]), true)).toBe(true);
+  it('flags when the route is in view, corridors loaded, and one stored gid is absent', () => {
+    expect(lineSelectionStaleInView([10, 20], new Set([10]), true, true)).toBe(true);
+  });
+
+  it('flags when every stored gid is absent but other corridors are in view', () => {
+    expect(lineSelectionStaleInView([10], new Set([99, 100]), true, true)).toBe(true);
+    expect(lineSelectionStaleInView([10, 20], new Set([50]), true, true)).toBe(true);
   });
 });
 
