@@ -47,6 +47,7 @@ class ScenarioCreate(BaseModel):
     route: dict[str, Any] | None = None  # GeoJSON MultiLineString
     segments: list[dict[str, Any]] | None = None
     row_width_ft: float | None = None
+    project_id: str | None = None
 
 
 class ScenarioUpdate(BaseModel):
@@ -77,8 +78,8 @@ class TerminalIn(BaseModel):
 class ProjectCreate(BaseModel):
     """A project and the first scenario that connects its terminals.
 
-    ``scenario`` is a scenario create body. It has no ``project_id``; the
-    server assigns the new project.
+    ``scenario`` is a scenario create body. ``scenario.project_id`` is
+    ignored; the server assigns the new project.
     """
 
     name: str | None = None

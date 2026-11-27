@@ -22,6 +22,7 @@ import json
 import os
 import socket
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -207,7 +208,7 @@ def make_user(client):
         user_id = _create_confirmed_user(email, password)
         token = _login(email, password)
         created.append(user_id)
-        return user_id, {"Authorization": f"Bearer {token}"}
+        return user_id, token
 
     yield _make
 
@@ -252,13 +253,84 @@ def _create_payload(name: str = "Test scenario", changes: dict | None = None) ->
     }
 
 
+def _headers(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _make_project(client, token: str, scenario: dict | None = None) -> dict:
+    """Create a project whose terminals are the two ends of ``ROUTE``.
+
+    ``token`` is the caller's access token. The first scenario is the base.
+    """
+    body = dict(scenario if scenario is not None else _create_payload())
+    body.pop("project_id", None)
+    body["route"] = ROUTE
+    body["row_width_ft"] = ROW_WIDTH_FT
+    response = client.post(
+        "/api/projects",
+        json={
+            "sending": {"point": [-97.74, 30.27]},
+            "receiving": {"point": [-96.80, 32.78]},
+            "scenario": body,
+        },
+        headers=_headers(token),
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _scenario_payload(project_id: str, **kwargs) -> dict:
+    payload = _create_payload(**kwargs)
+    payload["project_id"] = project_id
+    return payload
+
+
+def _set_created_at(scenario_id: str, when: datetime) -> None:
+    import anyio
+
+    async def _run() -> None:
+        conn = await asyncpg.connect(dsn=SUPERUSER_DATABASE_URL)
+        try:
+            await conn.execute(
+                "update public.scenario set created_at = $2 where id = $1",
+                uuid.UUID(scenario_id),
+                when,
+            )
+        finally:
+            await conn.close()
+
+    anyio.run(_run)
+
+
+def _project_base(project_id: str) -> str | None:
+    import anyio
+
+    async def _run():
+        conn = await asyncpg.connect(dsn=SUPERUSER_DATABASE_URL)
+        try:
+            return await conn.fetchval(
+                "select base_scenario_id from public.project where id = $1",
+                uuid.UUID(project_id),
+            )
+        finally:
+            await conn.close()
+
+    value = anyio.run(_run)
+    return None if value is None else str(value)
+
+
 # --- Tests ---------------------------------------------------------------------
 
 
 def test_post_creates_scenario_with_results_and_provenance(client, make_user):
-    _, headers = make_user("post")
+    _, token = make_user("post")
+    made = _make_project(client, token)
 
-    response = client.post("/api/scenarios", json=_create_payload(), headers=headers)
+    response = client.post(
+        "/api/scenarios",
+        json=_scenario_payload(made["project"]["id"]),
+        headers=_headers(token),
+    )
 
     assert response.status_code == 201, response.text
     body = response.json()
@@ -273,8 +345,8 @@ def test_post_creates_scenario_with_results_and_provenance(client, make_user):
 
 
 def test_patch_with_changes_recalculates_and_bumps_revision(client, make_user):
-    _, headers = make_user("patch-recalc")
-    created = client.post("/api/scenarios", json=_create_payload(), headers=headers).json()
+    _, token = make_user("patch-recalc")
+    created = _make_project(client, token)["scenario"]
     original_inputs_id = created["inputs_id"]
 
     new_changes = dict(created["changes"])
@@ -288,7 +360,7 @@ def test_patch_with_changes_recalculates_and_bumps_revision(client, make_user):
             "route": ROUTE,
             "row_width_ft": ROW_WIDTH_FT,
         },
-        headers=headers,
+        headers=_headers(token),
     )
 
     assert response.status_code == 200, response.text
@@ -300,13 +372,13 @@ def test_patch_with_changes_recalculates_and_bumps_revision(client, make_user):
 
 
 def test_patch_name_only_keeps_results(client, make_user):
-    _, headers = make_user("patch-name-only")
-    created = client.post("/api/scenarios", json=_create_payload(), headers=headers).json()
+    _, token = make_user("patch-name-only")
+    created = _make_project(client, token)["scenario"]
 
     response = client.patch(
         f"/api/scenarios/{created['id']}",
         json={"revision": created["revision"], "name": "Renamed scenario"},
-        headers=headers,
+        headers=_headers(token),
     )
 
     assert response.status_code == 200, response.text
@@ -319,13 +391,22 @@ def test_patch_name_only_keeps_results(client, make_user):
 
 
 def test_delete_removes_the_row(client, make_user):
-    _, headers = make_user("delete")
-    created = client.post("/api/scenarios", json=_create_payload(), headers=headers).json()
+    _, token = make_user("delete")
+    made = _make_project(client, token)
+    created = client.post(
+        "/api/scenarios",
+        json=_scenario_payload(made["project"]["id"], name="Second sheet"),
+        headers=_headers(token),
+    ).json()
 
-    delete_response = client.delete(f"/api/scenarios/{created['id']}", headers=headers)
+    delete_response = client.delete(
+        f"/api/scenarios/{created['id']}", headers=_headers(token)
+    )
     assert delete_response.status_code == 204, delete_response.text
 
-    second_delete = client.delete(f"/api/scenarios/{created['id']}", headers=headers)
+    second_delete = client.delete(
+        f"/api/scenarios/{created['id']}", headers=_headers(token)
+    )
     assert second_delete.status_code == 404
     assert second_delete.json()["error"]["code"] == "not_found"
 
@@ -338,13 +419,13 @@ def test_stale_revision_returns_409(client, make_user):
     first PATCH already advanced `revision`), which is how 409
     `stale_revision` is now detected (no separate SELECT-then-compare).
     """
-    _, headers = make_user("stale-revision")
-    created = client.post("/api/scenarios", json=_create_payload(), headers=headers).json()
+    _, token = make_user("stale-revision")
+    created = _make_project(client, token)["scenario"]
 
     first = client.patch(
         f"/api/scenarios/{created['id']}",
         json={"revision": created["revision"], "name": "First rename"},
-        headers=headers,
+        headers=_headers(token),
     )
     assert first.status_code == 200, first.text
     assert first.json()["revision"] == created["revision"] + 1
@@ -352,7 +433,7 @@ def test_stale_revision_returns_409(client, make_user):
     stale = client.patch(
         f"/api/scenarios/{created['id']}",
         json={"revision": created["revision"], "name": "Second rename"},
-        headers=headers,
+        headers=_headers(token),
     )
 
     assert stale.status_code == 409
@@ -374,8 +455,8 @@ def test_concurrent_patches_with_same_revision_only_one_succeeds(client, make_us
     different loop", since asyncpg's pool is bound to the loop it was
     created on.
     """
-    user_id, headers = make_user("concurrent-patch")
-    created = client.post("/api/scenarios", json=_create_payload(), headers=headers).json()
+    user_id, token = make_user("concurrent-patch")
+    created = _make_project(client, token)["scenario"]
 
     payload_a = ScenarioUpdate(revision=created["revision"], name="Winner A")
     payload_b = ScenarioUpdate(revision=created["revision"], name="Winner B")
@@ -398,41 +479,46 @@ def test_concurrent_patches_with_same_revision_only_one_succeeds(client, make_us
 
 
 def test_another_users_row_returns_403(client, make_user):
-    _, headers_a = make_user("owner")
-    _, headers_b = make_user("other")
-    created = client.post("/api/scenarios", json=_create_payload(), headers=headers_a).json()
+    _, token_a = make_user("owner")
+    _, token_b = make_user("other")
+    created = _make_project(client, token_a)["scenario"]
 
     patch_response = client.patch(
         f"/api/scenarios/{created['id']}",
         json={"revision": created["revision"], "name": "Hijacked"},
-        headers=headers_b,
+        headers=_headers(token_b),
     )
     assert patch_response.status_code == 403
     assert patch_response.json()["error"]["code"] == "not_owner"
 
-    delete_response = client.delete(f"/api/scenarios/{created['id']}", headers=headers_b)
+    delete_response = client.delete(
+        f"/api/scenarios/{created['id']}", headers=_headers(token_b)
+    )
     assert delete_response.status_code == 403
     assert delete_response.json()["error"]["code"] == "not_owner"
 
 
 def test_post_with_wrong_defaults_id_returns_409(client, make_user):
-    _, headers = make_user("stale-defaults")
-    payload = _create_payload()
+    _, token = make_user("stale-defaults")
+    made = _make_project(client, token)
+    payload = _scenario_payload(made["project"]["id"])
     payload["defaults_id"] = "sha256:" + "0" * 64
 
-    response = client.post("/api/scenarios", json=payload, headers=headers)
+    response = client.post("/api/scenarios", json=payload, headers=_headers(token))
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "stale_defaults"
 
 
 def test_invalid_changes_return_422_with_path(client, make_user):
-    _, headers = make_user("invalid-changes")
-    bad_payload = _create_payload(
-        changes={"01_project_technical_details.project.capacity_mw": "not-a-number"}
+    _, token = make_user("invalid-changes")
+    made = _make_project(client, token)
+    bad_payload = _scenario_payload(
+        made["project"]["id"],
+        changes={"01_project_technical_details.project.capacity_mw": "not-a-number"},
     )
 
-    response = client.post("/api/scenarios", json=bad_payload, headers=headers)
+    response = client.post("/api/scenarios", json=bad_payload, headers=_headers(token))
 
     assert response.status_code == 422
     body = response.json()
@@ -443,12 +529,16 @@ def test_invalid_changes_return_422_with_path(client, make_user):
 def test_calculator_failure_stores_calc_error(client, make_user):
     """The deployed defaults alone (capacity_mw=0) make run_calculation raise;
     resolve_inputs still succeeds, so the row is saved with calc_error set."""
-    _, headers = make_user("calc-failure")
+    _, token = make_user("calc-failure")
+    made = _make_project(client, token)
 
     response = client.post(
         "/api/scenarios",
-        json=_create_payload(changes={path: 0.0 for path in ACRE_PATHS}),
-        headers=headers,
+        json=_scenario_payload(
+            made["project"]["id"],
+            changes={path: 0.0 for path in ACRE_PATHS},
+        ),
+        headers=_headers(token),
     )
 
     assert response.status_code == 201, response.text
@@ -462,8 +552,13 @@ def test_calculator_failure_stores_calc_error(client, make_user):
 
 
 def test_missing_protected_area_acres_are_rejected(client, make_user):
-    _, headers = make_user("missing-acres")
-    response = client.post("/api/scenarios", json=_create_payload(changes={}), headers=headers)
+    _, token = make_user("missing-acres")
+    made = _make_project(client, token)
+    response = client.post(
+        "/api/scenarios",
+        json=_scenario_payload(made["project"]["id"], changes={}),
+        headers=_headers(token),
+    )
     assert response.status_code == 422
     message = response.json()["error"]["message"]
     assert message.startswith("protected_area_acres are required. Missing: ")
@@ -472,19 +567,164 @@ def test_missing_protected_area_acres_are_rejected(client, make_user):
 
 
 def test_results_in_request_body_are_ignored(client, make_user):
-    _, headers = make_user("results-ignored")
-    payload = _create_payload()
+    _, token = make_user("results-ignored")
+    made = _make_project(client, token)
+    payload = _scenario_payload(made["project"]["id"])
     payload["results"] = {"bogus": "injected"}
 
-    created = client.post("/api/scenarios", json=payload, headers=headers).json()
+    created = client.post("/api/scenarios", json=payload, headers=_headers(token)).json()
     assert created["results"] != {"bogus": "injected"}
     assert created["results"]["provenance"]["inputs_id"] == created["inputs_id"]
 
     patch_response = client.patch(
         f"/api/scenarios/{created['id']}",
         json={"revision": created["revision"], "name": "Still real results", "results": {"bogus": "injected"}},
-        headers=headers,
+        headers=_headers(token),
     )
     body = patch_response.json()
     assert body["results"] != {"bogus": "injected"}
     assert body["results"] == created["results"]
+
+
+def test_post_without_project_is_422(client, make_user):
+    _, token = make_user("no-project")
+    response = client.post(
+        "/api/scenarios", json=_create_payload(), headers=_headers(token)
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_changes"
+    assert response.json()["error"]["message"] == "project_id is required"
+
+
+def test_post_into_another_users_project_is_403(client, make_user):
+    _, owner = make_user("sheet-owner")
+    _, other = make_user("sheet-other")
+    made = _make_project(client, owner)
+    response = client.post(
+        "/api/scenarios",
+        json=_scenario_payload(made["project"]["id"]),
+        headers=_headers(other),
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "not_owner"
+
+
+def test_patch_route_off_terminal_is_422(client, make_user):
+    _, token = make_user("off-terminal")
+    created = _make_project(client, token)["scenario"]
+    response = client.patch(
+        f"/api/scenarios/{created['id']}",
+        json={
+            "revision": created["revision"],
+            "route": {
+                "type": "MultiLineString",
+                "coordinates": [[[-80.0, 25.0], [-81.0, 26.0]]],
+            },
+        },
+        headers=_headers(token),
+    )
+    assert response.status_code == 422
+    body = response.json()["error"]
+    assert body["code"] == "route_terminals_mismatch"
+    assert body["message"].startswith("The route's sending end is")
+
+
+def test_delete_last_scenario_is_409(client, make_user):
+    _, token = make_user("last-scenario")
+    made = _make_project(client, token)
+    scenario = made["scenario"]
+    response = client.delete(
+        f"/api/scenarios/{scenario['id']}", headers=_headers(token)
+    )
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "last_scenario"
+    renamed = client.patch(
+        f"/api/scenarios/{scenario['id']}",
+        json={"revision": scenario["revision"], "name": "Still here"},
+        headers=_headers(token),
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["name"] == "Still here"
+
+
+def test_delete_base_promotes_oldest(client, make_user):
+    """Oldest remaining scenario, by created_at then id, becomes the base."""
+    _, token = make_user("promote-base")
+    made = _make_project(client, token, scenario=_create_payload(name="Base"))
+    project_id = made["project"]["id"]
+    base_id = made["scenario"]["id"]
+    headers = _headers(token)
+
+    def _add(name: str) -> str:
+        response = client.post(
+            "/api/scenarios",
+            json=_scenario_payload(project_id, name=name),
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+        return response.json()["id"]
+
+    middle_id = _add("Middle")
+    newest_id = _add("Newest")
+    start = datetime(2020, 1, 1, tzinfo=UTC)
+    _set_created_at(base_id, start)
+    _set_created_at(middle_id, start + timedelta(days=1))
+    _set_created_at(newest_id, start + timedelta(days=2))
+
+    kept = client.delete(f"/api/scenarios/{newest_id}", headers=headers)
+    assert kept.status_code == 204, kept.text
+    assert _project_base(project_id) == base_id
+
+    promoted = client.delete(f"/api/scenarios/{base_id}", headers=headers)
+    assert promoted.status_code == 204, promoted.text
+    assert _project_base(project_id) == middle_id
+
+    tied = _make_project(client, token, scenario=_create_payload(name="Tied base"))
+    tied_project = tied["project"]["id"]
+    tied_base = tied["scenario"]["id"]
+    left_id = _add_to(client, token, tied_project, "Left")
+    right_id = _add_to(client, token, tied_project, "Right")
+    same = datetime(2021, 6, 1, tzinfo=UTC)
+    _set_created_at(left_id, same)
+    _set_created_at(right_id, same)
+    _set_created_at(tied_base, same + timedelta(days=1))
+    removed = client.delete(f"/api/scenarios/{tied_base}", headers=headers)
+    assert removed.status_code == 204, removed.text
+    assert _project_base(tied_project) == str(min(uuid.UUID(left_id), uuid.UUID(right_id)))
+
+
+def _add_to(client, token: str, project_id: str, name: str) -> str:
+    response = client.post(
+        "/api/scenarios",
+        json=_scenario_payload(project_id, name=name),
+        headers=_headers(token),
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+def test_duplicate_names_with_counter_within_project(client, make_user):
+    _, token = make_user("dup-sheet")
+    _, other = make_user("dup-sheet-other")
+    made = _make_project(client, token, scenario=_create_payload(name="Line"))
+    source = made["scenario"]
+    headers = _headers(token)
+
+    first = client.post(f"/api/scenarios/{source['id']}/duplicate", headers=headers)
+    assert first.status_code == 201, first.text
+    copied = first.json()
+    assert copied["name"] == "Line (2)"
+    assert copied["source"] == "manual"
+    assert copied["results"] == source["results"]
+    assert copied["project_id"] == made["project"]["id"]
+    assert copied["id"] != source["id"]
+
+    second = client.post(f"/api/scenarios/{source['id']}/duplicate", headers=headers)
+    assert second.status_code == 201, second.text
+    assert second.json()["name"] == "Line (3)"
+
+    refused = client.post(
+        f"/api/scenarios/{source['id']}/duplicate", headers=_headers(other)
+    )
+    assert refused.status_code == 403
+    assert refused.json()["error"]["code"] == "not_owner"

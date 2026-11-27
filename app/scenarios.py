@@ -46,7 +46,7 @@ _DEFAULTS_ID = forge.get_defaults_id()
 _SCENARIO_COLUMNS = (
     "id, user_id, name, source, defaults_id, changes, results, calculator, "
     "inputs_id, computed_at, calc_error, revision, created_at, updated_at, "
-    "ST_AsGeoJSON(route)::jsonb AS route, segments, layer_releases"
+    "ST_AsGeoJSON(route)::jsonb AS route, segments, layer_releases, project_id"
 )
 
 _security = HTTPBearer(auto_error=False)
@@ -150,6 +150,85 @@ async def _fetch_scenario(conn, scenario_id: str):
         f"select {_SCENARIO_COLUMNS} from public.scenario where id = $1",
         scenario_uuid,
     )
+
+
+_PROJECT_REQUIRED = "project_id is required"
+_READ_ONLY = "This project is read-only because it holds a paper scenario."
+_LAST_SCENARIO = "A project must keep at least one scenario."
+_NOT_OWNER_PROJECT = "This project belongs to another user."
+_NOT_FOUND_PROJECT = "No such project."
+_NAME_LIMIT = "Scenario name must be 1–200 characters."
+
+
+def generate_scenario_name(base_name: str, existing_names: list[str]) -> str:
+    """Port of the frontend ``generateScenarioName`` rule.
+
+    The duplicate name is ``"<name> (2)"``, then ``"(3)"``, among the names
+    already in the project. The source name is one of those names, so the
+    first copy is ``"<name> (2)"``.
+    """
+    if base_name not in existing_names:
+        return base_name
+    counter = 2
+    while f"{base_name} ({counter})" in existing_names:
+        counter += 1
+    return f"{base_name} ({counter})"
+
+
+def _terminal_pair(project) -> tuple[tuple[float, float], tuple[float, float]]:
+    return (
+        (float(project["sending_lon"]), float(project["sending_lat"])),
+        (float(project["receiving_lon"]), float(project["receiving_lat"])),
+    )
+
+
+async def _fetch_project_points(conn, project_id: UUID):
+    return await conn.fetchrow(
+        """
+        select id, user_id, base_scenario_id,
+               ST_X(sending_point) as sending_lon,
+               ST_Y(sending_point) as sending_lat,
+               ST_X(receiving_point) as receiving_lon,
+               ST_Y(receiving_point) as receiving_lat
+        from public.project
+        where id = $1
+        """,
+        project_id,
+    )
+
+
+async def _project_is_read_only(conn, project_id: UUID) -> bool:
+    row = await conn.fetchrow(
+        """
+        select exists (
+            select 1 from public.scenario
+            where project_id = $1 and source = 'paper'
+        ) as is_paper
+        """,
+        project_id,
+    )
+    return bool(row["is_paper"])
+
+
+async def _require_writable_project(conn, user_id: str, project_id: UUID | None):
+    """The project the caller may write, or an error response.
+
+    Owner is checked before the paper rule, matching ``app.projects``.
+    """
+    if project_id is None:
+        return _error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "invalid_changes",
+            _PROJECT_REQUIRED,
+        )
+    project = await _fetch_project_points(conn, project_id)
+    if project is None:
+        return _error(status.HTTP_404_NOT_FOUND, "not_found", _NOT_FOUND_PROJECT)
+    if str(project["user_id"]) != user_id:
+        return _error(status.HTTP_403_FORBIDDEN, "not_owner", _NOT_OWNER_PROJECT)
+    if await _project_is_read_only(conn, project["id"]):
+        return _error(status.HTTP_403_FORBIDDEN, "read_only", _READ_ONLY)
+    return project
 
 
 # --- Calculation ---------------------------------------------------------------
@@ -376,10 +455,12 @@ async def insert_scenario(
 ):
     """Insert one scenario on an open ``forge_api`` transaction.
 
-    ``project_id`` is null for a scenario create that has no project yet.
-    The column stays nullable until the later not-null migration. Argument
-    order through ``layer_releases`` matches the pre-project insert so
-    existing route tests keep their positions.
+    ``project_id`` may be null so a caller can still insert without one.
+    ``POST /api/scenarios`` does not: it requires a project the caller owns.
+    Creating a project passes the new project's id and ignores any
+    ``project_id`` on the nested scenario body. Argument order through
+    ``layer_releases`` matches the pre-project insert so existing route
+    tests keep their positions.
     """
     return await conn.fetchrow(
         f"""
@@ -412,12 +493,40 @@ async def insert_scenario(
 
 
 async def create_scenario(user_id: str, payload: ScenarioCreate) -> JSONResponse:
-    prepared = await prepare_scenario_insert(user_id, payload, None)
+    """Insert a scenario into a project the caller owns.
+
+    ``project_id`` is required. The project's terminal rule runs inside
+    ``prepare_scenario_insert``. A paper project is read-only. The nested
+    scenario on ``POST /api/projects`` does not come through here; that
+    path assigns the new project id itself.
+    """
+    if not payload.project_id:
+        return _error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "invalid_changes",
+            _PROJECT_REQUIRED,
+        )
+    try:
+        project_uuid = UUID(payload.project_id)
+    except ValueError:
+        return _error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "invalid_changes",
+            _PROJECT_REQUIRED,
+        )
+
+    async with db_module.forge_api_transaction(user_id) as conn:
+        project = await _require_writable_project(conn, user_id, project_uuid)
+        if isinstance(project, JSONResponse):
+            return project
+        terminals = _terminal_pair(project)
+
+    prepared = await prepare_scenario_insert(user_id, payload, terminals)
     if isinstance(prepared, JSONResponse):
         return prepared
 
     async with db_module.forge_api_transaction(user_id) as conn:
-        record = await insert_scenario(conn, user_id, None, prepared)
+        record = await insert_scenario(conn, user_id, project_uuid, prepared)
 
     return JSONResponse(status_code=status.HTTP_201_CREATED, content=_row_to_dict(record))
 
@@ -426,14 +535,19 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
     """Update the caller's scenario, racing safely against concurrent PATCHes.
 
     Check order: auth (the route's dependency) -> stale_defaults -> fetch row
-    -> not_found -> not_owner -> route and row width when the caller sent
-    changes or defaults_id -> rate limit -> route analysis -> calculate ->
-    save. A name-only PATCH does not analyze the route or assign
-    layer_releases. A recalculating save with the route key omitted measures
-    the stored line and does not assign ``route``. A recalculating save that
-    sends ``route: null`` returns 422 and leaves the row unchanged. A request
-    that was always going to be rejected (unknown defaults, missing row, wrong
-    owner, missing route, non-positive width) never burns a rate-limit slot.
+    -> not_found -> not_owner -> project (missing, not owner, read-only) ->
+    terminal rule when a route geometry is sent -> route and row width when
+    the caller sent changes or defaults_id -> rate limit -> route analysis ->
+    calculate -> save. A name-only PATCH does not analyze the route or assign
+    layer_releases. A sent route is snapped to the project's terminals before
+    it is measured or stored. ``project_id`` in the body is not a field on
+    ``ScenarioUpdate``, so it cannot change the row. A recalculating save
+    with the route key omitted measures the stored line and does not assign
+    ``route``. A recalculating save that sends ``route: null`` returns 422
+    and leaves the row unchanged. A request that was always going to be
+    rejected (unknown defaults, missing row, wrong owner, read-only project,
+    terminal mismatch, missing route, non-positive width) never burns a
+    rate-limit slot.
 
     The SELECT is its own transaction. It ends once not_found and not_owner
     have been applied and the fields the rest of this function needs are
@@ -465,6 +579,10 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
             return _error(status.HTTP_404_NOT_FOUND, "not_found", "No such scenario.")
         if str(existing["user_id"]) != user_id:
             return _error(status.HTTP_403_FORBIDDEN, "not_owner", "This scenario belongs to another user.")
+        project = await _require_writable_project(conn, user_id, existing["project_id"])
+        if isinstance(project, JSONResponse):
+            return project
+        terminals = _terminal_pair(project)
         # Copied before this transaction ends. Later steps must not touch the
         # row or the connection: route analysis acquires its own.
         stored = {
@@ -493,14 +611,25 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
         payload.changes if payload.changes is not None else _decode_jsonb(stored["changes"])
     )
 
+    route_was_sent = "route" in payload.model_fields_set
+    snapped_route: dict | None = None
+    if route_was_sent and payload.route is not None:
+        snapped = snap_route_to_terminals(payload.route, terminals[0], terminals[1])
+        if isinstance(snapped, TerminalMismatch):
+            return _error(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "route_terminals_mismatch",
+                mismatch_message(snapped),
+            )
+        snapped_route = snapped
+
     prepared: tuple[RouteGeometry, float] | None = None
     if recalculate:
-        prepared_route = _prepare_route(
-            _route_to_measure(
-                payload.route, "route" in payload.model_fields_set, stored["route"]
-            ),
-            payload.row_width_ft,
-        )
+        if route_was_sent:
+            measure_route = snapped_route if snapped_route is not None else payload.route
+        else:
+            measure_route = _route_to_measure(None, False, stored["route"])
+        prepared_route = _prepare_route(measure_route, payload.row_width_ft)
         if isinstance(prepared_route, JSONResponse):
             return prepared_route
         prepared = prepared_route
@@ -552,8 +681,11 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
         calc_fields["calc_error"],
     ]
     # Only fields the caller sent. A name-only PATCH must not null the route.
-    if "route" in payload.model_fields_set:
-        params.append(_geojson_param(payload.route))
+    # A sent geometry is the snapped copy, so every scenario shares the
+    # project's exact ends. An explicit null still clears the column.
+    if route_was_sent:
+        to_store = snapped_route if snapped_route is not None else payload.route
+        params.append(_geojson_param(to_store))
         assignments.append(
             f"route = ST_SetSRID(ST_GeomFromGeoJSON(${len(params)}::text), 4326)"
         )
@@ -590,21 +722,119 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
 
 
 async def delete_scenario(user_id: str, scenario_id: str) -> Response:
-    # Same ordering principle as update_scenario: validate ownership before
-    # spending a rate-limit slot on a request that was always going to fail.
+    """Delete one scenario. The project's last scenario cannot be deleted.
+
+    When the deleted row is the base, the oldest remaining scenario
+    (``order by created_at, id``) becomes the base in this same transaction,
+    before the delete, so ``on delete set null`` does not clear it.
+    ``revision`` advances with that pointer so a concurrent project PATCH
+    cannot write the deleted id back.
+    """
     async with db_module.forge_api_transaction(user_id) as conn:
         existing = await _fetch_scenario(conn, scenario_id)
         if existing is None:
             return _error(status.HTTP_404_NOT_FOUND, "not_found", "No such scenario.")
         if str(existing["user_id"]) != user_id:
             return _error(status.HTTP_403_FORBIDDEN, "not_owner", "This scenario belongs to another user.")
+        project = await _require_writable_project(conn, user_id, existing["project_id"])
+        if isinstance(project, JSONResponse):
+            return project
 
+        remaining = await conn.fetch(
+            """
+            select id
+            from public.scenario
+            where project_id = $1 and id <> $2
+            order by created_at, id
+            """,
+            project["id"],
+            existing["id"],
+        )
+        if not remaining:
+            return _error(
+                status.HTTP_409_CONFLICT,
+                "last_scenario",
+                _LAST_SCENARIO,
+            )
         if not auth_module.rate_limiter.allow_write(user_id):
             return _rate_limited()
 
+        base_id = project["base_scenario_id"]
+        if base_id is not None and str(base_id) == str(existing["id"]):
+            await conn.execute(
+                """
+                update public.project
+                set base_scenario_id = $1, revision = revision + 1
+                where id = $2
+                """,
+                remaining[0]["id"],
+                project["id"],
+            )
         await conn.execute("delete from public.scenario where id = $1", existing["id"])
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+async def duplicate_scenario(user_id: str, scenario_id: str) -> JSONResponse:
+    """Copy one scenario inside its project. Results are copied, not recalculated.
+
+    The name follows ``generate_scenario_name`` against names in that project
+    only. A non-owner gets ``not_owner``. A paper project is read-only; the
+    caller duplicates the project instead.
+    """
+    async with db_module.forge_api_transaction(user_id) as conn:
+        existing = await _fetch_scenario(conn, scenario_id)
+        if existing is None:
+            return _error(status.HTTP_404_NOT_FOUND, "not_found", "No such scenario.")
+        if str(existing["user_id"]) != user_id:
+            return _error(status.HTTP_403_FORBIDDEN, "not_owner", "This scenario belongs to another user.")
+        project = await _require_writable_project(conn, user_id, existing["project_id"])
+        if isinstance(project, JSONResponse):
+            return project
+
+        name_rows = await conn.fetch(
+            """
+            select name
+            from public.scenario
+            where project_id = $1
+            """,
+            project["id"],
+        )
+        new_name = generate_scenario_name(
+            existing["name"],
+            [row["name"] for row in name_rows],
+        )
+        if not 1 <= len(new_name) <= 200:
+            return _error(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "invalid_changes",
+                _NAME_LIMIT,
+            )
+        if not auth_module.rate_limiter.allow_write(user_id):
+            return _rate_limited()
+
+        record = await conn.fetchrow(
+            f"""
+            insert into public.scenario (
+                user_id, name, source, defaults_id, changes,
+                results, calculator, inputs_id, computed_at, calc_error,
+                route, segments, layer_releases, project_id
+            )
+            select
+                user_id, $2, 'manual', defaults_id, changes,
+                results, calculator, inputs_id, computed_at, calc_error,
+                route, segments, layer_releases, project_id
+            from public.scenario
+            where id = $1
+            returning {_SCENARIO_COLUMNS}
+            """,
+            existing["id"],
+            new_name,
+        )
+        if record is None:
+            return _error(status.HTTP_404_NOT_FOUND, "not_found", "No such scenario.")
+
+    return JSONResponse(status_code=status.HTTP_201_CREATED, content=_row_to_dict(record))
 
 
 # --- Routes --------------------------------------------------------------------
@@ -625,3 +855,10 @@ async def patch_scenario(
 @router.delete("/api/scenarios/{scenario_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_scenario_route(scenario_id: str, user: dict = Depends(require_user)) -> Response:
     return await delete_scenario(user["sub"], scenario_id)
+
+
+@router.post("/api/scenarios/{scenario_id}/duplicate", status_code=status.HTTP_201_CREATED)
+async def post_duplicate_scenario(
+    scenario_id: str, user: dict = Depends(require_user)
+) -> JSONResponse:
+    return await duplicate_scenario(user["sub"], scenario_id)

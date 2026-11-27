@@ -20,6 +20,10 @@ from app.route import ROUTE_REQUIRED
 
 USER_ID = "11111111-1111-1111-1111-111111111111"
 SCENARIO_ID = UUID("22222222-2222-2222-2222-222222222222")
+PROJECT_ID = UUID("33333333-3333-3333-3333-333333333333")
+# The routes below run from this sending point to this receiving point.
+SEND = (-97.74, 30.27)
+RECV = (-96.80, 32.78)
 ROUTE = {
     "type": "MultiLineString",
     "coordinates": [[[-97.74, 30.27], [-96.80, 32.78]]],
@@ -58,19 +62,67 @@ def _record(**overrides):
         "updated_at": datetime(2026, 10, 13, tzinfo=UTC),
         "route": None,
         "segments": None,
+        "project_id": PROJECT_ID,
     }
     row.update(overrides)
     return row
 
 
+def _project_row():
+    """The project these scenario rows belong to, owned by ``USER_ID``."""
+    return {
+        "id": PROJECT_ID,
+        "user_id": UUID(USER_ID),
+        "base_scenario_id": SCENARIO_ID,
+        "sending_lon": SEND[0],
+        "sending_lat": SEND[1],
+        "receiving_lon": RECV[0],
+        "receiving_lat": RECV[1],
+    }
+
+
 class _Capture:
+    """Scenario rows come off the queue. The project and paper checks do not.
+
+    Every write loads the project first. That row is ``_project_row``, so a
+    test does not have to enqueue it.
+    """
+
     def __init__(self, rows):
         self.rows = list(rows)
         self.calls: list[tuple[str, tuple]] = []
+        self.project = _project_row()
 
     async def fetchrow(self, sql, *args):
         self.calls.append((sql, args))
+        low = " ".join(sql.lower().split())
+        if low.startswith("select") and "from public.project" in low:
+            return self.project
+        if "source = 'paper'" in low:
+            return {"is_paper": False}
+        if not self.rows:
+            raise AssertionError(sql)
         return self.rows.pop(0)
+
+
+def _insert_call(conn: _Capture) -> tuple[str, tuple]:
+    matches = [
+        (sql, args)
+        for sql, args in conn.calls
+        if "insert into public.scenario" in " ".join(sql.lower().split())
+    ]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def _update_call(conn: _Capture) -> tuple[str, tuple]:
+    matches = [
+        (sql, args)
+        for sql, args in conn.calls
+        if "update public.scenario" in " ".join(sql.lower().split())
+    ]
+    assert len(matches) == 1
+    return matches[0]
 
 
 def _patch_db(monkeypatch, conn: _Capture) -> None:
@@ -113,6 +165,7 @@ def _create_payload(**overrides) -> ScenarioCreate:
         "source": "manual",
         "defaults_id": scenarios_module._DEFAULTS_ID,
         "changes": {"kept": True},
+        "project_id": str(PROJECT_ID),
     }
     fields.update(overrides)
     return ScenarioCreate(**fields)
@@ -141,7 +194,10 @@ def test_create_without_route_is_422_and_does_not_insert(monkeypatch):
 
     assert response.status_code == 422
     assert json.loads(response.body) == {"detail": ROUTE_REQUIRED}
-    assert conn.calls == []
+    assert not any(
+        "insert into public.scenario" in " ".join(sql.lower().split())
+        for sql, _args in conn.calls
+    )
 
 
 def test_create_with_route_passes_geojson_text(monkeypatch):
@@ -158,7 +214,7 @@ def test_create_with_route_passes_geojson_text(monkeypatch):
     )
 
     assert response.status_code == 201
-    _sql, args = conn.calls[0]
+    _sql, args = _insert_call(conn)
     assert args[10] == json.dumps(ROUTE)
     assert args[11] == json.dumps(SEGMENTS)
     body = json.loads(response.body)
@@ -191,7 +247,7 @@ def test_create_stores_measured_changes_and_layer_releases(monkeypatch):
     route, width = calls[0]
     assert width == 100
     assert route.model_dump() == AUSTIN_DALLAS_ROUTE
-    sql, args = conn.calls[0]
+    sql, args = _insert_call(conn)
     assert json.loads(args[4])[FORESTED] == 10
     assert "layer_releases" in sql
     assert json.dumps(LAYER_RELEASES) in args
@@ -213,7 +269,7 @@ def test_update_name_only_does_not_rewrite_route(monkeypatch):
 
     assert response.status_code == 200
     select_sql, _select_args = conn.calls[0]
-    update_sql, _update_args = conn.calls[1]
+    update_sql, _update_args = _update_call(conn)
     assert "ST_AsGeoJSON(route)::jsonb AS route" in select_sql
     assert "ST_GeomFromGeoJSON" not in update_sql
     assert "segments =" not in update_sql
@@ -242,8 +298,7 @@ def test_update_name_only_does_not_call_analysis_or_assign_layer_releases(monkey
 
     assert response.status_code == 200
     assert calls == []
-    _select_sql, _select_args = conn.calls[0]
-    update_sql, _update_args = conn.calls[1]
+    update_sql, _update_args = _update_call(conn)
     assert "layer_releases =" not in update_sql
 
 
@@ -273,7 +328,7 @@ def test_update_with_changes_stores_measured_miles_and_layer_releases(monkeypatc
     route, width = calls[0]
     assert width == 100
     assert route.model_dump() == AUSTIN_DALLAS_ROUTE
-    update_sql, update_args = conn.calls[1]
+    update_sql, update_args = _update_call(conn)
     assert json.loads(update_args[2])[FORESTED] == 10
     assert "layer_releases =" in update_sql
     assert json.dumps(LAYER_RELEASES) in update_args
@@ -303,7 +358,7 @@ def test_update_omitted_route_measures_stored_line_and_does_not_assign_it(monkey
     route, width = calls[0]
     assert width == 100
     assert route.model_dump() == AUSTIN_DALLAS_ROUTE
-    update_sql, _update_args = conn.calls[1]
+    update_sql, _update_args = _update_call(conn)
     assert "ST_GeomFromGeoJSON" not in update_sql
     assert "layer_releases =" in update_sql
 
@@ -338,8 +393,9 @@ def test_update_explicit_null_route_while_recalculating_is_422(monkeypatch):
     assert response.status_code == 422
     assert json.loads(response.body) == {"detail": ROUTE_REQUIRED}
     assert calls == []
-    assert len(conn.calls) == 1
-    assert "update public.scenario" not in conn.calls[0][0]
+    assert not any(
+        "update public.scenario" in " ".join(sql.lower().split()) for sql, _args in conn.calls
+    )
 
 
 def test_update_recalculate_rejects_non_positive_width(monkeypatch):
@@ -360,8 +416,9 @@ def test_update_recalculate_rejects_non_positive_width(monkeypatch):
     assert response.status_code == 422
     assert json.loads(response.body) == {"detail": "row_width_ft must be positive"}
     assert calls == []
-    assert len(conn.calls) == 1
-    assert "update public.scenario" not in conn.calls[0][0]
+    assert not any(
+        "update public.scenario" in " ".join(sql.lower().split()) for sql, _args in conn.calls
+    )
 
 
 def test_update_sets_route_and_segments_when_present(monkeypatch):
@@ -377,7 +434,7 @@ def test_update_sets_route_and_segments_when_present(monkeypatch):
     )
 
     assert response.status_code == 200
-    update_sql, update_args = conn.calls[1]
+    update_sql, update_args = _update_call(conn)
     assert "ST_GeomFromGeoJSON" in update_sql
     assert "ST_SetSRID" in update_sql
     assert "segments =" in update_sql
@@ -401,7 +458,7 @@ def test_update_route_only_leaves_segments_unchanged(monkeypatch):
     )
 
     assert response.status_code == 200
-    update_sql, update_args = conn.calls[1]
+    update_sql, update_args = _update_call(conn)
     assert "ST_GeomFromGeoJSON" in update_sql
     assert "segments =" not in update_sql
     assert json.dumps(ROUTE) in update_args
@@ -421,7 +478,7 @@ def test_update_explicit_null_clears_route_and_segments(monkeypatch):
     )
 
     assert response.status_code == 200
-    update_sql, update_args = conn.calls[1]
+    update_sql, update_args = _update_call(conn)
     assert "ST_GeomFromGeoJSON" in update_sql
     assert "segments =" in update_sql
     geom_index = update_sql.index("ST_GeomFromGeoJSON")
