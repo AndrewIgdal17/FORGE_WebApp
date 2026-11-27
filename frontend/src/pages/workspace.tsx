@@ -53,6 +53,7 @@ import type { TerminalFootprints } from '@/lib/terminals';
 import { useFormStore } from '@/stores/form-store';
 import {
   clearLastWorkspace,
+  projectScenarioMap,
   readLastWorkspace,
   reconcileRemembered,
   workspaceEntry,
@@ -672,14 +673,22 @@ function WorkspaceBody(): ReactElement {
         let requestedProject = params.get('project');
         let requestedId = params.get('scenario');
         if (useProjectStore.getState().loaded) {
+          const { projects } = useProjectStore.getState();
+          const { scenarios } = useScenarioStore.getState();
+          const pendingDraft = useScenarioStore.getState().pendingDraft !== null;
+          // Only a bare visit reads (and may clear) the remembered workspace.
+          const bareVisit =
+            !pendingDraft &&
+            !params.get('project') &&
+            !params.get('scenario') &&
+            params.get('new') !== '1';
           const entry = workspaceEntry({
             params,
-            pendingDraft: useScenarioStore.getState().pendingDraft !== null,
-            remembered: rememberedForEntry(),
-            projectIds: useProjectStore.getState().projects.map((project) => project.id),
-            scenarioProjects: new Map(
-              useScenarioStore.getState().scenarios.map((item) => [item.id, item.project_id]),
-            ),
+            pendingDraft,
+            remembered: bareVisit ? rememberedForEntry() : null,
+            projectIds: projects.map((project) => project.id),
+            scenarioProjects: new Map(scenarios.map((item) => [item.id, item.project_id])),
+            projectScenarios: projectScenarioMap(projects, scenarios),
           });
           if (entry.kind === 'projects') {
             navigateRef.current('/app/projects', { replace: true });

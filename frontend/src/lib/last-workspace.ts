@@ -60,6 +60,21 @@ export function reconcileRemembered(
   return fallback ? { project: project.id, scenario: fallback.id } : null;
 }
 
+/**
+ * Each loaded project to its base scenario, else its first scenario; null when
+ * it has none. Projects that are not loaded are absent from the map.
+ */
+export function projectScenarioMap(
+  projects: ReadonlyArray<{ id: string; base_scenario_id: string | null }>,
+  scenarios: Scenario[],
+): Map<string, string | null> {
+  const map = new Map<string, string | null>();
+  for (const project of projects) {
+    map.set(project.id, scenarioForWorkspace(project, scenarios)?.id ?? null);
+  }
+  return map;
+}
+
 export type WorkspaceEntry =
   | { kind: 'stay' }
   | { kind: 'open'; project: string; scenario: string }
@@ -74,22 +89,32 @@ export interface WorkspaceEntryInput {
   projectIds: readonly string[];
   /** Scenario id to its project id (null when the scenario has no project). Missing ids are not loaded. */
   scenarioProjects: ReadonlyMap<string, string | null>;
+  /** Project id to its base or first scenario id (see projectScenarioMap). Missing ids are not loaded. */
+  projectScenarios: ReadonlyMap<string, string | null>;
 }
 
 /**
  * Decides what /app/workspace should do on load. The wizard (new=1), a pending
- * imported draft, and any URL that already names a project stay where they are.
- * A scenario-only URL opens that scenario's project when it is loaded. A bare
- * visit opens the remembered workspace when its project exists. Anything else
- * goes to the project list.
+ * imported draft, and a URL naming both project and scenario stay where they are.
+ * A project-only URL opens that project's base or first scenario. A scenario-only
+ * URL opens that scenario's project. A bare visit opens the remembered workspace
+ * when its project exists. Anything else goes to the project list.
  */
 export function workspaceEntry(input: WorkspaceEntryInput): WorkspaceEntry {
-  const { params, pendingDraft, remembered, projectIds, scenarioProjects } = input;
+  const { params, pendingDraft, remembered, projectIds, scenarioProjects, projectScenarios } =
+    input;
   if (pendingDraft) return { kind: 'stay' };
   if (params.get('new') === '1') return { kind: 'stay' };
-  if (params.get('project')) return { kind: 'stay' };
 
+  const projectId = params.get('project');
   const scenarioId = params.get('scenario');
+  if (projectId && scenarioId) return { kind: 'stay' };
+  if (projectId) {
+    const base = projectScenarios.get(projectId) ?? null;
+    if (!base) return { kind: 'projects' };
+    return { kind: 'open', project: projectId, scenario: base };
+  }
+
   if (scenarioId) {
     if (!scenarioProjects.has(scenarioId)) return { kind: 'projects' };
     const projectId = scenarioProjects.get(scenarioId) ?? null;

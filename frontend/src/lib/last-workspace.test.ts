@@ -7,6 +7,7 @@ vi.mock('@/lib/supabase', () => ({
 import {
   clearLastWorkspace,
   readLastWorkspace,
+  projectScenarioMap,
   reconcileRemembered,
   workspaceEntry,
   writeLastWorkspace,
@@ -128,12 +129,38 @@ describe('reconcileRemembered', () => {
   });
 });
 
+describe('projectScenarioMap', () => {
+  it('maps each project to its base scenario, else its first, else null', () => {
+    const map = projectScenarioMap(
+      [
+        { id: 'p1', base_scenario_id: 's2' },
+        { id: 'p2', base_scenario_id: null },
+        { id: 'p3', base_scenario_id: null },
+      ],
+      [
+        scenario('s1', 'p1', '2026-01-01'),
+        scenario('s2', 'p1', '2026-01-02'),
+        scenario('s3', 'p2', '2026-01-01'),
+      ],
+    );
+    expect(map.get('p1')).toBe('s2');
+    expect(map.get('p2')).toBe('s3');
+    expect(map.get('p3')).toBeNull();
+    expect(map.has('gone')).toBe(false);
+  });
+});
+
 describe('workspaceEntry', () => {
   const remembered = { project: 'p1', scenario: 's1' };
   const projectIds = ['p1', 'p2'];
   const scenarioProjects = new Map<string, string | null>([
     ['s3', 'p2'],
     ['free', null],
+  ]);
+  const projectScenarios = new Map<string, string | null>([
+    ['p1', 's1'],
+    ['p2', 's3'],
+    ['p3', null],
   ]);
   const entry = (
     query: string,
@@ -149,6 +176,7 @@ describe('workspaceEntry', () => {
       remembered: overrides.remembered === undefined ? remembered : overrides.remembered,
       projectIds: overrides.projectIds ?? projectIds,
       scenarioProjects,
+      projectScenarios,
     });
 
   it('opens the remembered workspace on a bare visit when its project exists', () => {
@@ -175,8 +203,17 @@ describe('workspaceEntry', () => {
     expect(entry('project=p2&scenario=s9')).toEqual({ kind: 'stay' });
   });
 
-  it('stays when a project is named without a scenario', () => {
-    expect(entry('project=p2')).toEqual({ kind: 'stay' });
+  it('opens the base or first scenario when only a project is named', () => {
+    expect(entry('project=p1')).toEqual({ kind: 'open', project: 'p1', scenario: 's1' });
+    expect(entry('project=p2')).toEqual({ kind: 'open', project: 'p2', scenario: 's3' });
+  });
+
+  it('sends a project-only URL to /app/projects when the project has no scenarios', () => {
+    expect(entry('project=p3')).toEqual({ kind: 'projects' });
+  });
+
+  it('sends a project-only URL to /app/projects when the project is not loaded', () => {
+    expect(entry('project=gone')).toEqual({ kind: 'projects' });
   });
 
   it('redirects a scenario-only URL to the scenario project when the scenario is loaded', () => {
