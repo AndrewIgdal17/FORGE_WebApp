@@ -110,7 +110,9 @@ async def footprint_geojson(conn, gid: int) -> dict | None:
 
 
 def _parsed_gid(gid: str) -> int | None:
-    if not gid.isdigit():
+    # ASCII digits only: str.isdigit() also accepts "²" and other scripts'
+    # digits, which int() then rejects. At most 10 digits keeps int() cheap.
+    if not (1 <= len(gid) <= 10) or not gid.isascii() or not gid.isdigit():
         return None
     parsed = int(gid)
     if parsed > _INT4_MAX:

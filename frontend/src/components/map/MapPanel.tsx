@@ -36,6 +36,8 @@ import { useFormStore } from '@/stores/form-store';
 import { useMapStore } from '@/stores/map-store';
 import type { DraftTerminal } from '@/stores/scenario-store';
 
+const TERMINAL_MISMATCH_TOAST_ID = 'route-terminal-mismatch';
+
 const NO_MARKERS: readonly TerminalMarkerSpec[] = [];
 
 export interface MapPanelProps {
@@ -113,7 +115,10 @@ export function MapPanel({
   }, [map, onZoom]);
 
   const onTerminalMismatch = useCallback((message: string) => {
-    toast.error(message);
+    toast.error(message, { id: TERMINAL_MISMATCH_TOAST_ID });
+  }, []);
+  const onTerminalMatch = useCallback(() => {
+    toast.dismiss(TERMINAL_MISMATCH_TOAST_ID);
   }, []);
   const {
     mode,
@@ -125,7 +130,7 @@ export function MapPanel({
     redo,
     reset,
     isDrawing,
-  } = useRouteDraw(map, { terminals: drawTerminals, onTerminalMismatch });
+  } = useRouteDraw(map, { terminals: drawTerminals, onTerminalMismatch, onTerminalMatch });
   const endpointSubstationsRef = useRef(endpointSubstations);
   endpointSubstationsRef.current = endpointSubstations;
   const { analyze, loading, error } = useRouteAnalyze();

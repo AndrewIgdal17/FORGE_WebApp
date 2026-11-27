@@ -13,8 +13,8 @@ import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 import {
   TERMINAL_TOLERANCE_M,
   haversineM,
+  mismatchTransition,
   routeEndsMatch,
-  routeFinishMessage,
   type TerminalFootprints,
 } from '@/lib/terminals';
 
@@ -44,6 +44,8 @@ export interface DrawTerminals {
 export interface RouteDrawOptions {
   terminals?: DrawTerminals | null;
   onTerminalMismatch?: (message: string) => void;
+  /** Called once a route that failed the terminal check passes it. */
+  onTerminalMatch?: () => void;
 }
 
 export interface SubstationHit {
@@ -318,6 +320,8 @@ export function useRouteDraw(
   terminalsRef.current = options?.terminals ?? null;
   const onMismatchRef = useRef(options?.onTerminalMismatch);
   onMismatchRef.current = options?.onTerminalMismatch;
+  const onMatchRef = useRef(options?.onTerminalMatch);
+  onMatchRef.current = options?.onTerminalMatch;
   const lastMismatchRef = useRef<string | null>(null);
   const [mode, setModeState] = useState<DrawMode>(DRAW_MODE);
   const [routeGeoJSON, setRouteGeoJSON] = useState<MultiLineString | null>(null);
@@ -335,14 +339,10 @@ export function useRouteDraw(
       terminals.receiving,
       terminals.footprints,
     );
-    if (match.ok) {
-      lastMismatchRef.current = null;
-      return;
-    }
-    const message = routeFinishMessage(match.end, match.distanceM);
-    if (lastMismatchRef.current === message) return;
-    lastMismatchRef.current = message;
-    onMismatchRef.current?.(message);
+    const step = mismatchTransition(lastMismatchRef.current, match);
+    lastMismatchRef.current = step.next;
+    if (step.action === 'show') onMismatchRef.current?.(step.message);
+    if (step.action === 'clear') onMatchRef.current?.();
   }, []);
 
   useEffect(() => {

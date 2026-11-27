@@ -105,6 +105,25 @@ export function routeFinishMessage(end: 'sending' | 'receiving', distanceM: numb
   );
 }
 
+export type MismatchTransition =
+  | { action: 'show'; message: string; next: string }
+  | { action: 'clear'; next: null }
+  | { action: 'none'; next: string | null };
+
+/**
+ * What to do with the end-of-drawing message when the check runs again
+ * (a finished line, an edited vertex, or footprints arriving late). A message
+ * shown earlier is cleared once the route passes, so it cannot linger.
+ */
+export function mismatchTransition(previous: string | null, match: RouteEnds): MismatchTransition {
+  if (match.ok) {
+    return previous === null ? { action: 'none', next: null } : { action: 'clear', next: null };
+  }
+  const message = routeFinishMessage(match.end, match.distanceM);
+  if (message === previous) return { action: 'none', next: previous };
+  return { action: 'show', message, next: message };
+}
+
 /** Point terminal name: latitude, then longitude, four decimals. Matches the API. */
 export function pointTerminalName(point: [number, number]): string {
   const [lon, lat] = point;

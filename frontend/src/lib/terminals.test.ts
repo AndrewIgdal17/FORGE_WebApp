@@ -4,6 +4,7 @@ import type { MultiLineString, MultiPolygon, Polygon } from 'geojson';
 import {
   TERMINAL_TOLERANCE_M,
   haversineM,
+  mismatchTransition,
   routeEndsMatch,
   routeFinishMessage,
 } from './terminals';
@@ -184,5 +185,19 @@ describe('routeFinishMessage', () => {
     expect(routeFinishMessage('receiving', 250.7)).toBe(
       "The route's receiving end is 251 m from the project's receiving terminal; it must be within 100 m, or inside the substation's footprint and within 1 km.",
     );
+  });
+});
+
+describe('mismatchTransition', () => {
+  it('shows a message once, then clears it when the route later passes', () => {
+    const fail = { ok: false as const, end: 'sending' as const, distanceM: 183 };
+    const first = mismatchTransition(null, fail);
+    expect(first.action).toBe('show');
+    if (first.action !== 'show') throw new Error('expected show');
+    expect(first.next).toBe(first.message);
+    expect(mismatchTransition(first.next, fail).action).toBe('none');
+    const cleared = mismatchTransition(first.next, { ok: true });
+    expect(cleared).toEqual({ action: 'clear', next: null });
+    expect(mismatchTransition(null, { ok: true })).toEqual({ action: 'none', next: null });
   });
 });

@@ -526,18 +526,24 @@ def test_invalid_changes_return_422_with_path(client, make_user):
     assert "01_project_technical_details.project.capacity_mw" in body["error"]["paths"]
 
 
-def test_calculator_failure_stores_calc_error(client, make_user):
-    """The deployed defaults alone (capacity_mw=0) make run_calculation raise;
-    resolve_inputs still succeeds, so the row is saved with calc_error set."""
+def test_calculator_failure_stores_calc_error(client, make_user, monkeypatch):
+    """Valid inputs whose calculation raises are saved with calc_error set.
+
+    Required-input checks now refuse incomplete changes before the calculator
+    runs (422), so the failure is forced inside run_calculation itself.
+    """
+    from forge.errors import CalculationError
+
+    def failing_run(*_args, **_kwargs):
+        raise CalculationError("forced failure for the calc_error path")
+
+    monkeypatch.setattr(scenarios_module.forge, "run_calculation", failing_run)
     _, token = make_user("calc-failure")
     made = _make_project(client, token)
 
     response = client.post(
         "/api/scenarios",
-        json=_scenario_payload(
-            made["project"]["id"],
-            changes={path: 0.0 for path in ACRE_PATHS},
-        ),
+        json=_scenario_payload(made["project"]["id"]),
         headers=_headers(token),
     )
 
@@ -547,8 +553,7 @@ def test_calculator_failure_stores_calc_error(client, make_user):
     assert body["calculator"] is None
     assert body["inputs_id"] is None
     assert body["computed_at"] is None
-    assert body["calc_error"]
-    assert "capacity_mw" in body["calc_error"]
+    assert "forced failure for the calc_error path" in body["calc_error"]
 
 
 def test_missing_protected_area_acres_are_rejected(client, make_user):

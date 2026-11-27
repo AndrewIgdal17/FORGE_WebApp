@@ -277,3 +277,13 @@ def test_point_terminal_never_queries_footprint(monkeypatch):
     assert pool.acquires == 0
     assert footprint.calls == []
     assert not any("ref.substations" in sql.lower() for sql, _args in conn.calls)
+
+
+def test_parsed_gid_accepts_only_ascii_digits_in_int4_range():
+    from app.footprints import _parsed_gid
+
+    assert _parsed_gid("85896") == 85896
+    assert _parsed_gid("0") == 0
+    assert _parsed_gid("2147483647") == 2_147_483_647
+    for odd in ["²", "١٢", "12a", "", " 12", "-1", "+1", "1.0", "2147483648", "0" * 40 + "1"]:
+        assert _parsed_gid(odd) is None, odd
