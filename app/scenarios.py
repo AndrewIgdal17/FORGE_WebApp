@@ -30,6 +30,7 @@ from . import auth as auth_module
 from . import db as db_module
 from .models import ScenarioCreate, ScenarioUpdate, sanitize_for_json
 from .route import ROUTE_REQUIRED, RouteGeometry, run_route_analysis
+from .terminals import TerminalMismatch, mismatch_message, snap_route_to_terminals
 
 logger = logging.getLogger(__name__)
 
@@ -125,9 +126,9 @@ def _row_to_dict(record) -> dict:
     # asyncpg has no jsonb codec, so route and segments may arrive as text.
     for key in ("changes", "results", "calculator", "route", "segments", "layer_releases"):
         row[key] = _decode_jsonb(row.get(key))
-    for key in ("id", "user_id"):
-        if isinstance(row.get(key), UUID):
-            row[key] = str(row[key])
+    for key, value in list(row.items()):
+        if isinstance(value, UUID):
+            row[key] = str(value)
     for key in ("computed_at", "created_at", "updated_at"):
         value = row.get(key)
         if isinstance(value, datetime):
@@ -296,11 +297,23 @@ async def _measure_changes(
 # --- Business logic ------------------------------------------------------------
 
 
-async def create_scenario(user_id: str, payload: ScenarioCreate) -> JSONResponse:
-    # Check order: auth (already done by the route's dependency) -> stale_defaults
-    # -> route and row width -> rate limit -> route analysis -> calculate ->
-    # save. A missing route, a non-positive width, or stale defaults never
-    # burns a rate-limit slot.
+async def prepare_scenario_insert(
+    user_id: str,
+    payload: ScenarioCreate,
+    terminals: tuple[tuple[float, float], tuple[float, float]] | None,
+) -> dict | JSONResponse:
+    """Run every create check and return the values an insert needs.
+
+    Check order matches the historical ``create_scenario`` path: stale
+    defaults, route shape, row width, then (only when ``terminals`` is set)
+    the terminal snap, then write and calculation rate limits, route
+    analysis, and the calculator. A missing route, a non-positive width,
+    stale defaults, or a terminal mismatch never burns a rate-limit slot.
+
+    ``terminals`` is ``(sending, receiving)`` as ``(lon, lat)``. When it is
+    set, the returned route is the snapped copy. ``None`` leaves the route
+    unchanged, which is how a scenario create with no project still behaves.
+    """
     if payload.defaults_id != _DEFAULTS_ID:
         return _error(
             status.HTTP_409_CONFLICT,
@@ -312,6 +325,18 @@ async def create_scenario(user_id: str, payload: ScenarioCreate) -> JSONResponse
     if isinstance(prepared, JSONResponse):
         return prepared
     geometry, row_width_ft = prepared
+    route_value = payload.route
+
+    if terminals is not None:
+        snapped = snap_route_to_terminals(payload.route, terminals[0], terminals[1])
+        if isinstance(snapped, TerminalMismatch):
+            return _error(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "route_terminals_mismatch",
+                mismatch_message(snapped),
+            )
+        route_value = snapped
+        geometry = RouteGeometry.model_validate(snapped)
 
     if not auth_module.rate_limiter.allow_write(user_id):
         return _rate_limited()
@@ -327,34 +352,72 @@ async def create_scenario(user_id: str, payload: ScenarioCreate) -> JSONResponse
     if error_response is not None:
         return error_response
 
+    return {
+        "name": payload.name,
+        "source": payload.source,
+        "defaults_id": payload.defaults_id,
+        "changes": changes,
+        "results": calc_fields["results"],
+        "calculator": calc_fields["calculator"],
+        "inputs_id": calc_fields["inputs_id"],
+        "computed_at": calc_fields["computed_at"],
+        "calc_error": calc_fields["calc_error"],
+        "route": route_value,
+        "segments": payload.segments,
+        "layer_releases": releases,
+    }
+
+
+async def insert_scenario(
+    conn,
+    user_id: str,
+    project_id: UUID | None,
+    values: dict,
+):
+    """Insert one scenario on an open ``forge_api`` transaction.
+
+    ``project_id`` is null for a scenario create that has no project yet.
+    The column stays nullable until the later not-null migration. Argument
+    order through ``layer_releases`` matches the pre-project insert so
+    existing route tests keep their positions.
+    """
+    return await conn.fetchrow(
+        f"""
+        insert into public.scenario
+            (user_id, name, source, defaults_id, changes,
+             results, calculator, inputs_id, computed_at, calc_error,
+             route, segments, layer_releases, project_id)
+        values
+            ($1, $2, $3, $4, $5::jsonb,
+             $6::jsonb, $7::jsonb, $8, $9, $10,
+             ST_SetSRID(ST_GeomFromGeoJSON($11::text), 4326), $12::jsonb,
+             $13::jsonb, $14)
+        returning {_SCENARIO_COLUMNS}
+        """,
+        UUID(user_id),
+        values["name"],
+        values["source"],
+        values["defaults_id"],
+        json.dumps(values["changes"]),
+        _jsonb_param(values["results"]),
+        _jsonb_param(values["calculator"]),
+        values["inputs_id"],
+        values["computed_at"],
+        values["calc_error"],
+        _geojson_param(values["route"]),
+        _jsonb_param(values["segments"]),
+        _jsonb_param(values["layer_releases"]),
+        project_id,
+    )
+
+
+async def create_scenario(user_id: str, payload: ScenarioCreate) -> JSONResponse:
+    prepared = await prepare_scenario_insert(user_id, payload, None)
+    if isinstance(prepared, JSONResponse):
+        return prepared
+
     async with db_module.forge_api_transaction(user_id) as conn:
-        record = await conn.fetchrow(
-            f"""
-            insert into public.scenario
-                (user_id, name, source, defaults_id, changes,
-                 results, calculator, inputs_id, computed_at, calc_error,
-                 route, segments, layer_releases)
-            values
-                ($1, $2, $3, $4, $5::jsonb,
-                 $6::jsonb, $7::jsonb, $8, $9, $10,
-                 ST_SetSRID(ST_GeomFromGeoJSON($11::text), 4326), $12::jsonb,
-                 $13::jsonb)
-            returning {_SCENARIO_COLUMNS}
-            """,
-            UUID(user_id),
-            payload.name,
-            payload.source,
-            payload.defaults_id,
-            json.dumps(changes),
-            _jsonb_param(calc_fields["results"]),
-            _jsonb_param(calc_fields["calculator"]),
-            calc_fields["inputs_id"],
-            calc_fields["computed_at"],
-            calc_fields["calc_error"],
-            _geojson_param(payload.route),
-            _jsonb_param(payload.segments),
-            _jsonb_param(releases),
-        )
+        record = await insert_scenario(conn, user_id, None, prepared)
 
     return JSONResponse(status_code=status.HTTP_201_CREATED, content=_row_to_dict(record))
 

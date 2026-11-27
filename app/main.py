@@ -28,6 +28,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from . import auth as auth_module
 from . import db as db_module
+from . import projects as projects_module
 from . import route as route_module
 from . import scenarios as scenarios_module
 from .audit import router as audit_router
@@ -256,6 +257,7 @@ app.add_middleware(BodySizeLimitMiddleware)
 # No CORS middleware: the browser and the API are served from the same origin.
 
 app.include_router(scenarios_module.router)
+app.include_router(projects_module.router)
 app.include_router(route_module.router)
 app.include_router(audit_router)
 

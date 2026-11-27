@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 def _sanitize_floats_for_json(obj: Any) -> Any:
@@ -57,3 +57,37 @@ class ScenarioUpdate(BaseModel):
     route: dict[str, Any] | None = None
     segments: list[dict[str, Any]] | None = None
     row_width_ft: float | None = None
+
+
+class TerminalIn(BaseModel):
+    """One project end: a substation gid or a lon/lat point, never both."""
+
+    substation_gid: int | None = None
+    point: tuple[float, float] | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> TerminalIn:
+        has_gid = self.substation_gid is not None
+        has_point = self.point is not None
+        if has_gid == has_point:
+            raise ValueError("Set exactly one of substation_gid or point.")
+        return self
+
+
+class ProjectCreate(BaseModel):
+    """A project and the first scenario that connects its terminals.
+
+    ``scenario`` is a scenario create body. It has no ``project_id``; the
+    server assigns the new project.
+    """
+
+    name: str | None = None
+    sending: TerminalIn
+    receiving: TerminalIn
+    scenario: ScenarioCreate
+
+
+class ProjectUpdate(BaseModel):
+    revision: int
+    name: str | None = None
+    base_scenario_id: str | None = None
