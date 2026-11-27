@@ -119,6 +119,44 @@ export interface AnalyzeResponse {
   open_water_miles?: number;
 }
 
+export type TerminalIn =
+  | { substation_gid: number; point?: undefined }
+  | { point: [number, number]; substation_gid?: undefined };
+
+export interface ProjectCreate {
+  name?: string;
+  sending: TerminalIn;
+  receiving: TerminalIn;
+  scenario: ScenarioCreate;
+}
+
+export interface ProjectUpdate {
+  revision: number;
+  name?: string;
+  base_scenario_id?: string;
+}
+
+export interface GeoJsonPoint {
+  type: 'Point';
+  coordinates: [number, number];
+}
+
+export interface ProjectResponse {
+  id: string;
+  user_id: string;
+  name: string;
+  sending_substation_gid: number | null;
+  receiving_substation_gid: number | null;
+  sending_name: string;
+  receiving_name: string;
+  sending_point: GeoJsonPoint;
+  receiving_point: GeoJsonPoint;
+  base_scenario_id: string | null;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ScenarioCreate {
   name: string;
   source: string;
@@ -127,6 +165,7 @@ export interface ScenarioCreate {
   route: Record<string, unknown>;
   segments?: unknown[] | null;
   row_width_ft: number;
+  project_id?: string;
 }
 
 export interface ScenarioUpdate {
@@ -304,6 +343,53 @@ export async function deleteScenario(id: string): Promise<void> {
   await apiFetch<void>(`/api/scenarios/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
+}
+
+export async function createProject(
+  payload: ProjectCreate,
+): Promise<{ project: ProjectResponse; scenario: ScenarioResponse }> {
+  return apiFetch<{ project: ProjectResponse; scenario: ScenarioResponse }>(
+    '/api/projects',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function updateProject(
+  id: string,
+  payload: ProjectUpdate,
+): Promise<ProjectResponse> {
+  return apiFetch<ProjectResponse>(
+    `/api/projects/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  await apiFetch<void>(`/api/projects/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function duplicateProject(
+  id: string,
+): Promise<{ project: ProjectResponse; scenarios: ScenarioResponse[] }> {
+  return apiFetch<{ project: ProjectResponse; scenarios: ScenarioResponse[] }>(
+    `/api/projects/${encodeURIComponent(id)}/duplicate`,
+    { method: 'POST' },
+  );
+}
+
+export async function duplicateScenarioApi(id: string): Promise<ScenarioResponse> {
+  return apiFetch<ScenarioResponse>(
+    `/api/scenarios/${encodeURIComponent(id)}/duplicate`,
+    { method: 'POST' },
+  );
 }
 
 export type PhaseADecision =
