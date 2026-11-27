@@ -3,7 +3,9 @@ import type { ReactElement } from 'react';
 import type { MultiLineString } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { toast } from 'sonner';
+import { CircuitPicker } from '@/components/map/CircuitPicker';
 import { DrawingToolbar } from '@/components/map/DrawingToolbar';
+import { LineSelectPanel } from '@/components/map/LineSelectPanel';
 import { applyDrawnRouteReset } from '@/components/map/drawn-route-reset';
 import {
   finishedRouteStep,
@@ -21,6 +23,7 @@ import {
   type TerminalMarkerSpec,
 } from '@/components/map/terminal-markers';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { useLineSelect } from '@/hooks/use-line-select';
 import { useRouteAnalyze } from '@/hooks/use-route-analyze';
 import {
   SUBSTATION_SNAP_MIN_ZOOM,
@@ -29,7 +32,9 @@ import {
   type DrawTerminals,
   type EndpointSubstations,
 } from '@/hooks/use-route-draw';
-import type { AnalyzeResponse } from '@/lib/api';
+import { ApiError, assembleLine, type AnalyzeResponse, type AssembleLinePiece, type LineConnector, type LineSelectionIn } from '@/lib/api';
+import { selectionSummary, toggleGid } from '@/lib/line-select';
+import type { CorridorCandidate } from '@/lib/line-select';
 import { resolvedRowWidthFt, rowWidthProblem } from '@/lib/analyze-request';
 import { pointTerminalName } from '@/lib/terminals';
 import { useFormStore } from '@/stores/form-store';
@@ -43,8 +48,13 @@ const NO_MARKERS: readonly TerminalMarkerSpec[] = [];
 export interface MapPanelProps {
   createMode?: boolean;
   drawingEnabled?: boolean;
+  lineSelectEnabled?: boolean;
   existingRoute?: MultiLineString | null;
+  initialSelectedGids?: number[];
+  storedConnectors?: LineConnector[];
+  terminalSubstations?: { sending: number | null; receiving: number | null };
   onRouteChange?: (route: MultiLineString | null, segments: unknown[] | null) => void;
+  onLineSelectionCommit?: (selection: LineSelectionIn | null) => void;
   onAnalyzed?: () => void;
   terminalMarkers?: readonly TerminalMarkerSpec[];
   drawTerminals?: DrawTerminals | null;
@@ -74,11 +84,29 @@ function segmentsFor(
   ];
 }
 
+function assembleErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.body && typeof error.body === 'object') {
+    const body = error.body as Record<string, unknown>;
+    const nested = body.error;
+    if (nested && typeof nested === 'object' && typeof (nested as { message?: string }).message === 'string') {
+      return (nested as { message: string }).message;
+    }
+    if (typeof body.message === 'string' && body.message) return body.message;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return 'Could not assemble the line';
+}
+
 export function MapPanel({
   createMode = true,
   drawingEnabled = true,
+  lineSelectEnabled = false,
   existingRoute = null,
+  initialSelectedGids,
+  storedConnectors,
+  terminalSubstations,
   onRouteChange,
+  onLineSelectionCommit,
   onAnalyzed,
   terminalMarkers = NO_MARKERS,
   drawTerminals = null,
@@ -102,6 +130,47 @@ export function MapPanel({
   onAnalyzedRef.current = onAnalyzed;
   onPickTerminalRef.current = onPickTerminal;
   hasDrawTerminalsRef.current = drawTerminals != null;
+
+  const [selectedGids, setSelectedGids] = useState<number[]>(initialSelectedGids ?? []);
+  const [pickerCandidates, setPickerCandidates] = useState<CorridorCandidate[] | null>(null);
+  const [assembledPieces, setAssembledPieces] = useState<AssembleLinePiece[]>([]);
+  const [assembledConnectors, setAssembledConnectors] = useState<LineConnector[]>(storedConnectors ?? []);
+  const [lineSummary, setLineSummary] = useState<string | null>(null);
+  const [assembleError, setAssembleError] = useState<string | null>(null);
+  const [assembling, setAssembling] = useState(false);
+  const onLineSelectionCommitRef = useRef(onLineSelectionCommit);
+  onLineSelectionCommitRef.current = onLineSelectionCommit;
+
+  useEffect(() => {
+    setSelectedGids(initialSelectedGids ?? []);
+  }, [initialSelectedGids]);
+
+  useEffect(() => {
+    if (storedConnectors) setAssembledConnectors(storedConnectors);
+  }, [storedConnectors]);
+
+  useEffect(() => {
+    if (!lineSelectEnabled) {
+      setSelectedGids([]);
+      setAssembledPieces([]);
+      setAssembledConnectors([]);
+      setLineSummary(null);
+      setAssembleError(null);
+    }
+  }, [lineSelectEnabled]);
+
+  const lineSelectActive = lineSelectEnabled && drawTerminals != null && terminalPick == null;
+  useLineSelect(map, {
+    active: lineSelectActive,
+    selectedGids,
+    onSelectedGids: (gids) => {
+      setSelectedGids(gids);
+      setAssembleError(null);
+      setLineSummary(null);
+      onLineSelectionCommitRef.current?.(null);
+    },
+    onPickerOpen: setPickerCandidates,
+  });
 
   const [zoom, setZoom] = useState<number | null>(null);
   const onZoom = useCallback(() => {
@@ -173,6 +242,7 @@ export function MapPanel({
   }, [createMode, mode]);
 
   useEffect(() => {
+    if (lineSelectEnabled) return;
     const wasDrawing = wasDrawingRef.current;
     wasDrawingRef.current = isDrawing;
 
@@ -204,7 +274,7 @@ export function MapPanel({
     if (wasDrawing || (hasDrawTerminalsRef.current && finishedRouteRef.current === null)) {
       setFinishedRoute(routeGeoJSON);
     }
-  }, [isDrawing, routeGeoJSON, terminalEndsOk]);
+  }, [lineSelectEnabled, isDrawing, routeGeoJSON, terminalEndsOk]);
 
   // Identity refreshes on vertex drag. This effect stays tied to the finished
   // line so a drag does not re-analyze the pre-drag geometry. A missing width
@@ -298,22 +368,92 @@ export function MapPanel({
   }
 
   const showExisting = !clearedExisting && existingRoute && !routeGeoJSON ? existingRoute : null;
-  const statsRoute = routeGeoJSON ?? showExisting;
+  const lineRoute = lineSelectEnabled ? finishedRoute : null;
+  const displayedRoute = lineSelectEnabled ? lineRoute ?? showExisting : showExisting;
+  const statsRoute = routeGeoJSON ?? lineRoute ?? showExisting;
+
+  async function handleUseLine(): Promise<void> {
+    if (!drawTerminals || selectedGids.length === 0) return;
+    const stretchEnd =
+      terminalSubstations?.receiving === null ? drawTerminals.receiving : null;
+    setAssembling(true);
+    setAssembleError(null);
+    try {
+      const response = await assembleLine({
+        gids: selectedGids,
+        sending: drawTerminals.sending,
+        receiving: drawTerminals.receiving,
+        ...(terminalSubstations?.sending !== undefined && terminalSubstations.sending !== null
+          ? { sending_gid: terminalSubstations.sending }
+          : {}),
+        ...(terminalSubstations?.receiving !== undefined && terminalSubstations.receiving !== null
+          ? { receiving_gid: terminalSubstations.receiving }
+          : {}),
+        stretch_end: stretchEnd,
+      });
+      setAssembledPieces(response.pieces);
+      setAssembledConnectors(response.connectors);
+      const summary = selectionSummary(response.pieces, response.connectors);
+      setLineSummary(summary);
+      setFinishedRoute(response.route);
+      requestId.current += 1;
+      setClearedExisting(true);
+      onLineSelectionCommitRef.current?.({
+        gids: selectedGids,
+        stretch_end: stretchEnd,
+      });
+    } catch (error) {
+      setAssembleError(assembleErrorMessage(error));
+    } finally {
+      setAssembling(false);
+    }
+  }
+
+  function handlePickerChoose(candidate: CorridorCandidate): void {
+    setSelectedGids((current) => toggleGid(current, candidate.gid));
+    setPickerCandidates(null);
+    setAssembleError(null);
+    onLineSelectionCommitRef.current?.(null);
+  }
+
+  function handleRemoveGid(gid: number): void {
+    setSelectedGids((current) => current.filter((value) => value !== gid));
+    setAssembleError(null);
+    onLineSelectionCommitRef.current?.(null);
+  }
 
   function handleReset(): void {
     requestId.current += 1;
     setFinishedRoute(null);
     setAnalyzed(null);
     setClearedExisting(true);
+    setSelectedGids([]);
+    setAssembledPieces([]);
+    setAssembledConnectors([]);
+    setLineSummary(null);
+    setAssembleError(null);
+    onLineSelectionCommitRef.current?.(null);
     onRouteChangeRef.current?.(null, null);
     reset();
     if (!drawingEnabled) setMode('select');
     applyDrawnRouteReset();
   }
 
+  const connectorSegments = useMemo(
+  () =>
+    assembledConnectors.map((connector) => ({
+      coordinates: connector.coordinates,
+    })),
+  [assembledConnectors],
+  );
+
   return (
     <div className="relative h-full min-h-0 w-full flex-1 overflow-hidden">
-      <RouteMap onMap={setMap} existingRoute={showExisting} />
+      <RouteMap
+        onMap={setMap}
+        existingRoute={displayedRoute}
+        connectorSegments={connectorSegments}
+      />
       {terminalPick ? (
         <div
           data-terminal-banner
@@ -324,7 +464,25 @@ export function MapPanel({
             : 'Click the receiving substation'}
         </div>
       ) : null}
-      <MapTooltip map={map} isDrawing={isDrawing} />
+      <MapTooltip map={map} isDrawing={isDrawing} lineSelecting={lineSelectActive} />
+      {lineSelectActive ? (
+        <LineSelectPanel
+          selectedGids={selectedGids}
+          pieces={assembledPieces}
+          connectors={assembledConnectors}
+          summary={lineSummary}
+          assembleError={assembleError}
+          assembling={assembling}
+          onRemove={handleRemoveGid}
+          onUseLine={() => { void handleUseLine(); }}
+        />
+      ) : null}
+      <CircuitPicker
+        open={pickerCandidates !== null}
+        candidates={pickerCandidates ?? []}
+        onChoose={handlePickerChoose}
+        onClose={() => setPickerCandidates(null)}
+      />
       <RouteStats
         route={statsRoute}
         isDrawing={isDrawing}
@@ -339,6 +497,8 @@ export function MapPanel({
       <DrawingToolbar
         mode={mode}
         drawingEnabled={drawingEnabled}
+        lineSelectMode={lineSelectEnabled}
+        lineSelectEnabled={lineSelectEnabled && drawTerminals != null}
         onMode={setMode}
         onUndo={undo}
         onRedo={redo}

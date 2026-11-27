@@ -1,0 +1,238 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Popup } from 'maplibre-gl';
+import type {
+  Map as MapLibreMap,
+  MapGeoJSONFeature,
+  MapLayerMouseEvent,
+  MapMouseEvent,
+} from 'maplibre-gl';
+import { hitLayerId } from '@/components/map/RouteMap';
+import {
+  lineSelectTooltip,
+  overlappingCandidates,
+  toggleGid,
+  type CorridorCandidate,
+} from '@/lib/line-select';
+
+const CORRIDOR_HIT = hitLayerId('ref.corridors');
+const SELECTED_SOURCE = 'forge-line-selected';
+const SELECTED_LAYER = 'forge-line-selected-highlight';
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+function propString(properties: MapGeoJSONFeature['properties'], key: string): string | null {
+  const value = properties[key];
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+function propNumber(properties: MapGeoJSONFeature['properties'], key: string): number | null {
+  const primary = properties[key];
+  if (typeof primary === 'number' && Number.isFinite(primary)) return primary;
+  const asString = propString(properties, key);
+  if (!asString) return null;
+  const parsed = Number(asString);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function corridorCandidateFromFeature(feature: MapGeoJSONFeature): CorridorCandidate | null {
+  const gid = propNumber(feature.properties, 'gid');
+  if (gid === null) return null;
+  const voltage_kv =
+    propNumber(feature.properties, 'voltage_kv') ??
+    propNumber(feature.properties, 'voltage');
+  return {
+    gid,
+    voltage_kv,
+    sub_1: propString(feature.properties, 'sub_1'),
+    sub_2: propString(feature.properties, 'sub_2'),
+    source: propString(feature.properties, 'source') ?? '',
+    circuits: propNumber(feature.properties, 'circuits'),
+  };
+}
+
+function ensureSelectedLayers(map: MapLibreMap): void {
+  if (!map.getSource(SELECTED_SOURCE)) {
+    map.addSource(SELECTED_SOURCE, {
+      type: 'vector',
+      url: 'https://tiles.forge-calc.com/ref.corridors',
+      promoteId: 'gid',
+    });
+  }
+  if (!map.getLayer(SELECTED_LAYER)) {
+    map.addLayer({
+      id: SELECTED_LAYER,
+      type: 'line',
+      source: SELECTED_SOURCE,
+      'source-layer': 'ref.corridors',
+      filter: ['in', ['get', 'gid'], ['literal', [] as number[]]],
+      paint: {
+        'line-color': '#2563eb',
+        'line-width': 5,
+        'line-opacity': 0.95,
+      },
+    });
+  }
+}
+
+function syncSelectedFilter(map: MapLibreMap, gids: number[]): void {
+  if (!map.getLayer(SELECTED_LAYER)) return;
+  map.setFilter(SELECTED_LAYER, ['in', ['get', 'gid'], ['literal', [...gids]]]);
+  map.setLayoutProperty(SELECTED_LAYER, 'visibility', gids.length > 0 ? 'visible' : 'none');
+}
+
+export interface UseLineSelectOptions {
+  active: boolean;
+  selectedGids: number[];
+  onSelectedGids: (gids: number[]) => void;
+  onPickerOpen: (candidates: CorridorCandidate[]) => void;
+}
+
+export function useLineSelect(
+  map: MapLibreMap | null,
+  options: UseLineSelectOptions,
+): { hoveredGid: number | null } {
+  const { active, selectedGids, onSelectedGids, onPickerOpen } = options;
+  const activeRef = useRef(active);
+  const selectedRef = useRef(selectedGids);
+  const hoverPopupRef = useRef<Popup | null>(null);
+  const hoveredGidRef = useRef<number | null>(null);
+  const [hoveredGid, setHoveredGid] = useState<number | null>(null);
+  activeRef.current = active;
+  selectedRef.current = selectedGids;
+
+  const toggle = useCallback(
+    (gid: number) => {
+      onSelectedGids(toggleGid(selectedRef.current, gid));
+    },
+    [onSelectedGids],
+  );
+
+  useEffect(() => {
+    if (!map) return;
+    const install = (): void => {
+      if (!map.getLayer(CORRIDOR_HIT)) return;
+      ensureSelectedLayers(map);
+      syncSelectedFilter(map, selectedRef.current);
+    };
+    install();
+    map.on('idle', install);
+    map.on('style.load', install);
+    return () => {
+      map.off('idle', install);
+      map.off('style.load', install);
+    };
+  }, [map]);
+
+  useEffect(() => {
+    if (!map) return;
+    syncSelectedFilter(map, selectedGids);
+  }, [map, selectedGids]);
+
+  useEffect(() => {
+    if (!map || !active) {
+      hoverPopupRef.current?.remove();
+      hoveredGidRef.current = null;
+      setHoveredGid(null);
+      return;
+    }
+
+    const hideTooltip = (): void => {
+      hoverPopupRef.current?.remove();
+      hoveredGidRef.current = null;
+      setHoveredGid(null);
+      map.getCanvas().style.cursor = '';
+    };
+
+    const showTooltip = (candidate: CorridorCandidate, lngLat: MapMouseEvent['lngLat']): void => {
+      const text = lineSelectTooltip(candidate);
+      let popup = hoverPopupRef.current;
+      if (!popup) {
+        popup = new Popup({
+          closeButton: false,
+          closeOnClick: false,
+          closeOnMove: false,
+          focusAfterOpen: false,
+          className: 'forge-map-tooltip',
+          maxWidth: '320px',
+        });
+        hoverPopupRef.current = popup;
+      }
+      popup
+        .setLngLat(lngLat)
+        .setHTML(
+          `<div style="font-family:system-ui,sans-serif;font-size:12px;font-weight:600;line-height:1.3;color:#0f172a;">${escapeHtml(text)}</div>`,
+        )
+        .addTo(map);
+      map.getCanvas().style.cursor = 'pointer';
+      hoveredGidRef.current = candidate.gid;
+      setHoveredGid(candidate.gid);
+    };
+
+    const corridorFeatures = (point: MapMouseEvent['point']): MapGeoJSONFeature[] => {
+      if (!map.getLayer(CORRIDOR_HIT)) return [];
+      return map.queryRenderedFeatures(point, { layers: [CORRIDOR_HIT] });
+    };
+
+    const onMove = (event: MapLayerMouseEvent): void => {
+      if (!activeRef.current) return;
+      const features = corridorFeatures(event.point);
+      const candidates = overlappingCandidates(
+        features
+          .map((feature) => corridorCandidateFromFeature(feature))
+          .filter((row): row is CorridorCandidate => row !== null),
+      );
+      const top = candidates[0];
+      if (!top) {
+        hideTooltip();
+        return;
+      }
+      if (hoveredGidRef.current === top.gid && hoverPopupRef.current?.isOpen()) return;
+      showTooltip(top, event.lngLat);
+    };
+
+    const onLeave = (): void => {
+      hideTooltip();
+    };
+
+    const onClick = (event: MapLayerMouseEvent): void => {
+      if (!activeRef.current) return;
+      event.preventDefault();
+      const features = corridorFeatures(event.point);
+      const candidates = overlappingCandidates(
+        features
+          .map((feature) => corridorCandidateFromFeature(feature))
+          .filter((row): row is CorridorCandidate => row !== null),
+      );
+      if (candidates.length === 0) return;
+      if (candidates.length === 1) {
+        toggle(candidates[0]!.gid);
+        return;
+      }
+      onPickerOpen(candidates);
+    };
+
+    map.on('mousemove', CORRIDOR_HIT, onMove);
+    map.on('mouseleave', CORRIDOR_HIT, onLeave);
+    map.on('click', CORRIDOR_HIT, onClick);
+
+    return () => {
+      map.off('mousemove', CORRIDOR_HIT, onMove);
+      map.off('mouseleave', CORRIDOR_HIT, onLeave);
+      map.off('click', CORRIDOR_HIT, onClick);
+      hideTooltip();
+    };
+  }, [map, active, toggle, onPickerOpen]);
+
+  return { hoveredGid };
+}

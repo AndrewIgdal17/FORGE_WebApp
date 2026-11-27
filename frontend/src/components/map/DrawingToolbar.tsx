@@ -1,5 +1,5 @@
 import type { ReactElement, SyntheticEvent } from 'react';
-import { MousePointer2, Pencil, Redo2, Undo2 } from 'lucide-react';
+import { GitBranch, MousePointer2, Pencil, Redo2, Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { DrawMode } from '@/hooks/use-route-draw';
 
@@ -9,6 +9,8 @@ const PANEL =
 export interface DrawingToolbarProps {
   mode: DrawMode;
   drawingEnabled: boolean;
+  lineSelectMode?: boolean;
+  lineSelectEnabled?: boolean;
   onMode: (mode: DrawMode) => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -21,44 +23,71 @@ function stopMapPointer(event: SyntheticEvent): void {
 export function DrawingToolbar({
   mode,
   drawingEnabled,
+  lineSelectMode = false,
+  lineSelectEnabled = false,
   onMode,
   onUndo,
   onRedo,
 }: DrawingToolbarProps): ReactElement {
   return (
-    <div className={PANEL} role="toolbar" aria-label="Route drawing" onPointerDown={stopMapPointer}>
-      <Button
-        type="button"
-        size="icon"
-        variant={mode === 'linestring' ? 'default' : 'outline'}
-        aria-pressed={mode === 'linestring'}
-        aria-label="Draw"
-        title={drawingEnabled ? 'Draw' : 'Fill the required inputs before drawing'}
-        disabled={!drawingEnabled}
-        onClick={() => {
-          if (!drawingEnabled) return;
-          onMode('linestring');
-        }}
-      >
-        <Pencil />
-      </Button>
-      <Button
-        type="button"
-        size="icon"
-        variant={mode === 'select' ? 'default' : 'outline'}
-        aria-pressed={mode === 'select'}
-        aria-label="Edit"
-        title="Edit"
-        onClick={() => onMode('select')}
-      >
-        <MousePointer2 />
-      </Button>
-      <Button type="button" size="icon" variant="outline" aria-label="Undo" title="Undo" onClick={onUndo}>
-        <Undo2 />
-      </Button>
-      <Button type="button" size="icon" variant="outline" aria-label="Redo" title="Redo" onClick={onRedo}>
-        <Redo2 />
-      </Button>
+    <div
+      className={PANEL}
+      role="toolbar"
+      aria-label={lineSelectMode ? 'Line selection' : 'Route drawing'}
+      onPointerDown={stopMapPointer}
+    >
+      {lineSelectMode ? (
+        <Button
+          type="button"
+          size="icon"
+          variant="default"
+          aria-pressed
+          aria-label="Select line"
+          title={
+            lineSelectEnabled
+              ? 'Select existing line pieces on the map'
+              : 'Fill the required inputs before selecting a line'
+          }
+          disabled={!lineSelectEnabled}
+        >
+          <GitBranch />
+        </Button>
+      ) : (
+        <>
+          <Button
+            type="button"
+            size="icon"
+            variant={mode === 'linestring' ? 'default' : 'outline'}
+            aria-pressed={mode === 'linestring'}
+            aria-label="Draw"
+            title={drawingEnabled ? 'Draw' : 'Fill the required inputs before drawing'}
+            disabled={!drawingEnabled}
+            onClick={() => {
+              if (!drawingEnabled) return;
+              onMode('linestring');
+            }}
+          >
+            <Pencil />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant={mode === 'select' ? 'default' : 'outline'}
+            aria-pressed={mode === 'select'}
+            aria-label="Edit"
+            title="Edit"
+            onClick={() => onMode('select')}
+          >
+            <MousePointer2 />
+          </Button>
+          <Button type="button" size="icon" variant="outline" aria-label="Undo" title="Undo" onClick={onUndo}>
+            <Undo2 />
+          </Button>
+          <Button type="button" size="icon" variant="outline" aria-label="Redo" title="Redo" onClick={onRedo}>
+            <Redo2 />
+          </Button>
+        </>
+      )}
     </div>
   );
 }

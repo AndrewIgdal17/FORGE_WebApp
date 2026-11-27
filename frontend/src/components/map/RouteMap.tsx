@@ -18,6 +18,8 @@ const US_ZOOM = 5;
 const ROUTE_BLUE = '#3b82f6';
 const ROUTE_WHITE = '#ffffff';
 const ROUTE_SOURCE_ID = 'forge-existing-route';
+const CONNECTOR_SOURCE_ID = 'forge-route-connectors';
+const CONNECTOR_LAYER_ID = 'forge-route-connectors-line';
 
 /** Data-driven fill: warm sequential palette for BLM zones 1–15. */
 const BLM_ZONE_FILL: ExpressionSpecification = [
@@ -104,9 +106,14 @@ export const PREVIEW_OVERLAYS: readonly MapOverlay[] = [
 
 const EMPTY_ROUTE: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
+export interface RouteConnectorSegment {
+  coordinates: [number, number][];
+}
+
 export interface RouteMapProps {
   onMap: (map: MapLibreMap | null) => void;
   existingRoute?: MultiLineString | null;
+  connectorSegments?: readonly RouteConnectorSegment[];
 }
 
 function routeCollection(route: MultiLineString): FeatureCollection<LineString | Point> {
@@ -375,6 +382,51 @@ function addOverlays(map: MapLibreMap): void {
   }
 }
 
+function connectorCollection(
+  segments: readonly RouteConnectorSegment[],
+): FeatureCollection<LineString> {
+  const features: Array<Feature<LineString>> = [];
+  for (const segment of segments) {
+    if (segment.coordinates.length < 2) continue;
+    features.push({
+      type: 'Feature',
+      properties: {},
+      geometry: { type: 'LineString', coordinates: segment.coordinates },
+    });
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+function addConnectorLayers(map: MapLibreMap): void {
+  if (!map.getSource(CONNECTOR_SOURCE_ID)) {
+    map.addSource(CONNECTOR_SOURCE_ID, {
+      type: 'geojson',
+      data: EMPTY_ROUTE,
+    });
+  }
+  if (!map.getLayer(CONNECTOR_LAYER_ID)) {
+    map.addLayer({
+      id: CONNECTOR_LAYER_ID,
+      type: 'line',
+      source: CONNECTOR_SOURCE_ID,
+      paint: {
+        'line-color': ROUTE_BLUE,
+        'line-width': 3,
+        'line-dasharray': [2, 2],
+        'line-opacity': 0.9,
+      },
+    });
+  }
+}
+
+function syncConnectorData(map: MapLibreMap, segments: readonly RouteConnectorSegment[]): void {
+  const source = map.getSource(CONNECTOR_SOURCE_ID);
+  if (!(source instanceof GeoJSONSource)) return;
+  source.setData(
+    segments.length > 0 ? connectorCollection(segments) : EMPTY_ROUTE,
+  );
+}
+
 function addRouteLayers(map: MapLibreMap): void {
   if (!map.getSource(ROUTE_SOURCE_ID)) {
     map.addSource(ROUTE_SOURCE_ID, {
@@ -526,17 +578,23 @@ function applyLayerState(map: MapLibreMap): void {
   applyAttributeFilters(map);
 }
 
-export function RouteMap({ onMap, existingRoute = null }: RouteMapProps): ReactElement {
+export function RouteMap({
+  onMap,
+  existingRoute = null,
+  connectorSegments = [],
+}: RouteMapProps): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const onMapRef = useRef(onMap);
   const fittedKey = useRef<string | null>(null);
   const existingRouteRef = useRef(existingRoute);
+  const connectorSegmentsRef = useRef(connectorSegments);
   const [ready, setReady] = useState(false);
   const layers = useMapStore((state) => state.layers);
   const hiddenAttributes = useMapStore((state) => state.hiddenAttributes);
   onMapRef.current = onMap;
   existingRouteRef.current = existingRoute;
+  connectorSegmentsRef.current = connectorSegments;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -556,6 +614,7 @@ export function RouteMap({ onMap, existingRoute = null }: RouteMapProps): ReactE
       if (cancelled) return;
       addOverlays(map);
       addRouteLayers(map);
+      addConnectorLayers(map);
       applyLayerState(map);
       setReady(true);
       map.resize();
@@ -598,6 +657,12 @@ export function RouteMap({ onMap, existingRoute = null }: RouteMapProps): ReactE
     }
     fitExisting(map, existingRoute, fittedKey);
   }, [existingRoute, ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    syncConnectorData(map, connectorSegments);
+  }, [connectorSegments, ready]);
 
   return (
     <div

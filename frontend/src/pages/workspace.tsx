@@ -43,7 +43,7 @@ import {
   terrainMatchesRouteLength,
 } from '@/lib/analyze-request';
 import { ApiError, calculate, getSubstationFootprint, requiredInputs } from '@/lib/api';
-import type { RequiredField, RequiredResponse } from '@/lib/api';
+import type { LineSelectionIn, RequiredField, RequiredResponse } from '@/lib/api';
 import { diffChanges } from '@/lib/changes';
 import { debounce } from '@/lib/debounce';
 import { duplicateAction } from '@/lib/duplicate-action';
@@ -455,6 +455,10 @@ function WorkspaceBody(): ReactElement {
   const [drawn, setDrawn] = useState<ScenarioGeometry | undefined>(undefined);
   const [required, setRequired] = useState<RequiredResponse | null>(null);
   const [terminalFootprints, setTerminalFootprints] = useState<TerminalFootprints | null>(null);
+  const [pendingLineSelection, setPendingLineSelection] = useState<LineSelectionIn | null | undefined>(
+    undefined,
+  );
+  const projectTypeRef = useRef<unknown>(null);
 
   const baselineRef = useRef<string | null>(null);
   const lastStatusRef = useRef('Not calculated');
@@ -855,7 +859,17 @@ function WorkspaceBody(): ReactElement {
     savingRef.current = true;
     try {
       const changes = useFormStore.getState().getChanges();
-      await saveScenario(active.id, changes, active.revision, drawn, rowWidthFt);
+      await saveScenario(
+        active.id,
+        changes,
+        active.revision,
+        drawn,
+        rowWidthFt,
+        pendingLineSelection !== undefined && pendingLineSelection !== null
+          ? pendingLineSelection
+          : undefined,
+      );
+      setPendingLineSelection(undefined);
       goToWorkspace(project.id, active.id);
       updateDrawn(undefined);
       baselineRef.current = JSON.stringify(changes);
@@ -919,6 +933,11 @@ function WorkspaceBody(): ReactElement {
     },
     [setUnsavedChanges],
   );
+
+  const handleLineSelectionCommit = useCallback((selection: LineSelectionIn | null) => {
+    setPendingLineSelection(selection);
+    if (selection !== null) setUnsavedChanges(true);
+  }, [setUnsavedChanges]);
 
   function beginDraft(
     name: string,
@@ -1006,6 +1025,7 @@ function WorkspaceBody(): ReactElement {
           plainRoute(route),
           drawn?.segments ?? null,
           rowWidthFt,
+          pendingLineSelection ?? undefined,
         );
       } else if (draft.terminals) {
         const created = await createProjectWithScenario(
@@ -1019,6 +1039,7 @@ function WorkspaceBody(): ReactElement {
           plainRoute(route),
           drawn?.segments ?? null,
           rowWidthFt,
+          pendingLineSelection ?? undefined,
         );
         scenario = created.scenario;
       } else {
@@ -1027,6 +1048,7 @@ function WorkspaceBody(): ReactElement {
       }
       abandonDraft();
       updateDrawn(undefined);
+      setPendingLineSelection(undefined);
       applyScenario(scenario);
       if (scenario.project_id) goToWorkspace(scenario.project_id, scenario.id);
       toast.success(draft.project_id ? 'Scenario created' : 'Project created');
@@ -1068,7 +1090,8 @@ function WorkspaceBody(): ReactElement {
     currentRowWidthFt() != null;
   const calculationAllowed =
     required !== null && canCalculate(required, routeDrawn);
-  const drawingEnabled = required !== null && canDraw(required);
+  const routeInputReady = required !== null && canDraw(required);
+  const activeProjectType = getValueAtPath(data ?? {}, `${PROJECT}.project_type`);
   const missingForCalculation = required === null ? [] : panelFields(required, routeDrawn);
 
   function openRequiredField(path: string): void {
@@ -1094,6 +1117,24 @@ function WorkspaceBody(): ReactElement {
   }, [ready, rememberProjectId, rememberScenarioId]);
 
   const pickingNewProject = terminalPick !== null && draft !== null && !draft.project_id;
+  const lineSelectEnabled =
+    routeInputReady && !pickingNewProject && replacesExistingLine(activeProjectType);
+  const drawingEnabled = routeInputReady && !pickingNewProject && !lineSelectEnabled;
+
+  useEffect(() => {
+    if (projectTypeRef.current === null) {
+      projectTypeRef.current = activeProjectType;
+      return;
+    }
+    if (projectTypeRef.current === activeProjectType) return;
+    const prior = projectTypeRef.current;
+    projectTypeRef.current = activeProjectType;
+    if (replacesExistingLine(prior) !== replacesExistingLine(activeProjectType)) {
+      updateDrawn(undefined);
+      setPendingLineSelection(undefined);
+    }
+  }, [activeProjectType]);
+
   const footprintGids = ((): { sending: number | null; receiving: number | null } | null => {
     if (pickingNewProject) return null;
     if (draft?.terminals) {
@@ -1334,12 +1375,22 @@ function WorkspaceBody(): ReactElement {
                 showRouteMap ? (
                   <div className="relative flex-1 min-h-0 overflow-hidden">
                     <MapPanel
+                      key={activeScenarioId ?? (draft ? 'draft' : 'none')}
                       createMode={draft !== null}
-                      drawingEnabled={drawingEnabled && !pickingNewProject}
+                      drawingEnabled={drawingEnabled}
+                      lineSelectEnabled={lineSelectEnabled}
                       existingRoute={
                         draft ? scenarioMapRoute(drawn ?? null) : scenarioMapRoute(activeScenario)
                       }
+                      initialSelectedGids={
+                        activeScenario?.line_selection?.gids ?? undefined
+                      }
+                      storedConnectors={
+                        activeScenario?.line_selection?.connectors ?? undefined
+                      }
+                      terminalSubstations={footprintGids ?? undefined}
                       onRouteChange={handleRouteChange}
+                      onLineSelectionCommit={handleLineSelectionCommit}
                       onAnalyzed={() => { void refreshRequired(); }}
                       terminalMarkers={terminalMarkers}
                       drawTerminals={mapTerminals}
