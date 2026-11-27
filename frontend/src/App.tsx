@@ -8,6 +8,7 @@ import SignupPage from '@/pages/signup';
 import LoginPage from '@/pages/login';
 import HomePage from '@/pages/home';
 import ProjectsPage, { ProjectDetailRedirect } from '@/pages/projects';
+import ProjectComparePage from '@/pages/project-compare';
 import WorkspacePage from '@/pages/workspace';
 import DevMapPage from '@/pages/dev-map';
 import AuditPage from '@/pages/audit';
@@ -24,6 +25,7 @@ export default function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/app" element={<HomePage />} />
               <Route path="/app/projects" element={<ProjectsPage />} />
+              <Route path="/app/projects/:id/compare" element={<ProjectComparePage />} />
               <Route path="/app/projects/:id" element={<ProjectDetailRedirect />} />
               <Route
                 path="/app/scenarios-manager"

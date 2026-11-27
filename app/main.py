@@ -61,7 +61,7 @@ def _calc_semaphore() -> asyncio.Semaphore:
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# React frontend (all page routes: /, /signup, /login, /app, /app/workspace, /app/projects, /app/projects/{id}, /app/scenarios-manager, /app/dev-map, /app/audit)
+# React frontend (all page routes: /, /signup, /login, /app, /app/workspace, /app/projects, /app/projects/{id}, /app/projects/{id}/compare, /app/scenarios-manager, /app/dev-map, /app/audit)
 REACT_DIST = BASE_DIR / "frontend" / "dist"
 REACT_INDEX = REACT_DIST / "index.html"
 
@@ -321,6 +321,12 @@ async def serve_scenarios_manager() -> FileResponse:
 @app.get("/app/projects", response_class=FileResponse)
 async def serve_projects() -> FileResponse:
     """Serve the projects list."""
+    return _serve_react()
+
+
+@app.get("/app/projects/{project_id}/compare", response_class=FileResponse)
+async def serve_project_compare(project_id: str) -> FileResponse:
+    """Serve the project compare page. Client route is /app/projects/:id/compare."""
     return _serve_react()
 
 
