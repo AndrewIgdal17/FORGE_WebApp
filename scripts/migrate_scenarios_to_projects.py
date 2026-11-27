@@ -30,6 +30,8 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from app.footprints import footprint_flags
+
 RATIO_KEYS = ("bcr_societal", "bcr_ratepayer", "bcr_utility")
 
 _SELECT_ROWS = """
@@ -102,6 +104,16 @@ class ProjectPlan:
     receiving: Terminal
     scenario_ids: tuple[str, ...]
     base_scenario_id: str
+
+
+@dataclass(frozen=True)
+class ScenarioEndReport:
+    """Route-end distance to each terminal and footprint flags for one scenario."""
+
+    send_m: float
+    send_in: bool
+    recv_m: float
+    recv_in: bool
 
 
 @dataclass(frozen=True)
@@ -185,25 +197,74 @@ def _terminal_label(terminal: Terminal) -> str:
     return f"{terminal.name} (gid {terminal.gid})"
 
 
-def format_report(plans: list[ProjectPlan], names: dict[str, str]) -> str:
+def _format_bool(value: bool) -> str:
+    return "true" if value else "false"
+
+
+def scenario_end_report(
+    route: dict,
+    plan: ProjectPlan,
+    inside_footprint: tuple[bool, bool],
+) -> ScenarioEndReport:
+    from app.terminals import haversine_m
+
+    sending, receiving = route_vertices(route, "")
+    return ScenarioEndReport(
+        send_m=haversine_m(sending, plan.sending.point),
+        send_in=inside_footprint[0],
+        recv_m=haversine_m(receiving, plan.receiving.point),
+        recv_in=inside_footprint[1],
+    )
+
+
+async def gather_end_reports(
+    conn,
+    plans: list[ProjectPlan],
+    routes: dict[str, dict],
+) -> dict[str, ScenarioEndReport]:
+    reports: dict[str, ScenarioEndReport] = {}
+    for plan in plans:
+        for scenario_id in plan.scenario_ids:
+            route = routes[scenario_id]
+            flags = await footprint_flags(
+                conn, route, plan.sending.gid, plan.receiving.gid
+            )
+            reports[scenario_id] = scenario_end_report(route, plan, flags)
+    return reports
+
+
+def format_report(
+    plans: list[ProjectPlan],
+    names: dict[str, str],
+    end_reports: dict[str, ScenarioEndReport],
+) -> str:
     lines = [
         f"{len(plans)} projects",
-        "owner\tproject\tbase\tscenarios\tsending\treceiving",
+        (
+            "owner\tproject\tscenario\tbase\tsending\treceiving"
+            "\tsend_m\tsend_in\trecv_m\trecv_in"
+        ),
     ]
     for plan in plans:
-        scenario_names = ", ".join(names.get(sid, sid) for sid in plan.scenario_ids)
-        lines.append(
-            "\t".join(
-                (
-                    plan.user_id,
-                    plan.name,
-                    names.get(plan.base_scenario_id, plan.base_scenario_id),
-                    scenario_names,
-                    _terminal_label(plan.sending),
-                    _terminal_label(plan.receiving),
+        base_name = names.get(plan.base_scenario_id, plan.base_scenario_id)
+        for scenario_id in plan.scenario_ids:
+            report = end_reports[scenario_id]
+            lines.append(
+                "\t".join(
+                    (
+                        plan.user_id,
+                        plan.name,
+                        names.get(scenario_id, scenario_id),
+                        base_name,
+                        _terminal_label(plan.sending),
+                        _terminal_label(plan.receiving),
+                        f"{report.send_m:.0f}",
+                        _format_bool(report.send_in),
+                        f"{report.recv_m:.0f}",
+                        _format_bool(report.recv_in),
+                    )
                 )
             )
-        )
     return "\n".join(lines) + "\n"
 
 
@@ -341,10 +402,11 @@ async def report(url: str) -> None:
         await conn.execute("SET default_transaction_read_only = on")
         async with conn.transaction(readonly=True):
             loaded = await load_rows(conn)
+            plans = group_rows(list(loaded.rows))
+            end_reports = await gather_end_reports(conn, plans, loaded.routes)
     finally:
         await conn.close()
-    plans = group_rows(list(loaded.rows))
-    sys.stdout.write(format_report(plans, _names(loaded.rows)))
+    sys.stdout.write(format_report(plans, _names(loaded.rows), end_reports))
     sys.stdout.write(format_notes(loaded.routeless, loaded.assigned))
     sys.stdout.flush()
 
@@ -396,10 +458,15 @@ async def _write_plans(conn, plans: list[ProjectPlan], routes: dict[str, dict]) 
             plan.receiving.point[1],
         )
         for scenario_id in plan.scenario_ids:
+            route = routes[scenario_id]
+            inside = await footprint_flags(
+                conn, route, plan.sending.gid, plan.receiving.gid
+            )
             snapped = snap_route_to_terminals(
-                routes[scenario_id],
+                route,
                 plan.sending.point,
                 plan.receiving.point,
+                inside_footprint=inside,
             )
             if isinstance(snapped, TerminalMismatch):
                 raise MigrationError(mismatch_message(snapped))
@@ -433,7 +500,10 @@ async def apply(url: str) -> int:
         async with conn.transaction():
             loaded = await load_rows(conn)
             plans = group_rows(list(loaded.rows))
-            sys.stdout.write(format_report(plans, _names(loaded.rows)))
+            end_reports = await gather_end_reports(conn, plans, loaded.routes)
+            sys.stdout.write(
+                format_report(plans, _names(loaded.rows), end_reports)
+            )
             sys.stdout.write(format_notes(loaded.routeless, loaded.assigned))
             sys.stdout.flush()
             if loaded.routeless:

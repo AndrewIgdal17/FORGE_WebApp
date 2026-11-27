@@ -4,17 +4,31 @@ Fixtures are the rows in the spec table "Migrating the stored rows"
 (2026-11-26 webapp-01). Owner ids are the prefixes in that table.
 """
 
-from datetime import UTC, datetime, timedelta
+from __future__ import annotations
 
+import json
+import copy
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
+
+import pytest
+
+from app.terminals import haversine_m
 from scripts.migrate_scenarios_to_projects import (
+    MigrationError,
+    ProjectPlan,
     RowEnds,
+    Terminal,
+    _write_plans,
+    format_report,
     group_rows,
     ratios_from_results,
+    scenario_end_report,
 )
 
-OWNER = "f2ac5e68"
-COPY_A = "ed7200ac"
-COPY_B = "3d97b236"
+OWNER = "f2ac5e68-0000-4000-8000-000000000001"
+COPY_A = "ed7200ac-0000-4000-8000-000000000002"
+COPY_B = "3d97b236-0000-4000-8000-000000000003"
 
 # (gid, name, (lon, lat)). Both SunZia ends are distinct points.
 SUNZIA_SENDING = (85896, "SunZia HVDC Converter Station", (-107.5, 34.2))
@@ -162,3 +176,125 @@ def test_missing_ratio_is_blank_not_zero():
     assert ratios_from_results(
         {"bcr": {"bcr_societal": 0, "bcr_ratepayer": 0.16, "bcr_utility": 1.1}}
     ) == ("0", "0.16", "1.1")
+
+
+def _offset_north(point: tuple[float, float], delta_m: float) -> tuple[float, float]:
+    delta_deg = delta_m / 111_194.926
+    return (point[0], point[1] + delta_deg)
+
+
+def _route(
+    first: tuple[float, float],
+    last: tuple[float, float],
+) -> dict:
+    mid = ((first[0] + last[0]) / 2, (first[1] + last[1]) / 2)
+    return {
+        "type": "MultiLineString",
+        "coordinates": [[[first[0], first[1]], [mid[0], mid[1]], [last[0], last[1]]]],
+    }
+
+
+def _sunzia_plan() -> ProjectPlan:
+    send_pt = SUNZIA_SENDING[2]
+    recv_pt = SUNZIA_RECEIVING[2]
+    return ProjectPlan(
+        user_id=OWNER,
+        name="SunZia HVDC Converter Station → SunZia HVDC Converter Station",
+        sending=Terminal(gid=SUNZIA_SENDING[0], name=SUNZIA_SENDING[1], point=send_pt),
+        receiving=Terminal(gid=SUNZIA_RECEIVING[0], name=SUNZIA_RECEIVING[1], point=recv_pt),
+        scenario_ids=("a1111111-1111-4111-8111-111111111111",),
+        base_scenario_id="a1111111-1111-4111-8111-111111111111",
+    )
+
+
+def test_report_rows_include_end_move_columns():
+    plan = _sunzia_plan()
+    scenario_id = plan.scenario_ids[0]
+    names = {scenario_id: "SunZia_Delay17"}
+    send_pt = plan.sending.point
+    recv_pt = plan.receiving.point
+    route = _route(_offset_north(send_pt, 183), _offset_north(recv_pt, 183))
+    ends = scenario_end_report(route, plan, (True, True))
+    text = format_report([plan], names, {scenario_id: ends})
+    header = text.splitlines()[1]
+    assert header.endswith("\tsend_m\tsend_in\trecv_m\trecv_in")
+    row = text.splitlines()[2]
+    cells = row.split("\t")
+    assert float(cells[-4]) == pytest.approx(183, abs=5)
+    assert float(cells[-2]) == pytest.approx(183, abs=5)
+    assert cells[-3] == "true"
+    assert cells[-1] == "true"
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
+class _FakeConn:
+    def __init__(self) -> None:
+        self.scenario_updates: list[tuple] = []
+        self.project_inserts = 0
+
+    async def execute(self, sql: str, *args):
+        if "insert into public.project" in sql:
+            self.project_inserts += 1
+            return None
+        if "update public.scenario" in sql:
+            self.scenario_updates.append(args)
+            return "UPDATE 1"
+        return None
+
+    async def fetchval(self, *_args, **_kwargs):
+        return uuid4()
+
+
+@pytest.mark.anyio
+async def test_apply_snaps_sunzia_like_183m_inside_footprint(monkeypatch):
+    plan = _sunzia_plan()
+    scenario_id = plan.scenario_ids[0]
+    send_pt = plan.sending.point
+    recv_pt = plan.receiving.point
+    route = _route(_offset_north(send_pt, 183), _offset_north(recv_pt, 183))
+    routes = {scenario_id: copy.deepcopy(route)}
+
+    async def _flags(_conn, _route, _send_gid, _recv_gid):
+        return (True, True)
+
+    monkeypatch.setattr(
+        "scripts.migrate_scenarios_to_projects.footprint_flags",
+        _flags,
+    )
+    conn = _FakeConn()
+    await _write_plans(conn, [plan], routes)
+
+    assert conn.scenario_updates
+    snapped = json.loads(conn.scenario_updates[0][1])
+    assert snapped["coordinates"][0][0] == [send_pt[0], send_pt[1]]
+    assert snapped["coordinates"][-1][-1] == [recv_pt[0], recv_pt[1]]
+    assert haversine_m(tuple(snapped["coordinates"][0][0]), send_pt) == pytest.approx(
+        0, abs=1
+    )
+
+
+@pytest.mark.anyio
+async def test_apply_refuses_1200m_inside_footprint(monkeypatch):
+    plan = _sunzia_plan()
+    scenario_id = plan.scenario_ids[0]
+    send_pt = plan.sending.point
+    recv_pt = plan.receiving.point
+    route = _route(_offset_north(send_pt, 1200), recv_pt)
+    routes = {scenario_id: route}
+
+    async def _flags(_conn, _route, _send_gid, _recv_gid):
+        return (True, False)
+
+    monkeypatch.setattr(
+        "scripts.migrate_scenarios_to_projects.footprint_flags",
+        _flags,
+    )
+    conn = _FakeConn()
+    with pytest.raises(MigrationError) as exc:
+        await _write_plans(conn, [plan], routes)
+    assert "sending" in str(exc.value)
+    assert conn.scenario_updates == []
