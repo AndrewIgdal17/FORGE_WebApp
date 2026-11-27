@@ -19,7 +19,7 @@ import { terrainsForConstruction, terrainMilesPath } from '@/components/sections
 import { ContentHeader } from '@/components/sidebar/content-header';
 import { Sidebar } from '@/components/sidebar/sidebar';
 import type { SubItemValidation } from '@/components/sidebar/sidebar-item';
-import { newScenarioFromDefaults } from '@/components/projects/scenario-tabs';
+import { newScenarioFromDefaults } from '@/components/projects/scenario-toolbar';
 import { ContributionStrip } from '@/components/workspace/contribution-strip';
 import { WorkspaceHeader } from '@/components/workspace/workspace-header';
 import { Button } from '@/components/ui/button';
@@ -425,7 +425,6 @@ function WorkspaceBody(): ReactElement {
 
   const navigate = useNavigate();
   const projects = useProjectStore((state) => state.projects);
-  const setBase = useProjectStore((state) => state.setBase);
   const [locationProjectId, setLocationProjectId] = useState<string | null>(() => {
     const value = new URLSearchParams(window.location.search).get('project');
     return value ? value : null;
@@ -1151,15 +1150,6 @@ function WorkspaceBody(): ReactElement {
     beginImportedDraft(consumed);
   }
 
-  async function handleMakeBase(id: string): Promise<void> {
-    if (!locationProject || projectReadOnly) return;
-    try {
-      await setBase(locationProject.id, id, locationProject.revision);
-    } catch (error) {
-      toast.error(errorMessage(error));
-    }
-  }
-
   function handleTabRename(id: string): void {
     if (!locationProject || projectReadOnly) return;
     const scenario = projectScenarios.find((item) => item.id === id);
@@ -1245,7 +1235,7 @@ function WorkspaceBody(): ReactElement {
             onCalculate={() => { void runCalculation(); }}
             onCreate={() => { void handleCreate(); }}
             locationProjectId={locationProjectId}
-            scenarioTabs={
+            scenarioToolbar={
               locationProject
                 ? {
                     project: locationProject,
@@ -1255,7 +1245,6 @@ function WorkspaceBody(): ReactElement {
                     onSelect: handleSelectTab,
                     onDuplicate: (id) => { void handleDuplicateTab(id); },
                     onNew: handleNewScenario,
-                    onMakeBase: (id) => { void handleMakeBase(id); },
                     onRename: handleTabRename,
                     onDelete: handleTabDelete,
                     onCompare: handleCompare,
