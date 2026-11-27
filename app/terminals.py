@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 TERMINAL_TOLERANCE_M: float = 100.0
+TERMINAL_FOOTPRINT_MAX_M: float = 1000.0
 
 _EARTH_RADIUS_M = 6_371_008.8
 
@@ -31,27 +32,51 @@ class TerminalMismatch:
     distance_m: float
 
 
+def _end_within_reach(
+    distance_m: float,
+    *,
+    tolerance_m: float,
+    inside_footprint: bool,
+    footprint_max_m: float,
+) -> bool:
+    if distance_m <= tolerance_m:
+        return True
+    return inside_footprint and distance_m <= footprint_max_m
+
+
 def snap_route_to_terminals(
     route: dict,
     sending: tuple[float, float],
     receiving: tuple[float, float],
     tolerance_m: float = TERMINAL_TOLERANCE_M,
+    inside_footprint: tuple[bool, bool] = (False, False),
+    footprint_max_m: float = TERMINAL_FOOTPRINT_MAX_M,
 ) -> dict | TerminalMismatch:
     """Snap route ends to terminal points, or return which end is out of tolerance.
 
     Checks the sending end first. Returns a deep copy with first/last vertices
-    replaced when both ends are within tolerance_m.
+    replaced when both ends are within reach (tolerance or footprint rule).
     """
     coordinates = route["coordinates"]
     route_first = (coordinates[0][0][0], coordinates[0][0][1])
     route_last = (coordinates[-1][-1][0], coordinates[-1][-1][1])
 
     sending_dist = haversine_m(route_first, sending)
-    if sending_dist > tolerance_m:
+    if not _end_within_reach(
+        sending_dist,
+        tolerance_m=tolerance_m,
+        inside_footprint=inside_footprint[0],
+        footprint_max_m=footprint_max_m,
+    ):
         return TerminalMismatch(end="sending", distance_m=sending_dist)
 
     receiving_dist = haversine_m(route_last, receiving)
-    if receiving_dist > tolerance_m:
+    if not _end_within_reach(
+        receiving_dist,
+        tolerance_m=tolerance_m,
+        inside_footprint=inside_footprint[1],
+        footprint_max_m=footprint_max_m,
+    ):
         return TerminalMismatch(end="receiving", distance_m=receiving_dist)
 
     snapped = copy.deepcopy(route)
@@ -63,5 +88,6 @@ def snap_route_to_terminals(
 def mismatch_message(m: TerminalMismatch) -> str:
     return (
         f"The route's {m.end} end is {m.distance_m:.0f} m "
-        f"from the project's {m.end} terminal; it must be within 100 m."
+        f"from the project's {m.end} terminal; it must be within 100 m, "
+        f"or inside the substation's footprint and within 1 km."
     )

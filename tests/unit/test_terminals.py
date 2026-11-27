@@ -107,9 +107,93 @@ def test_mismatch_message_format():
     m = TerminalMismatch(end="sending", distance_m=150.4)
     assert (
         mismatch_message(m)
-        == "The route's sending end is 150 m from the project's sending terminal; it must be within 100 m."
+        == "The route's sending end is 150 m from the project's sending terminal; "
+        "it must be within 100 m, or inside the substation's footprint and within 1 km."
     )
 
 
 def test_terminal_tolerance_constant():
     assert TERMINAL_TOLERANCE_M == 100.0
+
+
+def test_inside_footprint_183m_is_accepted_and_snapped():
+    first_off = _offset_lat(SENDING, 183)
+    last_off = _offset_lat(RECEIVING, -183)
+    route = _route(first_off, last_off)
+
+    result = snap_route_to_terminals(
+        route, SENDING, RECEIVING, inside_footprint=(True, True)
+    )
+
+    assert isinstance(result, dict)
+    assert result["coordinates"][0][0] == [SENDING[0], SENDING[1]]
+    assert result["coordinates"][-1][-1] == [RECEIVING[0], RECEIVING[1]]
+
+
+def test_inside_footprint_1200m_is_refused():
+    first_off = _offset_lat(SENDING, 1200)
+    route = _route(first_off, RECEIVING)
+
+    result = snap_route_to_terminals(
+        route, SENDING, RECEIVING, inside_footprint=(True, False)
+    )
+
+    assert isinstance(result, TerminalMismatch)
+    assert result.end == "sending"
+    assert result.distance_m == pytest.approx(1200, abs=5)
+
+
+def test_outside_footprint_150m_is_refused():
+    first_off = _offset_lat(SENDING, 150)
+    route = _route(first_off, RECEIVING)
+
+    result = snap_route_to_terminals(
+        route, SENDING, RECEIVING, inside_footprint=(False, False)
+    )
+
+    assert isinstance(result, TerminalMismatch)
+    assert result.end == "sending"
+    assert result.distance_m == pytest.approx(150, abs=5)
+
+
+def test_reversed_route_inside_receiving_footprint_refused_on_sending():
+    """Start is at receiving terminal; sending flag false → sending mismatch first."""
+    start_near_receiving = _offset_lat(RECEIVING, 50)
+    route = _route(start_near_receiving, SENDING)
+
+    result = snap_route_to_terminals(
+        route, SENDING, RECEIVING, inside_footprint=(False, True)
+    )
+
+    assert isinstance(result, TerminalMismatch)
+    assert result.end == "sending"
+
+
+def test_default_flags_keep_old_behaviour():
+    first_off = _offset_lat(SENDING, 150)
+    route = _route(first_off, RECEIVING)
+
+    result = snap_route_to_terminals(route, SENDING, RECEIVING)
+
+    assert isinstance(result, TerminalMismatch)
+    assert result.end == "sending"
+    assert result.distance_m == pytest.approx(150, abs=5)
+
+    first_ok = _offset_lat(SENDING, 30)
+    last_ok = _offset_lat(RECEIVING, -30)
+    route_ok = _route(first_ok, last_ok)
+    snapped = snap_route_to_terminals(route_ok, SENDING, RECEIVING)
+    assert isinstance(snapped, dict)
+
+
+def test_message_names_footprint_rule():
+    m = TerminalMismatch(end="receiving", distance_m=250.7)
+    msg = mismatch_message(m)
+    assert "100 m" in msg
+    assert "footprint" in msg
+    assert "1 km" in msg
+    assert (
+        msg
+        == "The route's receiving end is 251 m from the project's receiving terminal; "
+        "it must be within 100 m, or inside the substation's footprint and within 1 km."
+    )
