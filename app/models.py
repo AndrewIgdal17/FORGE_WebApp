@@ -92,3 +92,20 @@ class ProjectUpdate(BaseModel):
     revision: int
     name: str | None = None
     base_scenario_id: str | None = None
+
+
+class LineAssembleRequest(BaseModel):
+    gids: list[int]
+    sending: tuple[float, float]
+    receiving: tuple[float, float]
+    sending_gid: int | None = None
+    receiving_gid: int | None = None
+    stretch_end: tuple[float, float] | None = None
+
+    @model_validator(mode="after")
+    def _gids_valid(self) -> LineAssembleRequest:
+        if not (1 <= len(self.gids) <= 200):
+            raise ValueError("gids must contain between 1 and 200 items.")
+        if len(self.gids) != len(set(self.gids)):
+            raise ValueError("gids must be unique.")
+        return self
