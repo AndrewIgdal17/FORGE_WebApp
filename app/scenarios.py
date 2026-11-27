@@ -30,7 +30,12 @@ from . import auth as auth_module
 from . import db as db_module
 from .models import ScenarioCreate, ScenarioUpdate, sanitize_for_json
 from .route import ROUTE_REQUIRED, RouteGeometry, run_route_analysis
-from .terminals import TerminalMismatch, mismatch_message, snap_route_to_terminals
+from .terminals import (
+    ProjectTerminals,
+    TerminalMismatch,
+    mismatch_message,
+    snap_route_to_terminals,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -175,17 +180,51 @@ def generate_scenario_name(base_name: str, existing_names: list[str]) -> str:
     return f"{base_name} ({counter})"
 
 
-def _terminal_pair(project) -> tuple[tuple[float, float], tuple[float, float]]:
-    return (
-        (float(project["sending_lon"]), float(project["sending_lat"])),
-        (float(project["receiving_lon"]), float(project["receiving_lat"])),
+def _optional_gid(project, key: str) -> int | None:
+    value = project.get(key)
+    if value is None:
+        return None
+    return int(value)
+
+
+def _project_terminals(project) -> ProjectTerminals:
+    return ProjectTerminals(
+        sending=(float(project["sending_lon"]), float(project["sending_lat"])),
+        receiving=(float(project["receiving_lon"]), float(project["receiving_lat"])),
+        sending_gid=_optional_gid(project, "sending_substation_gid"),
+        receiving_gid=_optional_gid(project, "receiving_substation_gid"),
     )
+
+
+async def _inside_footprint(route: dict, terminals: ProjectTerminals) -> tuple[bool, bool]:
+    """Footprint flags for a snap that has no connection open.
+
+    Point terminals (both gids null) do not query. Otherwise this opens a
+    short read from the pool: scenario create and update, and project
+    create through ``prepare_scenario_insert``, all snap after the read
+    transaction has closed.
+    """
+    if terminals.sending_gid is None and terminals.receiving_gid is None:
+        return (False, False)
+    # Imported here so this module can load before ``app.footprints``,
+    # which depends on ``require_user``.
+    from .footprints import footprint_flags
+
+    pool = db_module.get_db_pool()
+    async with pool.acquire() as conn:
+        return await footprint_flags(
+            conn,
+            route,
+            terminals.sending_gid,
+            terminals.receiving_gid,
+        )
 
 
 async def _fetch_project_points(conn, project_id: UUID):
     return await conn.fetchrow(
         """
         select id, user_id, base_scenario_id,
+               sending_substation_gid, receiving_substation_gid,
                ST_X(sending_point) as sending_lon,
                ST_Y(sending_point) as sending_lat,
                ST_X(receiving_point) as receiving_lon,
@@ -379,7 +418,7 @@ async def _measure_changes(
 async def prepare_scenario_insert(
     user_id: str,
     payload: ScenarioCreate,
-    terminals: tuple[tuple[float, float], tuple[float, float]] | None,
+    terminals: ProjectTerminals | None,
 ) -> dict | JSONResponse:
     """Run every create check and return the values an insert needs.
 
@@ -389,9 +428,11 @@ async def prepare_scenario_insert(
     analysis, and the calculator. A missing route, a non-positive width,
     stale defaults, or a terminal mismatch never burns a rate-limit slot.
 
-    ``terminals`` is ``(sending, receiving)`` as ``(lon, lat)``. When it is
-    set, the returned route is the snapped copy. ``None`` leaves the route
-    unchanged, which is how a scenario create with no project still behaves.
+    ``terminals`` carries both points and their substation gids. When it is
+    set, the returned route is the snapped copy. The footprint lookup opens
+    its own read connection, because this function runs before the write
+    transaction. ``None`` leaves the route unchanged, which is how a
+    scenario create with no project still behaves.
     """
     if payload.defaults_id != _DEFAULTS_ID:
         return _error(
@@ -407,7 +448,13 @@ async def prepare_scenario_insert(
     route_value = payload.route
 
     if terminals is not None:
-        snapped = snap_route_to_terminals(payload.route, terminals[0], terminals[1])
+        flags = await _inside_footprint(payload.route, terminals)
+        snapped = snap_route_to_terminals(
+            payload.route,
+            terminals.sending,
+            terminals.receiving,
+            inside_footprint=flags,
+        )
         if isinstance(snapped, TerminalMismatch):
             return _error(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -519,7 +566,7 @@ async def create_scenario(user_id: str, payload: ScenarioCreate) -> JSONResponse
         project = await _require_writable_project(conn, user_id, project_uuid)
         if isinstance(project, JSONResponse):
             return project
-        terminals = _terminal_pair(project)
+        terminals = _project_terminals(project)
 
     prepared = await prepare_scenario_insert(user_id, payload, terminals)
     if isinstance(prepared, JSONResponse):
@@ -582,7 +629,7 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
         project = await _require_writable_project(conn, user_id, existing["project_id"])
         if isinstance(project, JSONResponse):
             return project
-        terminals = _terminal_pair(project)
+        terminals = _project_terminals(project)
         # Copied before this transaction ends. Later steps must not touch the
         # row or the connection: route analysis acquires its own.
         stored = {
@@ -614,7 +661,13 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
     route_was_sent = "route" in payload.model_fields_set
     snapped_route: dict | None = None
     if route_was_sent and payload.route is not None:
-        snapped = snap_route_to_terminals(payload.route, terminals[0], terminals[1])
+        flags = await _inside_footprint(payload.route, terminals)
+        snapped = snap_route_to_terminals(
+            payload.route,
+            terminals.sending,
+            terminals.receiving,
+            inside_footprint=flags,
+        )
         if isinstance(snapped, TerminalMismatch):
             return _error(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,

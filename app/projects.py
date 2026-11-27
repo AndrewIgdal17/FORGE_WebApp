@@ -27,6 +27,7 @@ from .scenarios import (
     prepare_scenario_insert,
     require_user,
 )
+from .terminals import ProjectTerminals
 
 router = APIRouter()
 
@@ -182,7 +183,12 @@ async def create_project(user_id: str, payload: ProjectCreate) -> JSONResponse:
     prepared = await prepare_scenario_insert(
         user_id,
         payload.scenario,
-        ((sending["lon"], sending["lat"]), (receiving["lon"], receiving["lat"])),
+        ProjectTerminals(
+            sending=(sending["lon"], sending["lat"]),
+            receiving=(receiving["lon"], receiving["lat"]),
+            sending_gid=sending["gid"],
+            receiving_gid=receiving["gid"],
+        ),
     )
     if isinstance(prepared, JSONResponse):
         return prepared

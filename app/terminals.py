@@ -27,6 +27,19 @@ def haversine_m(a: tuple[float, float], b: tuple[float, float]) -> float:
 
 
 @dataclass(frozen=True)
+class ProjectTerminals:
+    """A project's two ends and the substation gids that own them.
+
+    ``sending_gid`` and ``receiving_gid`` are null for point terminals.
+    """
+
+    sending: tuple[float, float]
+    receiving: tuple[float, float]
+    sending_gid: int | None
+    receiving_gid: int | None
+
+
+@dataclass(frozen=True)
 class TerminalMismatch:
     end: Literal["sending", "receiving"]
     distance_m: float

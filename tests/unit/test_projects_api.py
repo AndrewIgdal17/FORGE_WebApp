@@ -218,11 +218,35 @@ def _substation_fetchrow(sql, args):
     raise AssertionError(f"unexpected SQL: {sql}")
 
 
+def _patch_footprint_pool(monkeypatch) -> None:
+    """Project create looks up footprints on the pool, which unit tests do not open.
+
+    No row means both flags are false. The route in the gid test sits about
+    11 m off the terminals, so the 100 m rule still snaps it.
+    """
+
+    class _Read:
+        async def fetchrow(self, _sql, *_args):
+            return None
+
+        def acquire(self):
+            return self
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return False
+
+    monkeypatch.setattr(scenarios_module.db_module, "get_db_pool", lambda: _Read())
+
+
 def test_create_project_inserts_project_then_scenario_and_sets_base(monkeypatch):
     conn = _Conn(_substation_fetchrow)
     entered = _patch_db(monkeypatch, conn)
     analysis = _patch_analysis(monkeypatch)
     _patch_calc(monkeypatch)
+    _patch_footprint_pool(monkeypatch)
 
     payload = ProjectCreate(
         sending={"substation_gid": SEND_GID},
