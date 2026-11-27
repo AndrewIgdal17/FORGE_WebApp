@@ -51,6 +51,13 @@ import { getValueAtPath } from '@/lib/path';
 import { isMultiLineString, scenarioMapRoute } from '@/lib/route-geometry';
 import type { TerminalFootprints } from '@/lib/terminals';
 import { useFormStore } from '@/stores/form-store';
+import {
+  clearLastWorkspace,
+  readLastWorkspace,
+  workspaceEntry,
+  writeLastWorkspace,
+  type LastWorkspace,
+} from '@/lib/last-workspace';
 import { isProjectReadOnly, useProjectStore } from '@/stores/project-store';
 import type { Project } from '@/stores/project-store';
 import {
@@ -424,6 +431,8 @@ function WorkspaceBody(): ReactElement {
   const savedResults = useScenarioStore((state) => state.savedResults);
 
   const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const projects = useProjectStore((state) => state.projects);
   const [locationProjectId, setLocationProjectId] = useState<string | null>(() => {
     const value = new URLSearchParams(window.location.search).get('project');
@@ -467,6 +476,7 @@ function WorkspaceBody(): ReactElement {
     if (`${window.location.pathname}${window.location.search}` !== next) {
       window.history.replaceState(null, '', next);
     }
+    writeLastWorkspace(projectId, scenarioId);
     setLocationProjectId((current) => (current === projectId ? current : projectId));
   }
 
@@ -625,6 +635,26 @@ function WorkspaceBody(): ReactElement {
     beginImportedDraftRef.current = beginImportedDraft;
   }, [beginImportedDraft]);
 
+  // The remembered workspace, reconciled against loaded data. A deleted project
+  // forgets it; a deleted scenario falls back to the project's base scenario.
+  function rememberedForEntry(): LastWorkspace | null {
+    const remembered = readLastWorkspace();
+    if (!remembered) return null;
+    const project = useProjectStore
+      .getState()
+      .projects.find((item) => item.id === remembered.project);
+    if (!project) {
+      clearLastWorkspace();
+      return null;
+    }
+    const allScenarios = useScenarioStore.getState().scenarios;
+    if (allScenarios.some((item) => item.id === remembered.scenario && item.project_id === project.id)) {
+      return remembered;
+    }
+    const fallback = scenarioForWorkspace(project, allScenarios);
+    return fallback ? { project: project.id, scenario: fallback.id } : null;
+  }
+
   useEffect(() => {
     let cancelled = false;
     const params = new URLSearchParams(window.location.search);
@@ -646,11 +676,28 @@ function WorkspaceBody(): ReactElement {
           }
         }
 
-        // `?tutorial=sunzia` is ignored until the tutorial player exists.
-        if (params.get('new') === '1') setWizardOpen(true);
+        // A bare visit goes to the remembered workspace, or the project list.
+        // The project store has loaded at this point, so project ids are reliable.
+        let target = params;
+        const entry = workspaceEntry(
+          params,
+          useScenarioStore.getState().pendingDraft !== null,
+          rememberedForEntry(),
+          useProjectStore.getState().projects.map((project) => project.id),
+        );
+        if (entry.kind === 'redirect') {
+          if (!entry.to.startsWith('/app/workspace')) {
+            navigateRef.current(entry.to, { replace: true });
+            return;
+          }
+          target = new URLSearchParams(entry.to.split('?')[1] ?? '');
+        }
 
-        const requestedProject = params.get('project');
-        const requestedId = params.get('scenario');
+        // `?tutorial=sunzia` is ignored until the tutorial player exists.
+        if (target.get('new') === '1') setWizardOpen(true);
+
+        const requestedProject = target.get('project');
+        const requestedId = target.get('scenario');
         if (requestedId) {
           const match = useScenarioStore
             .getState()

@@ -10,6 +10,7 @@ import {
   importCsvFile,
   importForgeFile,
   useScenarioStore,
+  workspaceUrl,
   type Scenario,
 } from '@/stores/scenario-store';
 
@@ -83,7 +84,11 @@ export default function HomePage(): ReactElement {
   // Open the example itself. Saving edits there makes your own copy.
   function openExample(scenario: Scenario): void {
     setActiveScenario(scenario.id);
-    navigate(`/app/workspace?scenario=${encodeURIComponent(scenario.id)}`);
+    navigate(
+      scenario.project_id
+        ? workspaceUrl(scenario.project_id, scenario.id)
+        : `/app/workspace?scenario=${encodeURIComponent(scenario.id)}`,
+    );
   }
 
   const examples = scenarios.filter((s) => s.source === 'paper');

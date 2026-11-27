@@ -1,13 +1,12 @@
 import type { ReactElement } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '@/hooks/use-auth';
+import { readLastWorkspace } from '@/lib/last-workspace';
 import { cn } from '@/lib/utils';
+import { workspaceUrl } from '@/stores/scenario-store';
 
-const NAV_LINKS = [
-  { href: '/app', label: 'Home' },
-  { href: '/app/workspace', label: 'Workspace' },
-  { href: '/app/projects', label: 'Projects' },
-] as const;
+const NAV_LINK_CLASS =
+  'border-b-2 border-transparent px-3 py-2 font-medium text-black/55 no-underline transition-[color,border-color] duration-150 hover:text-black/85';
 
 const ADMIN_EMAIL = 'andrewigdal17@gmail.com';
 
@@ -38,12 +37,33 @@ function AdminLink({
   );
 }
 
+function NavItem({
+  href,
+  label,
+  active,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+}): ReactElement {
+  return (
+    <Link
+      to={href}
+      aria-current={active ? 'page' : undefined}
+      className={cn(NAV_LINK_CLASS, active && 'border-blue-600 font-bold text-blue-600')}
+    >
+      {label}
+    </Link>
+  );
+}
+
 export function AppNav(): ReactElement {
   const { session, profile, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const username = profile?.username || '';
   const isAdmin = session?.user?.email === ADMIN_EMAIL;
+  const workspace = readLastWorkspace();
 
   async function handleLogOut(): Promise<void> {
     await signOut();
@@ -59,22 +79,31 @@ export function AppNav(): ReactElement {
         FORGE
       </Link>
       <div className="flex gap-1">
-        {NAV_LINKS.map((link) => {
-          const active = location.pathname === link.href;
-          return (
-            <Link
-              key={link.href}
-              to={link.href}
-              aria-current={active ? 'page' : undefined}
-              className={cn(
-                'border-b-2 border-transparent px-3 py-2 font-medium text-black/55 no-underline transition-[color,border-color] duration-150 hover:text-black/85',
-                active && 'border-blue-600 font-bold text-blue-600',
-              )}
-            >
-              {link.label}
-            </Link>
-          );
-        })}
+        <NavItem
+          href="/app"
+          label="Home"
+          active={location.pathname === '/app'}
+        />
+        <NavItem
+          href="/app/projects"
+          label="Projects"
+          active={location.pathname === '/app/projects'}
+        />
+        {workspace ? (
+          <NavItem
+            href={workspaceUrl(workspace.project, workspace.scenario)}
+            label="Workspace"
+            active={location.pathname === '/app/workspace'}
+          />
+        ) : (
+          <span
+            title="Open a project first"
+            aria-disabled="true"
+            className="cursor-not-allowed border-b-2 border-transparent px-3 py-2 font-medium text-black/30 no-underline"
+          >
+            Workspace
+          </span>
+        )}
         {isAdmin ? (
           <>
             <AdminLink href="/app/dev-map" label="Dev Map" active={location.pathname === '/app/dev-map'} />
