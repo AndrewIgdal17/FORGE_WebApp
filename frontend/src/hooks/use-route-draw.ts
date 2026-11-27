@@ -15,6 +15,7 @@ import {
   haversineM,
   routeEndsMatch,
   routeFinishMessage,
+  type TerminalFootprints,
 } from '@/lib/terminals';
 
 type FeatureId = string | number;
@@ -37,6 +38,7 @@ export interface DrawTerminals {
   receiving: [number, number];
   sendingName: string;
   receivingName: string;
+  footprints?: TerminalFootprints;
 }
 
 export interface RouteDrawOptions {
@@ -162,7 +164,12 @@ function endsWithinTerminals(
   route: MultiLineString | null,
 ): boolean {
   if (!terminals || !route) return true;
-  return routeEndsMatch(route, terminals.sending, terminals.receiving).ok;
+  return routeEndsMatch(
+    route,
+    terminals.sending,
+    terminals.receiving,
+    terminals.footprints,
+  ).ok;
 }
 
 function substationsFor(map: MapLibreMap, route: MultiLineString): EndpointSubstations {
@@ -322,17 +329,30 @@ export function useRouteDraw(
   const noteMismatch = useCallback((route: MultiLineString | null) => {
     const terminals = terminalsRef.current;
     if (!terminals || !route) return;
-    const match = routeEndsMatch(route, terminals.sending, terminals.receiving);
+    const match = routeEndsMatch(
+      route,
+      terminals.sending,
+      terminals.receiving,
+      terminals.footprints,
+    );
     if (match.ok) {
       lastMismatchRef.current = null;
       return;
     }
-    const name = match.end === 'sending' ? terminals.sendingName : terminals.receivingName;
-    const message = routeFinishMessage(match.end, name);
+    const message = routeFinishMessage(match.end, match.distanceM);
     if (lastMismatchRef.current === message) return;
     lastMismatchRef.current = message;
     onMismatchRef.current?.(message);
   }, []);
+
+  useEffect(() => {
+    const draw = drawRef.current;
+    if (!draw?.enabled) return;
+    const route = routeGeometry(draw);
+    const ok = endsWithinTerminals(terminalsRef.current, route);
+    setTerminalEndsOk((currentOk) => (currentOk === ok ? currentOk : ok));
+    noteMismatch(route);
+  }, [options?.terminals?.footprints, noteMismatch]);
 
   const publish = useCallback((draw: TerraDraw) => {
     const current = draw.getMode();

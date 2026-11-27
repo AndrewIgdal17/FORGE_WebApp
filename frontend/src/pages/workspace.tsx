@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactElement } from 'react';
 import { LegacyBanner } from '@/components/results/legacy-banner';
 import { showLegacyBanner } from '@/lib/legacy';
-import type { MultiLineString } from 'geojson';
+import type { MultiLineString, MultiPolygon, Polygon } from 'geojson';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { AuthGuard } from '@/components/auth-guard';
@@ -42,13 +42,14 @@ import {
   rowWidthProblem,
   terrainMatchesRouteLength,
 } from '@/lib/analyze-request';
-import { ApiError, calculate, requiredInputs } from '@/lib/api';
+import { ApiError, calculate, getSubstationFootprint, requiredInputs } from '@/lib/api';
 import type { RequiredField, RequiredResponse } from '@/lib/api';
 import { diffChanges } from '@/lib/changes';
 import { debounce } from '@/lib/debounce';
 import { canCalculate, canDraw, panelFields } from '@/lib/required-gates';
 import { getValueAtPath } from '@/lib/path';
 import { isMultiLineString, scenarioMapRoute } from '@/lib/route-geometry';
+import type { TerminalFootprints } from '@/lib/terminals';
 import { useFormStore } from '@/stores/form-store';
 import { isProjectReadOnly, useProjectStore } from '@/stores/project-store';
 import type { Project } from '@/stores/project-store';
@@ -91,6 +92,15 @@ function isLonLatPair(value: unknown): value is [number, number] {
     Number.isFinite(value[0]) &&
     Number.isFinite(value[1])
   );
+}
+
+async function footprintOrNull(gid: number | null): Promise<Polygon | MultiPolygon | null> {
+  if (gid === null) return null;
+  try {
+    return await getSubstationFootprint(gid);
+  } catch {
+    return null;
+  }
 }
 
 function projectDrawTerminals(project: Project): DrawTerminals | null {
@@ -433,6 +443,7 @@ function WorkspaceBody(): ReactElement {
   const [perspective, setPerspective] = useState<PerspectiveKey>('societal');
   const [drawn, setDrawn] = useState<ScenarioGeometry | undefined>(undefined);
   const [required, setRequired] = useState<RequiredResponse | null>(null);
+  const [terminalFootprints, setTerminalFootprints] = useState<TerminalFootprints | null>(null);
 
   const baselineRef = useRef<string | null>(null);
   const lastStatusRef = useRef('Not calculated');
@@ -1019,20 +1030,58 @@ function WorkspaceBody(): ReactElement {
       ? null
       : projects.find((item) => item.id === locationProjectId) ?? null;
   const pickingNewProject = terminalPick !== null && draft !== null && !draft.project_id;
+  const footprintGids = ((): { sending: number | null; receiving: number | null } | null => {
+    if (pickingNewProject) return null;
+    if (draft?.terminals) {
+      return {
+        sending: draft.terminals.sending.substation_gid,
+        receiving: draft.terminals.receiving.substation_gid,
+      };
+    }
+    if (!locationProject) return null;
+    return {
+      sending: locationProject.sending_substation_gid,
+      receiving: locationProject.receiving_substation_gid,
+    };
+  })();
+  const footprintActive = footprintGids !== null;
+  const sendingFootprintGid = footprintGids?.sending ?? null;
+  const receivingFootprintGid = footprintGids?.receiving ?? null;
+  useEffect(() => {
+    if (!footprintActive) {
+      setTerminalFootprints(null);
+      return;
+    }
+    let cancelled = false;
+    setTerminalFootprints(null);
+    void Promise.all([
+      footprintOrNull(sendingFootprintGid),
+      footprintOrNull(receivingFootprintGid),
+    ]).then(([sending, receiving]) => {
+      if (!cancelled) setTerminalFootprints({ sending, receiving });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [footprintActive, sendingFootprintGid, receivingFootprintGid]);
   const mapTerminals = useMemo((): DrawTerminals | null => {
     if (pickingNewProject) return null;
+    let base: DrawTerminals | null = null;
     if (draft?.terminals) {
       const { sending, receiving } = draft.terminals;
       if (!isLonLatPair(sending.point) || !isLonLatPair(receiving.point)) return null;
-      return {
+      base = {
         sending: sending.point,
         receiving: receiving.point,
         sendingName: sending.name,
         receivingName: receiving.name,
       };
+    } else {
+      base = locationProject ? projectDrawTerminals(locationProject) : null;
     }
-    return locationProject ? projectDrawTerminals(locationProject) : null;
-  }, [pickingNewProject, draft, locationProject]);
+    if (!base || !terminalFootprints) return base;
+    return { ...base, footprints: terminalFootprints };
+  }, [pickingNewProject, draft, locationProject, terminalFootprints]);
   const terminalMarkers = useMemo((): TerminalMarkerSpec[] => {
     if (mapTerminals) {
       return [

@@ -1,4 +1,4 @@
-import type { Geometry, MultiLineString } from 'geojson';
+import type { Geometry, MultiLineString, MultiPolygon, Polygon } from 'geojson';
 
 import { analyzeRequestBody } from '@/lib/analyze-request';
 import { supabase } from '@/lib/supabase';
@@ -264,6 +264,23 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     return undefined as T;
   }
   return (await readBody(response)) as T;
+}
+
+function isFootprintGeometry(value: unknown): value is Polygon | MultiPolygon {
+  if (!isRecord(value)) return false;
+  if (value.type !== 'Polygon' && value.type !== 'MultiPolygon') return false;
+  return Array.isArray(value.coordinates);
+}
+
+export async function getSubstationFootprint(
+  gid: number,
+): Promise<Polygon | MultiPolygon | null> {
+  const body = await apiFetch<unknown>(
+    `/api/substations/${encodeURIComponent(String(gid))}/footprint`,
+  );
+  if (!isRecord(body) || body.footprint == null) return null;
+  if (!isFootprintGeometry(body.footprint)) return null;
+  return body.footprint;
 }
 
 export async function getHealth(): Promise<HealthResponse> {
