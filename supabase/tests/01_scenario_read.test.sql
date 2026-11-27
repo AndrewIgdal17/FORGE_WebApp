@@ -9,7 +9,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(4);
+select plan(6);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures (bootstrap role bypasses RLS)
@@ -63,6 +63,27 @@ values (
 );
 
 -- ---------------------------------------------------------------------------
+-- project_id is appended after route_geojson. select s.* would reorder it.
+-- ---------------------------------------------------------------------------
+
+select ok(
+  (
+    select attnum
+    from pg_attribute
+    where attrelid = 'public.scenario_read'::regclass
+      and attname = 'project_id'
+      and not attisdropped
+  ) = (
+    select attnum
+    from pg_attribute
+    where attrelid = 'public.scenario_read'::regclass
+      and attname = 'route_geojson'
+      and not attisdropped
+  ) + 1,
+  'scenario_read appends project_id after route_geojson'
+);
+
+-- ---------------------------------------------------------------------------
 -- A stored route comes back as a MultiLineString object.
 -- ---------------------------------------------------------------------------
 
@@ -81,6 +102,13 @@ select is(
    where id = '22222222-0000-0000-0000-000000000001'),
   'MultiLineString',
   'route_geojson type is MultiLineString'
+);
+
+select is(
+  (select project_id::text from public.scenario_read
+   where id = '22222222-0000-0000-0000-000000000001'),
+  '33333333-0000-0000-0000-000000000011',
+  'scenario_read returns project_id'
 );
 
 reset role;

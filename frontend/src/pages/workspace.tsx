@@ -689,12 +689,12 @@ function WorkspaceBody(): ReactElement {
   async function handleSave(): Promise<void> {
     const active = useScenarioStore.getState().getActiveScenario();
     if (!active || savingRef.current) return;
-    const requestedProject = new URLSearchParams(window.location.search).get('project');
-    const projectId = requestedProject || active.project_id;
-    if (!projectId) {
+    if (!active.project_id) {
       toast.error('This scenario is not in a project, so nothing was saved.');
       return;
     }
+    const requestedProject = new URLSearchParams(window.location.search).get('project');
+    const projectId = requestedProject || active.project_id;
     const project = await projectById(projectId);
     if (!project) {
       toast.error('This project is not loaded, so nothing was saved.');

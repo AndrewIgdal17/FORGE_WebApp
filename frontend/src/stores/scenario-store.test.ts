@@ -20,6 +20,7 @@ import {
   createScenario,
   duplicateScenarioApi,
   getDefaults,
+  updateScenario,
 } from '@/lib/api';
 import type { ProjectResponse, ScenarioResponse } from '@/lib/api';
 import { scenarioMapRoute } from '@/lib/route-geometry';
@@ -166,6 +167,57 @@ describe('loadScenarios', () => {
     const scenario = useScenarioStore.getState().scenarios[0];
     expect(scenario.route).toBe(LINE);
     expect(scenarioMapRoute(scenario)).toBe(LINE);
+    expect(scenario.project_id).toBeNull();
+  });
+
+  it('keeps a project_id from scenario_read and does not store a blank', async () => {
+    const base = {
+      name: 'Routed',
+      source: 'manual',
+      defaults_id: 'd1',
+      changes: {},
+      results: null,
+      calculator: null,
+      inputs_id: null,
+      computed_at: null,
+      calc_error: null,
+      revision: 1,
+      created_at: '2026-11-09T00:00:00Z',
+      updated_at: '2026-11-09T00:00:00Z',
+      user_id: 'user-a',
+      route: HEX_ROUTE,
+      route_geojson: LINE,
+      segments: [],
+    };
+    const rows = [
+      { ...base, id: 'kept', project_id: 'p1' },
+      { ...base, id: 'missing' },
+      { ...base, id: 'blank', project_id: '' },
+      { ...base, id: 'nulled', project_id: null },
+    ];
+    tables.from.mockImplementation((table: string) => {
+      if (table === 'profiles') {
+        return { select: () => Promise.resolve({ data: [], error: null }) };
+      }
+      return {
+        select: () => ({
+          order: () => Promise.resolve({ data: rows, error: null }),
+        }),
+      };
+    });
+
+    await useScenarioStore.getState().loadScenarios();
+
+    const byId = new Map(
+      useScenarioStore.getState().scenarios.map((scenario) => [scenario.id, scenario.project_id]),
+    );
+    expect(byId.get('kept')).toBe('p1');
+    expect(byId.get('missing')).toBeNull();
+    expect(byId.get('blank')).toBeNull();
+    expect(byId.get('nulled')).toBeNull();
+    expect(useScenarioStore.getState().scenarios.some((scenario) => scenario.project_id === '')).toBe(
+      false,
+    );
   });
 });
 
@@ -470,6 +522,22 @@ describe('createProjectWithScenario', () => {
       useScenarioStore.getState().createProjectWithScenario(draft, {}, LINE, null, 215),
     ).rejects.toThrow(/missing or unreadable/);
     expect(createProject).not.toHaveBeenCalled();
+  });
+});
+
+describe('saveScenario', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useScenarioStore.setState({
+      scenarios: [{ ...acScenario({}), id: 's-null', project_id: null }],
+    });
+  });
+
+  it('refuses when project_id is null and does not write', async () => {
+    await expect(useScenarioStore.getState().saveScenario('s-null', {}, 1)).rejects.toThrow(
+      'This scenario is not in a project, so nothing was saved.',
+    );
+    expect(updateScenario).not.toHaveBeenCalled();
   });
 });
 

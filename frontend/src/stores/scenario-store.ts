@@ -45,7 +45,8 @@ export interface Scenario {
   created_at: string;
   updated_at: string;
   user_id: string;
-  project_id: string;
+  /** From `scenario_read`. Null when the view does not return a project id. */
+  project_id: string | null;
   ownerUsername?: string;
   route: Record<string, unknown> | null;
   /** Stored GeoJSON from `scenario_read.route_geojson`. Null when the row has no route. */
@@ -379,8 +380,9 @@ function terminalIn(terminal: DraftTerminal): TerminalIn {
   return { point: [terminal.point[0], terminal.point[1]] };
 }
 
-function readProjectId(value: unknown): string {
-  return typeof value === 'string' ? value : '';
+function readProjectId(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  return value;
 }
 
 function withProjectId(scenario: Scenario, projectId: string): Scenario {
@@ -981,6 +983,9 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
 
   saveScenario: async (id, changes, revision, geometry, rowWidthFt) => {
     const current = get().scenarios.find((scenario) => scenario.id === id);
+    if (!current?.project_id) {
+      throw new Error('This scenario is not in a project, so nothing was saved.');
+    }
     const route =
       geometry !== undefined
         ? geometry.route
@@ -1023,10 +1028,10 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
   duplicateScenario: async (id) => {
     const source = get().scenarios.find((scenario) => scenario.id === id);
     const row = await duplicateScenarioApi(id);
-    const scenario = withProjectId(
-      fromResponse(row, source?.ownerUsername),
-      source?.project_id ?? '',
-    );
+    const parsed = fromResponse(row, source?.ownerUsername);
+    const scenario = source?.project_id
+      ? withProjectId(parsed, source.project_id)
+      : parsed;
     set((state) => ({ scenarios: upsertScenario(state.scenarios, scenario) }));
     return scenario;
   },
