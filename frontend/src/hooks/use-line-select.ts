@@ -8,6 +8,7 @@ import type {
 } from 'maplibre-gl';
 import { hitLayerId } from '@/components/map/RouteMap';
 import {
+  hoverCorridorGidFilter,
   lineSelectTooltip,
   overlappingCandidates,
   toggleGid,
@@ -17,6 +18,7 @@ import {
 const CORRIDOR_HIT = hitLayerId('ref.corridors');
 const SELECTED_SOURCE = 'forge-line-selected';
 const SELECTED_LAYER = 'forge-line-selected-highlight';
+const HOVER_LAYER = 'forge-line-hover-highlight';
 
 function escapeHtml(value: string): string {
   return value
@@ -91,6 +93,37 @@ function syncSelectedFilter(map: MapLibreMap, gids: number[]): void {
   map.setLayoutProperty(SELECTED_LAYER, 'visibility', gids.length > 0 ? 'visible' : 'none');
 }
 
+function ensureHoverLayer(map: MapLibreMap): void {
+  if (!map.getSource(SELECTED_SOURCE)) {
+    map.addSource(SELECTED_SOURCE, {
+      type: 'vector',
+      url: 'https://tiles.forge-calc.com/ref.corridors',
+      promoteId: 'gid',
+    });
+  }
+  if (!map.getLayer(HOVER_LAYER)) {
+    map.addLayer({
+      id: HOVER_LAYER,
+      type: 'line',
+      source: SELECTED_SOURCE,
+      'source-layer': 'ref.corridors',
+      filter: hoverCorridorGidFilter(null),
+      paint: {
+        'line-color': '#f59e0b',
+        'line-width': 6,
+        'line-opacity': 0.95,
+      },
+    });
+    map.setLayoutProperty(HOVER_LAYER, 'visibility', 'none');
+  }
+}
+
+function syncHoverFilter(map: MapLibreMap, gid: number | null): void {
+  if (!map.getLayer(HOVER_LAYER)) return;
+  map.setFilter(HOVER_LAYER, hoverCorridorGidFilter(gid));
+  map.setLayoutProperty(HOVER_LAYER, 'visibility', gid === null ? 'none' : 'visible');
+}
+
 export interface UseLineSelectOptions {
   active: boolean;
   selectedGids: number[];
@@ -123,7 +156,9 @@ export function useLineSelect(
     const install = (): void => {
       if (!map.getLayer(CORRIDOR_HIT)) return;
       ensureSelectedLayers(map);
+      ensureHoverLayer(map);
       syncSelectedFilter(map, selectedRef.current);
+      syncHoverFilter(map, hoveredGidRef.current);
     };
     install();
     map.on('idle', install);
@@ -144,6 +179,7 @@ export function useLineSelect(
       hoverPopupRef.current?.remove();
       hoveredGidRef.current = null;
       setHoveredGid(null);
+      if (map) syncHoverFilter(map, null);
       return;
     }
 
@@ -151,6 +187,7 @@ export function useLineSelect(
       hoverPopupRef.current?.remove();
       hoveredGidRef.current = null;
       setHoveredGid(null);
+      syncHoverFilter(map, null);
       map.getCanvas().style.cursor = '';
     };
 
@@ -177,6 +214,7 @@ export function useLineSelect(
       map.getCanvas().style.cursor = 'pointer';
       hoveredGidRef.current = candidate.gid;
       setHoveredGid(candidate.gid);
+      syncHoverFilter(map, candidate.gid);
     };
 
     const corridorFeatures = (point: MapMouseEvent['point']): MapGeoJSONFeature[] => {

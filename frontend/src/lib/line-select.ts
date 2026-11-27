@@ -48,6 +48,11 @@ export function selectionSummary(
   return `From line data: ${pieces.length} ${pieceLabel}, ${mi} mi, ${connectorPhrase(connectors)}`;
 }
 
+/** MapLibre filter for the hover highlight overlay; `null` hides every feature. */
+export function hoverCorridorGidFilter(gid: number | null): ['==', ['get', 'gid'], number] {
+  return ['==', ['get', 'gid'], gid ?? -1];
+}
+
 export function lineSelectTooltip(candidate: CorridorCandidate): string {
   const voltage =
     candidate.voltage_kv !== null

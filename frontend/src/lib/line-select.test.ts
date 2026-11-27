@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  hoverCorridorGidFilter,
   overlappingCandidates,
   selectionSummary,
   toggleGid,
@@ -37,6 +38,16 @@ describe('overlappingCandidates', () => {
     const result = overlappingCandidates([base(10), base(10)]);
     expect(result).toHaveLength(1);
     expect(result[0]?.gid).toBe(10);
+  });
+});
+
+describe('hoverCorridorGidFilter', () => {
+  it('matches one corridor gid on the map', () => {
+    expect(hoverCorridorGidFilter(12345)).toEqual(['==', ['get', 'gid'], 12345]);
+  });
+
+  it('matches no feature when hover is cleared', () => {
+    expect(hoverCorridorGidFilter(null)).toEqual(['==', ['get', 'gid'], -1]);
   });
 });
 
