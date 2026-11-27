@@ -6,7 +6,12 @@ vi.mock('@/lib/supabase', () => ({
   supabase: { from: vi.fn(), auth: { getSession: vi.fn() } },
 }));
 
-import { ScenarioToolbar, newScenarioFromDefaults } from '@/components/projects/scenario-toolbar';
+import {
+  ScenarioToolbar,
+  chooseScenario,
+  newScenarioFromDefaults,
+  scenarioMenuItems,
+} from '@/components/projects/scenario-toolbar';
 import type { Project } from '@/stores/project-store';
 import type { Scenario } from '@/stores/scenario-store';
 
@@ -78,34 +83,71 @@ function renderToolbar(options: {
   );
 }
 
+/** The opening tag of the first button whose text is `label`, e.g. the Delete menu item. */
+function openingTagOf(html: string, label: string): string {
+  const end = html.indexOf(`${label}</button>`);
+  if (end < 0) return '';
+  return html.slice(html.lastIndexOf('<button', end), html.indexOf('>', html.lastIndexOf('<button', end)) + 1);
+}
+
 const later = sampleScenario('s-later', 'Reconductor', '2026-11-02T00:00:00Z');
 const earlier = sampleScenario('s-earlier', 'Rebuild', '2026-11-01T00:00:00Z');
 
+describe('scenarioMenuItems', () => {
+  it('lists this project scenarios in created_at order with only the active one checked', () => {
+    const items = scenarioMenuItems('p1', [later, earlier], 's-later');
+    expect(items).toEqual([
+      { id: 's-earlier', name: 'Rebuild', checked: false },
+      { id: 's-later', name: 'Reconductor', checked: true },
+    ]);
+  });
+
+  it('drops scenarios from other projects and orphans', () => {
+    const items = scenarioMenuItems(
+      'p1',
+      [earlier, sampleScenario('s-null', 'Orphan', '2026-11-03T00:00:00Z', null)],
+      's-earlier',
+    );
+    expect(items.map((item) => item.name)).toEqual(['Rebuild']);
+  });
+});
+
+describe('chooseScenario', () => {
+  it('calls onSelect with the id of the non-active item it was built for', () => {
+    const onSelect = vi.fn();
+    const items = scenarioMenuItems('p1', [later, earlier], 's-later');
+    const other = items.find((item) => !item.checked);
+    expect(other).toBeDefined();
+    chooseScenario(onSelect, other?.id ?? '')();
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith('s-earlier');
+  });
+});
+
 describe('ScenarioToolbar', () => {
-  it('lists every scenario in created_at order in the switcher', () => {
+  it('renders the switcher items as radios with the active one checked', () => {
     const html = renderToolbar({
       scenarios: [later, earlier],
       activeId: 's-later',
     });
     const menu = html.slice(html.indexOf('role="menu"'));
-    expect(menu).toContain('Rebuild');
-    expect(menu).toContain('Reconductor');
+    expect(menu).toContain('role="menuitemradio" aria-checked="false"');
+    expect(menu).toContain('role="menuitemradio" aria-checked="true"');
     expect(menu.indexOf('Rebuild')).toBeLessThan(menu.indexOf('Reconductor'));
   });
 
-  it('shows the active scenario name on the switcher button', () => {
+  it('labels the switcher with the active scenario name', () => {
     const html = renderToolbar({
       scenarios: [later, earlier],
       activeId: 's-later',
     });
-    const switcher = html.match(/<button[^>]*aria-label="Switch scenario"[^>]*>/)?.[0] ?? '';
-    expect(switcher).toContain('aria-haspopup="menu"');
-    expect(html).toContain('>Reconductor<');
+    expect(html).toContain('aria-label="Scenario: Reconductor"');
+    expect(html).toContain('aria-haspopup="menu"');
   });
 
-  it('shows Compare and Duplicate buttons', () => {
+  it('shows Compare as a link to the project compare page, and Duplicate as a button', () => {
     const html = renderToolbar({ scenarios: [later, earlier] });
-    expect(html).toMatch(/<button[^>]*>Compare<\/button>/);
+    expect(html).toMatch(/<a [^>]*href="\/app\/projects\/p1\/compare"[^>]*>Compare<\/a>/);
     expect(html).toMatch(/<button[^>]*>Duplicate<\/button>/);
   });
 
@@ -119,25 +161,20 @@ describe('ScenarioToolbar', () => {
   });
 
   it('disables Delete with a tooltip when the project has one scenario', () => {
-    const html = renderToolbar({
-      scenarios: [earlier],
-    });
-    const deleteButton = html.match(/<button[^>]*>(?:<span[^>]*><\/span>)?Delete<\/button>/)?.[0] ?? '';
-    expect(deleteButton).toContain('disabled');
-    expect(deleteButton).toContain('A project needs at least one scenario');
+    const html = renderToolbar({ scenarios: [earlier] });
+    const tag = openingTagOf(html, 'Delete');
+    expect(tag).toContain('disabled=""');
+    expect(tag).toContain('title="A project needs at least one scenario"');
     expect(html).toContain('Rename');
     expect(html).toContain('New scenario from defaults');
   });
 
-  it('omits a scenario whose project_id is null', () => {
-    const html = renderToolbar({
-      scenarios: [
-        earlier,
-        sampleScenario('s-null', 'Orphan', '2026-11-03T00:00:00Z', null),
-      ],
-    });
-    expect(html).toContain('Rebuild');
-    expect(html).not.toContain('Orphan');
+  it('leaves Delete enabled when the project has more than one scenario', () => {
+    const html = renderToolbar({ scenarios: [later, earlier] });
+    const tag = openingTagOf(html, 'Delete');
+    expect(tag).toContain('role="menuitem"');
+    expect(tag).not.toContain('disabled');
+    expect(tag).not.toContain('title=');
   });
 
   it('read-only shows Compare and Duplicate but hides Rename, Delete, and New', () => {
@@ -150,6 +187,7 @@ describe('ScenarioToolbar', () => {
     expect(html).toContain('Reconductor');
     expect(html).not.toContain('Rename');
     expect(html).not.toContain('>Delete<');
+    expect(html).not.toContain('Delete</button>');
     expect(html).not.toContain('New scenario from defaults');
     expect(html).not.toContain('Make base');
     expect(html).not.toContain('aria-label="More scenario actions"');

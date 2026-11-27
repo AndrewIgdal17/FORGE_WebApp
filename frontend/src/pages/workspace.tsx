@@ -1116,11 +1116,12 @@ function WorkspaceBody(): ReactElement {
   }
 
   async function handleDuplicateTab(id: string): Promise<void> {
-    if (!locationProject || !id) return;
+    if (!locationProject) return;
     if (projectReadOnly) {
       offerProjectDuplicate(locationProject.id);
       return;
     }
+    if (!id) return;
     try {
       const copy = await duplicateScenario(id);
       abandonDraft();
