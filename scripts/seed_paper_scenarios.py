@@ -31,6 +31,7 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
@@ -148,7 +149,16 @@ async def _insert_scenario(
     )
 
 
+_SEEDING_DISABLED_MSG = (
+    "Seeding is disabled: scenarios need a project, and these seeds have no routes. "
+    "See PROJECT_MEMORY 'Paper goals'."
+)
+
+
 async def main() -> None:
+    print(_SEEDING_DISABLED_MSG)
+    sys.exit(2)
+
     dsn = os.environ.get("FORGE_DATABASE_URL", "")
     if not dsn:
         raise SystemExit("FORGE_DATABASE_URL is not set.")

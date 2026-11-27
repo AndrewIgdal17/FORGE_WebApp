@@ -21,7 +21,16 @@ from uuid import UUID
 OWNER_ID = UUID("846d719f-7a14-4022-8979-ad4c92317030")
 
 
+_SEEDING_DISABLED_MSG = (
+    "Seeding is disabled: scenarios need a project, and these seeds have no routes. "
+    "See PROJECT_MEMORY 'Paper goals'."
+)
+
+
 async def main() -> None:
+    print(_SEEDING_DISABLED_MSG)
+    sys.exit(2)
+
     database_url = os.environ.get("FORGE_DATABASE_URL")
     if not database_url:
         print("ERROR: Set FORGE_DATABASE_URL to the Supabase pooler URL.", file=sys.stderr)
