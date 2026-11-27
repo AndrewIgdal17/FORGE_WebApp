@@ -54,6 +54,7 @@ import { useFormStore } from '@/stores/form-store';
 import {
   clearLastWorkspace,
   readLastWorkspace,
+  reconcileRemembered,
   workspaceEntry,
   writeLastWorkspace,
   type LastWorkspace,
@@ -476,7 +477,6 @@ function WorkspaceBody(): ReactElement {
     if (`${window.location.pathname}${window.location.search}` !== next) {
       window.history.replaceState(null, '', next);
     }
-    writeLastWorkspace(projectId, scenarioId);
     setLocationProjectId((current) => (current === projectId ? current : projectId));
   }
 
@@ -635,24 +635,16 @@ function WorkspaceBody(): ReactElement {
     beginImportedDraftRef.current = beginImportedDraft;
   }, [beginImportedDraft]);
 
-  // The remembered workspace, reconciled against loaded data. A deleted project
-  // forgets it; a deleted scenario falls back to the project's base scenario.
+  // Reads the remembered workspace and reconciles it with loaded data. Only call
+  // after the project store has loaded: a stale value is cleared only then.
   function rememberedForEntry(): LastWorkspace | null {
-    const remembered = readLastWorkspace();
-    if (!remembered) return null;
-    const project = useProjectStore
-      .getState()
-      .projects.find((item) => item.id === remembered.project);
-    if (!project) {
-      clearLastWorkspace();
-      return null;
-    }
-    const allScenarios = useScenarioStore.getState().scenarios;
-    if (allScenarios.some((item) => item.id === remembered.scenario && item.project_id === project.id)) {
-      return remembered;
-    }
-    const fallback = scenarioForWorkspace(project, allScenarios);
-    return fallback ? { project: project.id, scenario: fallback.id } : null;
+    const reconciled = reconcileRemembered(
+      readLastWorkspace(),
+      useProjectStore.getState().projects,
+      useScenarioStore.getState().scenarios,
+    );
+    if (!reconciled) clearLastWorkspace();
+    return reconciled;
   }
 
   useEffect(() => {
@@ -676,28 +668,32 @@ function WorkspaceBody(): ReactElement {
           }
         }
 
-        // A bare visit goes to the remembered workspace, or the project list.
-        // The project store has loaded at this point, so project ids are reliable.
-        let target = params;
-        const entry = workspaceEntry(
-          params,
-          useScenarioStore.getState().pendingDraft !== null,
-          rememberedForEntry(),
-          useProjectStore.getState().projects.map((project) => project.id),
-        );
-        if (entry.kind === 'redirect') {
-          if (!entry.to.startsWith('/app/workspace')) {
-            navigateRef.current(entry.to, { replace: true });
+        // Entry rule. Only decide once the project store has loaded successfully.
+        let requestedProject = params.get('project');
+        let requestedId = params.get('scenario');
+        if (useProjectStore.getState().loaded) {
+          const entry = workspaceEntry({
+            params,
+            pendingDraft: useScenarioStore.getState().pendingDraft !== null,
+            remembered: rememberedForEntry(),
+            projectIds: useProjectStore.getState().projects.map((project) => project.id),
+            scenarioProjects: new Map(
+              useScenarioStore.getState().scenarios.map((item) => [item.id, item.project_id]),
+            ),
+          });
+          if (entry.kind === 'projects') {
+            navigateRef.current('/app/projects', { replace: true });
             return;
           }
-          target = new URLSearchParams(entry.to.split('?')[1] ?? '');
+          if (entry.kind === 'open') {
+            requestedProject = entry.project;
+            requestedId = entry.scenario;
+          }
         }
 
         // `?tutorial=sunzia` is ignored until the tutorial player exists.
-        if (target.get('new') === '1') setWizardOpen(true);
+        if (params.get('new') === '1') setWizardOpen(true);
 
-        const requestedProject = target.get('project');
-        const requestedId = target.get('scenario');
         if (requestedId) {
           const match = useScenarioStore
             .getState()
@@ -1075,6 +1071,18 @@ function WorkspaceBody(): ReactElement {
     locationProjectId === null
       ? null
       : projects.find((item) => item.id === locationProjectId) ?? null;
+  // Remember the open project workspace however it was opened (URL, toolbar,
+  // wizard, draft import). The effect is the only place that writes it.
+  const rememberProjectId = locationProject?.id ?? null;
+  const rememberScenarioId =
+    activeScenario && rememberProjectId && activeScenario.project_id === rememberProjectId
+      ? activeScenario.id
+      : null;
+  useEffect(() => {
+    if (!ready || !rememberProjectId || !rememberScenarioId) return;
+    writeLastWorkspace(rememberProjectId, rememberScenarioId);
+  }, [ready, rememberProjectId, rememberScenarioId]);
+
   const pickingNewProject = terminalPick !== null && draft !== null && !draft.project_id;
   const footprintGids = ((): { sending: number | null; receiving: number | null } | null => {
     if (pickingNewProject) return null;

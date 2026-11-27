@@ -27,6 +27,8 @@ export interface Project {
 interface ProjectStore {
   projects: Project[];
   loading: boolean;
+  /** True once a load has succeeded; false until then, and never reset by a failed load. */
+  loaded: boolean;
 
   loadProjects: () => Promise<void>;
   renameProject: (id: string, name: string, revision: number) => Promise<Project>;
@@ -117,6 +119,7 @@ export function isProjectReadOnly(
 export const useProjectStore = create<ProjectStore>((set) => ({
   projects: [],
   loading: false,
+  loaded: false,
 
   loadProjects: async () => {
     set({ loading: true });
@@ -131,7 +134,7 @@ export const useProjectStore = create<ProjectStore>((set) => ({
       const projects = ((data ?? []) as Array<Record<string, unknown>>).map(
         rowToProject,
       );
-      set({ projects, loading: false });
+      set({ projects, loading: false, loaded: true });
     } catch (error) {
       set({ loading: false });
       throw error;
