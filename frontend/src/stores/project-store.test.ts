@@ -17,11 +17,44 @@ import {
   deleteProject,
   updateProject,
 } from '@/lib/api';
+import type { ProjectResponse } from '@/lib/api';
+
 import {
+  fromProjectResponse,
   isProjectReadOnly,
   useProjectStore,
   type Project,
 } from './project-store';
+
+const GEO_SEND: ProjectResponse['sending_point'] = {
+  type: 'Point',
+  coordinates: [-97.74, 30.27],
+};
+const GEO_RECV: ProjectResponse['receiving_point'] = {
+  type: 'Point',
+  coordinates: [-97.75, 30.28],
+};
+
+function sampleProjectResponse(
+  overrides: Partial<Project> = {},
+): ProjectResponse {
+  const base = sampleProject(overrides);
+  return {
+    id: base.id,
+    user_id: base.user_id,
+    name: base.name,
+    sending_name: base.sending_name,
+    receiving_name: base.receiving_name,
+    sending_substation_gid: base.sending_substation_gid,
+    receiving_substation_gid: base.receiving_substation_gid,
+    sending_point: GEO_SEND,
+    receiving_point: GEO_RECV,
+    base_scenario_id: base.base_scenario_id,
+    revision: base.revision,
+    created_at: base.created_at,
+    updated_at: base.updated_at,
+  };
+}
 
 function sampleProject(overrides: Partial<Project> = {}): Project {
   return {
@@ -104,6 +137,50 @@ describe('loadProjects', () => {
     expect(project.sending_point).toEqual([-97.7401, 30.2702]);
     expect(project.receiving_point).toEqual([-81.2841, 35.5928]);
   });
+
+  it('does not store a missing sending_point_geojson as [0, 0]', async () => {
+    const row = {
+      id: 'p1',
+      user_id: 'user-a',
+      name: 'Line',
+      sending_name: 'Send',
+      receiving_name: 'Recv',
+      sending_substation_gid: null,
+      receiving_substation_gid: null,
+      sending_point_geojson: null,
+      receiving_point_geojson: { type: 'Point', coordinates: [-81.2841, 35.5928] },
+      base_scenario_id: 's1',
+      revision: 1,
+      created_at: '2026-11-09T00:00:00Z',
+      updated_at: '2026-11-09T00:00:00Z',
+    };
+    tables.from.mockImplementation(() => ({
+      select: () => ({
+        order: () => Promise.resolve({ data: [row], error: null }),
+      }),
+    }));
+
+    await useProjectStore.getState().loadProjects();
+
+    const project = useProjectStore.getState().projects[0];
+    expect(project.sending_point).toBeNull();
+    expect(project.sending_point).not.toEqual([0, 0]);
+    expect(project.receiving_point).toEqual([-81.2841, 35.5928]);
+  });
+});
+
+describe('fromProjectResponse', () => {
+  it('does not store an unreadable terminal as [0, 0]', () => {
+    const response = sampleProjectResponse();
+    const broken = {
+      ...response,
+      sending_point: { type: 'LineString', coordinates: [] } as unknown as ProjectResponse['sending_point'],
+    };
+    const project = fromProjectResponse(broken);
+    expect(project.sending_point).toBeNull();
+    expect(project.sending_point).not.toEqual([0, 0]);
+    expect(project.receiving_point).toEqual([-97.75, 30.28]);
+  });
 });
 
 describe('renameProject', () => {
@@ -113,13 +190,14 @@ describe('renameProject', () => {
   });
 
   it('calls updateProject and upserts the store', async () => {
-    const updated = { ...sampleProject(), name: 'New name', revision: 2 };
-    vi.mocked(updateProject).mockResolvedValue(updated as never);
+    const updated = sampleProjectResponse({ name: 'New name', revision: 2 });
+    vi.mocked(updateProject).mockResolvedValue(updated);
 
     const result = await useProjectStore.getState().renameProject('p1', 'New name', 1);
 
     expect(updateProject).toHaveBeenCalledWith('p1', { revision: 1, name: 'New name' });
     expect(result.name).toBe('New name');
+    expect(result.sending_point).toEqual([-97.74, 30.27]);
     expect(useProjectStore.getState().projects[0].name).toBe('New name');
   });
 });
@@ -131,8 +209,8 @@ describe('setBase', () => {
   });
 
   it('patches base_scenario_id via updateProject', async () => {
-    const updated = { ...sampleProject(), base_scenario_id: 's2', revision: 2 };
-    vi.mocked(updateProject).mockResolvedValue(updated as never);
+    const updated = sampleProjectResponse({ base_scenario_id: 's2', revision: 2 });
+    vi.mocked(updateProject).mockResolvedValue(updated);
 
     await useProjectStore.getState().setBase('p1', 's2', 1);
 
@@ -167,11 +245,11 @@ describe('duplicate', () => {
   });
 
   it('calls duplicateProject and adds the copy to the store', async () => {
-    const copy = sampleProject({ id: 'p2', name: 'A → B (copy)' });
+    const copy = sampleProjectResponse({ id: 'p2', name: 'A → B (copy)' });
     vi.mocked(duplicateProject).mockResolvedValue({
       project: copy,
       scenarios: [],
-    } as never);
+    });
 
     const result = await useProjectStore.getState().duplicate('p1');
 

@@ -16,8 +16,8 @@ export interface Project {
   receiving_name: string;
   sending_substation_gid: number | null;
   receiving_substation_gid: number | null;
-  sending_point: [number, number];
-  receiving_point: [number, number];
+  sending_point: [number, number] | null;
+  receiving_point: [number, number] | null;
   base_scenario_id: string | null;
   revision: number;
   created_at: string;
@@ -54,10 +54,8 @@ function pointFromGeoJson(value: unknown): [number, number] | null {
 }
 
 function rowToProject(row: Record<string, unknown>): Project {
-  const sending =
-    pointFromGeoJson(row.sending_point_geojson) ?? [0, 0];
-  const receiving =
-    pointFromGeoJson(row.receiving_point_geojson) ?? [0, 0];
+  const sending = pointFromGeoJson(row.sending_point_geojson);
+  const receiving = pointFromGeoJson(row.receiving_point_geojson);
   return {
     id: String(row.id),
     user_id: String(row.user_id),
@@ -83,8 +81,8 @@ function rowToProject(row: Record<string, unknown>): Project {
 }
 
 export function fromProjectResponse(response: ProjectResponse): Project {
-  const sending = pointFromGeoJson(response.sending_point) ?? [0, 0];
-  const receiving = pointFromGeoJson(response.receiving_point) ?? [0, 0];
+  const sending = pointFromGeoJson(response.sending_point);
+  const receiving = pointFromGeoJson(response.receiving_point);
   return {
     id: response.id,
     user_id: response.user_id,
