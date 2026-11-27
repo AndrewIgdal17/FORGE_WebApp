@@ -44,8 +44,9 @@ import {
 import { getValueAtPath } from '@/lib/path';
 import {
   coordsFromLineGeometry,
-  missingLineSelectionGids,
+  lineSelectionStaleInView,
   nearestPointOnLine,
+  routeFullyInMapView,
   OLD_AC_DC_PATH,
   OLD_CAPACITY_PATH,
   OLD_CONDUCTOR_PATH,
@@ -431,37 +432,39 @@ export function MapPanel({
       onLineDataStaleChangeRef.current?.(false);
       return;
     }
-    const sourceId = 'ref.corridors';
+    const corridorHit = hitLayerId('ref.corridors');
+    const corridorLine = 'ref.corridors';
     const checkStale = (): void => {
-      if (!map.getSource(sourceId)) {
+      const layers = [corridorHit, corridorLine].filter((id) => map.getLayer(id) !== undefined);
+      if (layers.length === 0) {
         onLineDataStaleChangeRef.current?.(false);
         return;
       }
-      let features;
-      try {
-        features = map.querySourceFeatures(sourceId, { sourceLayer: sourceId });
-      } catch {
-        onLineDataStaleChangeRef.current?.(false);
-        return;
-      }
-      const loaded = new Set<number>();
+      const features = map.queryRenderedFeatures({ layers });
+      const rendered = new Set<number>();
       for (const feature of features) {
         const raw = feature.properties?.gid;
         const gid = typeof raw === 'number' ? raw : Number(raw);
-        if (Number.isFinite(gid)) loaded.add(gid);
+        if (Number.isFinite(gid)) rendered.add(gid);
       }
-      const missing = missingLineSelectionGids(storedLineGids, loaded);
-      onLineDataStaleChangeRef.current?.(missing.length > 0);
+      const bounds = map.getBounds();
+      const routeInView = routeFullyInMapView(existingRoute, (point) =>
+        bounds.contains(point),
+      );
+      const stale = lineSelectionStaleInView(storedLineGids, rendered, routeInView);
+      onLineDataStaleChangeRef.current?.(stale);
     };
     const onIdle = (): void => {
       checkStale();
     };
     map.on('idle', onIdle);
+    map.on('moveend', checkStale);
     checkStale();
     return () => {
       map.off('idle', onIdle);
+      map.off('moveend', checkStale);
     };
-  }, [map, storedLineGids]);
+  }, [map, storedLineGids, existingRoute]);
 
   function confirmPoint(): void {
     if (!pointConfirm) return;

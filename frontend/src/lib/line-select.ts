@@ -141,6 +141,41 @@ export function missingLineSelectionGids(
   return storedGids.filter((gid) => !loadedGids.has(gid));
 }
 
+/** True when every vertex of the route lies inside the map viewport. */
+export function routeFullyInMapView(
+  route: { coordinates: ReadonlyArray<ReadonlyArray<readonly number[]>> } | null | undefined,
+  contains: (lonLat: [number, number]) => boolean,
+): boolean {
+  if (!route?.coordinates.length) return false;
+  let seen = 0;
+  for (const line of route.coordinates) {
+    for (const pair of line) {
+      if (pair.length < 2) continue;
+      const lon = pair[0];
+      const lat = pair[1];
+      if (typeof lon !== 'number' || typeof lat !== 'number') continue;
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+      seen += 1;
+      if (!contains([lon, lat])) return false;
+    }
+  }
+  return seen > 0;
+}
+
+/**
+ * Best-effort stale notice: only when the full route is in view, corridor tiles
+ * show at least one selected piece, and another stored gid is absent from the view.
+ */
+export function lineSelectionStaleInView(
+  storedGids: ReadonlyArray<number>,
+  renderedGids: ReadonlySet<number>,
+  routeFullyInView: boolean,
+): boolean {
+  if (!routeFullyInView || storedGids.length === 0) return false;
+  if (!storedGids.some((gid) => renderedGids.has(gid))) return false;
+  return storedGids.some((gid) => !renderedGids.has(gid));
+}
+
 export function coordsFromLineGeometry(
   geometry: GeoJSON.Geometry | undefined,
 ): [number, number][] {

@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   hoverCorridorGidFilter,
+  lineSelectionStaleInView,
   nearestPointOnLine,
   overlappingCandidates,
   prefillChanges,
+  routeFullyInMapView,
   selectionSummary,
   stretchTerminalName,
   toggleGid,
@@ -108,6 +110,37 @@ describe('prefillChanges', () => {
     };
     const result = prefillChanges(current, { old_capacity_mw: 394 });
     expect(result).toEqual({});
+  });
+});
+
+describe('routeFullyInMapView', () => {
+  it('requires every vertex inside the viewport predicate', () => {
+    const route = {
+      coordinates: [
+        [
+          [0, 0],
+          [1, 1],
+        ],
+      ],
+    };
+    const contains = (pt: [number, number]): boolean => pt[0] >= 0 && pt[0] <= 1;
+    expect(routeFullyInMapView(route, contains)).toBe(true);
+    expect(routeFullyInMapView(route, () => false)).toBe(false);
+  });
+});
+
+describe('lineSelectionStaleInView', () => {
+  it('does not flag when the route is not fully in view', () => {
+    const rendered = new Set([10, 20]);
+    expect(lineSelectionStaleInView([10, 20, 30], rendered, false)).toBe(false);
+  });
+
+  it('does not flag when no selected piece is rendered yet', () => {
+    expect(lineSelectionStaleInView([10, 20], new Set(), true)).toBe(false);
+  });
+
+  it('flags when the route is in view, some pieces render, and one stored gid is absent', () => {
+    expect(lineSelectionStaleInView([10, 20], new Set([10]), true)).toBe(true);
   });
 });
 
