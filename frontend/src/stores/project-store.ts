@@ -16,8 +16,8 @@ export interface Project {
   receiving_name: string;
   sending_substation_gid: number | null;
   receiving_substation_gid: number | null;
-  sending_point: [number, number] | null;
-  receiving_point: [number, number] | null;
+  sending_point: [number, number];
+  receiving_point: [number, number];
   base_scenario_id: string | null;
   revision: number;
   created_at: string;
@@ -39,18 +39,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function pointFromGeoJson(value: unknown): [number, number] | null {
-  if (!isRecord(value) || value.type !== 'Point') return null;
-  const coords = value.coordinates;
-  if (
-    !Array.isArray(coords) ||
-    coords.length < 2 ||
-    typeof coords[0] !== 'number' ||
-    typeof coords[1] !== 'number'
-  ) {
-    return null;
+function pointFromGeoJson(value: unknown): [number, number] {
+  if (!isRecord(value) || value.type !== 'Point' || !Array.isArray(value.coordinates)) {
+    throw new Error('Project point is missing or unreadable');
   }
-  return [coords[0], coords[1]];
+  const [lon, lat] = value.coordinates;
+  if (typeof lon !== 'number' || typeof lat !== 'number') {
+    throw new Error('Project point is missing or unreadable');
+  }
+  return [lon, lat];
 }
 
 function rowToProject(row: Record<string, unknown>): Project {

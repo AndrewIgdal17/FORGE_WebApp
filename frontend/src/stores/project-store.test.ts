@@ -56,6 +56,10 @@ function sampleProjectResponse(
   };
 }
 
+function isZeroPoint(point: [number, number] | null): boolean {
+  return point !== null && point[0] === 0 && point[1] === 0;
+}
+
 function sampleProject(overrides: Partial<Project> = {}): Project {
   return {
     id: 'p1',
@@ -160,12 +164,16 @@ describe('loadProjects', () => {
       }),
     }));
 
-    await useProjectStore.getState().loadProjects();
+    await expect(useProjectStore.getState().loadProjects()).rejects.toThrow(
+      /missing or unreadable/,
+    );
 
-    const project = useProjectStore.getState().projects[0];
-    expect(project.sending_point).toBeNull();
-    expect(project.sending_point).not.toEqual([0, 0]);
-    expect(project.receiving_point).toEqual([-81.2841, 35.5928]);
+    const projects = useProjectStore.getState().projects;
+    expect(projects).toHaveLength(0);
+    expect(projects.some((project) => project.sending_point == null)).toBe(false);
+    expect(projects.some((project) => isZeroPoint(project.sending_point))).toBe(false);
+    expect(projects.some((project) => project.receiving_point == null)).toBe(false);
+    expect(projects.some((project) => isZeroPoint(project.receiving_point))).toBe(false);
   });
 });
 
@@ -176,10 +184,10 @@ describe('fromProjectResponse', () => {
       ...response,
       sending_point: { type: 'LineString', coordinates: [] } as unknown as ProjectResponse['sending_point'],
     };
-    const project = fromProjectResponse(broken);
-    expect(project.sending_point).toBeNull();
-    expect(project.sending_point).not.toEqual([0, 0]);
-    expect(project.receiving_point).toEqual([-97.75, 30.28]);
+    expect(() => fromProjectResponse(broken)).toThrow(/missing or unreadable/);
+    const projects = useProjectStore.getState().projects;
+    expect(projects.some((project) => project.sending_point == null)).toBe(false);
+    expect(projects.some((project) => isZeroPoint(project.sending_point))).toBe(false);
   });
 });
 
