@@ -12,6 +12,44 @@ const SOLE_SCENARIO_TOOLTIP = 'A project needs at least one scenario';
 
 type OpenMenu = 'switch' | 'more' | null;
 
+/** True when the user expects in-page navigation (not a new tab or modified click). */
+export function isPlainLeftClick(event: {
+  metaKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  button: number;
+}): boolean {
+  return (
+    !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0
+  );
+}
+
+/** Next menu item index when moving with arrow keys; wraps at both ends. */
+export function nextMenuIndex(
+  current: number,
+  count: number,
+  key: 'ArrowDown' | 'ArrowUp',
+): number {
+  if (count <= 0) return 0;
+  if (key === 'ArrowDown') return (current + 1) % count;
+  return (current - 1 + count) % count;
+}
+
+function focusableMenuItems(root: HTMLElement | null): HTMLElement[] {
+  if (!root) return [];
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(
+      '[role="menuitem"]:not([disabled]), [role="menuitemradio"]',
+    ),
+  );
+}
+
+function focusedMenuIndex(items: HTMLElement[]): number {
+  const active = document.activeElement;
+  const index = items.findIndex((item) => item === active);
+  return index >= 0 ? index : 0;
+}
+
 export interface ScenarioToolbarProps {
   project: Project;
   scenarios: Scenario[];
@@ -135,17 +173,46 @@ export function ScenarioToolbar({
 }: ScenarioToolbarProps): ReactElement {
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const switchTriggerRef = useRef<HTMLButtonElement>(null);
+  const moreTriggerRef = useRef<HTMLButtonElement>(null);
+  const switchMenuRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const items = scenarioMenuItems(project.id, scenarios, activeId);
   const active = items.find((item) => item.checked) ?? null;
   const sole = items.length === 1;
 
   useEffect(() => {
     if (!openMenu) return;
+    const menuRoot =
+      openMenu === 'switch' ? switchMenuRef.current : moreMenuRef.current;
+    const triggerRef =
+      openMenu === 'switch' ? switchTriggerRef : moreTriggerRef;
+    const items = focusableMenuItems(menuRoot);
+    if (items.length > 0) items[0].focus();
+
     function onPointerDown(event: MouseEvent): void {
       if (!rootRef.current?.contains(event.target as Node)) setOpenMenu(null);
     }
     function onKeyDown(event: KeyboardEvent): void {
-      if (event.key === 'Escape') setOpenMenu(null);
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOpenMenu(null);
+        triggerRef.current?.focus();
+        return;
+      }
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      const menuEl =
+        openMenu === 'switch' ? switchMenuRef.current : moreMenuRef.current;
+      if (!menuEl?.contains(event.target as Node)) return;
+      const menuItems = focusableMenuItems(menuEl);
+      if (menuItems.length === 0) return;
+      event.preventDefault();
+      const next = nextMenuIndex(
+        focusedMenuIndex(menuItems),
+        menuItems.length,
+        event.key,
+      );
+      menuItems[next]?.focus();
     }
     document.addEventListener('mousedown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
@@ -175,6 +242,7 @@ export function ScenarioToolbar({
     >
       <div className="relative">
         <button
+          ref={switchTriggerRef}
           type="button"
           aria-label={`Scenario: ${activeName}`}
           aria-haspopup="menu"
@@ -186,6 +254,7 @@ export function ScenarioToolbar({
           <span aria-hidden className="text-xs text-slate-500">▾</span>
         </button>
         <div
+          ref={switchMenuRef}
           role="menu"
           hidden={openMenu !== 'switch'}
           className="absolute left-0 top-full z-20 mt-1 max-h-72 w-56 overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-md"
@@ -204,6 +273,7 @@ export function ScenarioToolbar({
         href={`/app/projects/${encodeURIComponent(project.id)}/compare`}
         className="rounded-md px-2.5 py-1 text-sm text-slate-700 hover:bg-slate-100"
         onClick={(event) => {
+          if (!isPlainLeftClick(event)) return;
           event.preventDefault();
           onCompare();
         }}
@@ -221,6 +291,7 @@ export function ScenarioToolbar({
       {readOnly ? null : (
         <div className="relative">
           <button
+            ref={moreTriggerRef}
             type="button"
             aria-label="More scenario actions"
             aria-haspopup="menu"
@@ -231,6 +302,7 @@ export function ScenarioToolbar({
             ⋯
           </button>
           <div
+            ref={moreMenuRef}
             role="menu"
             hidden={openMenu !== 'more'}
             className="absolute right-0 top-full z-20 mt-1 w-56 rounded-md border border-slate-200 bg-white py-1 shadow-md"

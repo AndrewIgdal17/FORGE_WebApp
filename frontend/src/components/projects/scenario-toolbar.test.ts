@@ -9,7 +9,9 @@ vi.mock('@/lib/supabase', () => ({
 import {
   ScenarioToolbar,
   chooseScenario,
+  isPlainLeftClick,
   newScenarioFromDefaults,
+  nextMenuIndex,
   scenarioMenuItems,
 } from '@/components/projects/scenario-toolbar';
 import type { Project } from '@/stores/project-store';
@@ -191,6 +193,43 @@ describe('ScenarioToolbar', () => {
     expect(html).not.toContain('New scenario from defaults');
     expect(html).not.toContain('Make base');
     expect(html).not.toContain('aria-label="More scenario actions"');
+  });
+});
+
+describe('isPlainLeftClick', () => {
+  function click(overrides: Partial<{
+    metaKey: boolean;
+    ctrlKey: boolean;
+    shiftKey: boolean;
+    button: number;
+  }> = {}): { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; button: number } {
+    return {
+      metaKey: false,
+      ctrlKey: false,
+      shiftKey: false,
+      button: 0,
+      ...overrides,
+    };
+  }
+
+  it('is true for a plain primary-button click', () => {
+    expect(isPlainLeftClick(click())).toBe(true);
+  });
+
+  it('is false when a modifier or non-primary button is used', () => {
+    expect(isPlainLeftClick(click({ metaKey: true }))).toBe(false);
+    expect(isPlainLeftClick(click({ ctrlKey: true }))).toBe(false);
+    expect(isPlainLeftClick(click({ shiftKey: true }))).toBe(false);
+    expect(isPlainLeftClick(click({ button: 1 }))).toBe(false);
+  });
+});
+
+describe('nextMenuIndex', () => {
+  it('wraps forward and backward through item indices', () => {
+    expect(nextMenuIndex(0, 3, 'ArrowDown')).toBe(1);
+    expect(nextMenuIndex(2, 3, 'ArrowDown')).toBe(0);
+    expect(nextMenuIndex(0, 3, 'ArrowUp')).toBe(2);
+    expect(nextMenuIndex(1, 3, 'ArrowUp')).toBe(0);
   });
 });
 

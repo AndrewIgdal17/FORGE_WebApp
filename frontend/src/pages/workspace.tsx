@@ -46,6 +46,7 @@ import { ApiError, calculate, getSubstationFootprint, requiredInputs } from '@/l
 import type { RequiredField, RequiredResponse } from '@/lib/api';
 import { diffChanges } from '@/lib/changes';
 import { debounce } from '@/lib/debounce';
+import { duplicateAction } from '@/lib/duplicate-action';
 import { canCalculate, canDraw, panelFields } from '@/lib/required-gates';
 import { getValueAtPath } from '@/lib/path';
 import { isMultiLineString, scenarioMapRoute } from '@/lib/route-geometry';
@@ -1181,11 +1182,12 @@ function WorkspaceBody(): ReactElement {
 
   async function handleDuplicateTab(id: string): Promise<void> {
     if (!locationProject) return;
-    if (projectReadOnly) {
+    const action = duplicateAction(projectReadOnly, id);
+    if (action === 'offer_project_duplicate') {
       offerProjectDuplicate(locationProject.id);
       return;
     }
-    if (!id) return;
+    if (action === 'none') return;
     try {
       const copy = await duplicateScenario(id);
       abandonDraft();
