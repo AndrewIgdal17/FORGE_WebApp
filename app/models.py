@@ -39,6 +39,11 @@ class RequiredRequest(BaseModel):
     changes: dict[str, Any]
 
 
+class LineSelectionIn(BaseModel):
+    gids: list[int]
+    stretch_end: tuple[float, float] | None = None
+
+
 class ScenarioCreate(BaseModel):
     name: str
     source: str
@@ -48,6 +53,7 @@ class ScenarioCreate(BaseModel):
     segments: list[dict[str, Any]] | None = None
     row_width_ft: float | None = None
     project_id: str | None = None
+    line_selection: LineSelectionIn | None = None
 
 
 class ScenarioUpdate(BaseModel):
@@ -58,6 +64,7 @@ class ScenarioUpdate(BaseModel):
     route: dict[str, Any] | None = None
     segments: list[dict[str, Any]] | None = None
     row_width_ft: float | None = None
+    line_selection: LineSelectionIn | None = None
 
 
 class TerminalIn(BaseModel):

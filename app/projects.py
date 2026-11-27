@@ -393,19 +393,20 @@ async def duplicate_project(user_id: str, project_id: str) -> JSONResponse:
                 insert into public.scenario (
                     user_id, name, source, defaults_id, changes,
                     results, calculator, inputs_id, computed_at, calc_error,
-                    route, segments, layer_releases, project_id
+                    route, segments, layer_releases, project_id, line_selection
                 )
                 select
                     $1, name, 'manual', defaults_id, changes,
                     results, calculator, inputs_id, computed_at, calc_error,
-                    route, segments, layer_releases, $2
+                    route, segments, layer_releases, $2, line_selection
                 from public.scenario
                 where id = $3
                 returning
                     id, user_id, name, source, defaults_id, changes, results,
                     calculator, inputs_id, computed_at, calc_error, revision,
                     created_at, updated_at,
-                    ST_AsGeoJSON(route)::jsonb AS route, segments, layer_releases
+                    ST_AsGeoJSON(route)::jsonb AS route, segments, layer_releases,
+                    line_selection
                 """,
                 UUID(user_id),
                 project_record["id"],

@@ -28,7 +28,8 @@ from pydantic import ValidationError
 
 from . import auth as auth_module
 from . import db as db_module
-from .models import ScenarioCreate, ScenarioUpdate, sanitize_for_json
+from .layer_releases import CORRIDORS_RELEASE
+from .models import LineSelectionIn, ScenarioCreate, ScenarioUpdate, sanitize_for_json
 from .route import ROUTE_REQUIRED, RouteGeometry, run_route_analysis
 from .terminals import (
     ProjectTerminals,
@@ -51,8 +52,13 @@ _DEFAULTS_ID = forge.get_defaults_id()
 _SCENARIO_COLUMNS = (
     "id, user_id, name, source, defaults_id, changes, results, calculator, "
     "inputs_id, computed_at, calc_error, revision, created_at, updated_at, "
-    "ST_AsGeoJSON(route)::jsonb AS route, segments, layer_releases, project_id"
+    "ST_AsGeoJSON(route)::jsonb AS route, segments, layer_releases, project_id, "
+    "line_selection"
 )
+
+PROJECT_TYPE_PATH = "01_project_technical_details.project.project_type"
+_SELECTION_PROJECT_TYPES = frozenset({"reconductoring", "rebuild"})
+_LINE_SELECTION_UNSET = object()
 
 _security = HTTPBearer(auto_error=False)
 
@@ -129,7 +135,15 @@ def _decode_jsonb(value: Any) -> Any:
 def _row_to_dict(record) -> dict:
     row = dict(record)
     # asyncpg has no jsonb codec, so route and segments may arrive as text.
-    for key in ("changes", "results", "calculator", "route", "segments", "layer_releases"):
+    for key in (
+        "changes",
+        "results",
+        "calculator",
+        "route",
+        "segments",
+        "layer_releases",
+        "line_selection",
+    ):
         row[key] = _decode_jsonb(row.get(key))
     for key, value in list(row.items()):
         if isinstance(value, UUID):
@@ -353,6 +367,78 @@ def _route_required() -> JSONResponse:
     )
 
 
+def _project_type_from_changes(changes: dict) -> str | None:
+    value = changes.get(PROJECT_TYPE_PATH)
+    if value is None:
+        return None
+    return str(value)
+
+
+def _requires_line_selection(project_type: str | None) -> bool:
+    return project_type in _SELECTION_PROJECT_TYPES
+
+
+def _line_selection_required() -> JSONResponse:
+    return _error(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "line_selection_required",
+        "Reconductoring and rebuild scenarios need a line selection.",
+    )
+
+
+def _line_selection_not_allowed() -> JSONResponse:
+    return _error(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "line_selection_not_allowed",
+        "Greenfield scenarios cannot store a line selection.",
+    )
+
+
+def _greenfield_route_required() -> JSONResponse:
+    return _error(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "invalid_changes",
+        "A greenfield scenario needs a drawn route.",
+    )
+
+
+def _pack_line_selection(
+    selection: LineSelectionIn, assembly_body: dict[str, Any]
+) -> dict[str, Any]:
+    stretch = list(selection.stretch_end) if selection.stretch_end is not None else None
+    return {
+        "gids": selection.gids,
+        "stretch_end": stretch,
+        "connectors": assembly_body["connectors"],
+        "corridors_release": assembly_body["corridors_release"],
+    }
+
+
+async def _assemble_line_selection(
+    user_id: str,
+    terminals: ProjectTerminals,
+    selection: LineSelectionIn,
+) -> tuple[dict[str, Any] | None, JSONResponse | None]:
+    from .line_assembly import AssemblyError
+    from .lines import _assemble_with_conn, _assembly_error
+    from .models import LineAssembleRequest
+
+    payload = LineAssembleRequest(
+        gids=selection.gids,
+        sending=terminals.sending,
+        receiving=terminals.receiving,
+        sending_gid=terminals.sending_gid,
+        receiving_gid=terminals.receiving_gid,
+        stretch_end=selection.stretch_end,
+    )
+    async with db_module.forge_api_transaction(user_id) as conn:
+        try:
+            response = await _assemble_with_conn(conn, payload)
+        except AssemblyError as exc:
+            return None, _assembly_error(exc)
+    return json.loads(response.body), None
+
+
 def _checked_route(route: dict | None) -> RouteGeometry | JSONResponse:
     """Same acceptance rule as ``calculate_forge``: a MultiLineString, or 422."""
     if route is None:
@@ -441,16 +527,38 @@ async def prepare_scenario_insert(
             "The deployed calculator's defaults have changed; refetch /api/defaults.",
         )
 
-    prepared = _prepare_route(payload.route, payload.row_width_ft)
+    project_type = _project_type_from_changes(payload.changes)
+    assembled_route: dict | None = None
+    line_selection_value: dict | None = None
+
+    if payload.line_selection is not None:
+        if not _requires_line_selection(project_type):
+            return _line_selection_not_allowed()
+        if terminals is None:
+            return _line_selection_required()
+        assembly_body, assembly_error = await _assemble_line_selection(
+            user_id, terminals, payload.line_selection
+        )
+        if assembly_error is not None:
+            return assembly_error
+        assert assembly_body is not None
+        assembled_route = assembly_body["route"]
+        line_selection_value = _pack_line_selection(payload.line_selection, assembly_body)
+    elif _requires_line_selection(project_type):
+        return _line_selection_required()
+
+    route_input = assembled_route if assembled_route is not None else payload.route
+
+    prepared = _prepare_route(route_input, payload.row_width_ft)
     if isinstance(prepared, JSONResponse):
         return prepared
     geometry, row_width_ft = prepared
-    route_value = payload.route
+    route_value = route_input
 
-    if terminals is not None:
-        flags = await _inside_footprint(payload.route, terminals)
+    if terminals is not None and route_value is not None:
+        flags = await _inside_footprint(route_value, terminals)
         snapped = snap_route_to_terminals(
-            payload.route,
+            route_value,
             terminals.sending,
             terminals.receiving,
             inside_footprint=flags,
@@ -473,6 +581,8 @@ async def prepare_scenario_insert(
     if isinstance(measured, JSONResponse):
         return measured
     changes, releases = measured
+    if line_selection_value is not None:
+        releases = {**(releases or {}), "corridors": CORRIDORS_RELEASE}
 
     calc_fields, error_response = _calculate(payload.name, changes)
     if error_response is not None:
@@ -491,6 +601,7 @@ async def prepare_scenario_insert(
         "route": route_value,
         "segments": payload.segments,
         "layer_releases": releases,
+        "line_selection": line_selection_value,
     }
 
 
@@ -514,12 +625,12 @@ async def insert_scenario(
         insert into public.scenario
             (user_id, name, source, defaults_id, changes,
              results, calculator, inputs_id, computed_at, calc_error,
-             route, segments, layer_releases, project_id)
+             route, segments, layer_releases, project_id, line_selection)
         values
             ($1, $2, $3, $4, $5::jsonb,
              $6::jsonb, $7::jsonb, $8, $9, $10,
              ST_SetSRID(ST_GeomFromGeoJSON($11::text), 4326), $12::jsonb,
-             $13::jsonb, $14)
+             $13::jsonb, $14, $15::jsonb)
         returning {_SCENARIO_COLUMNS}
         """,
         UUID(user_id),
@@ -536,6 +647,7 @@ async def insert_scenario(
         _jsonb_param(values["segments"]),
         _jsonb_param(values["layer_releases"]),
         project_id,
+        _jsonb_param(values.get("line_selection")),
     )
 
 
@@ -645,17 +757,59 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
             "computed_at": existing["computed_at"],
             "calc_error": existing["calc_error"],
             "revision": existing["revision"],
+            "line_selection": existing.get("line_selection"),
         }
 
-    recalculate = (
-        "changes" in payload.model_fields_set or "defaults_id" in payload.model_fields_set
-    )
+    stored_changes = _decode_jsonb(stored["changes"])
+    stored_type = _project_type_from_changes(stored_changes)
     new_name = payload.name if payload.name is not None else stored["name"]
     new_defaults_id = (
         payload.defaults_id if payload.defaults_id is not None else stored["defaults_id"]
     )
     new_changes = (
         payload.changes if payload.changes is not None else _decode_jsonb(stored["changes"])
+    )
+    new_type = _project_type_from_changes(new_changes)
+    line_selection_sent = "line_selection" in payload.model_fields_set
+    type_became_selection = (
+        not _requires_line_selection(stored_type) and _requires_line_selection(new_type)
+    )
+    type_became_greenfield = (
+        _requires_line_selection(stored_type) and new_type == "greenfield"
+    )
+
+    line_selection_assign: Any = _LINE_SELECTION_UNSET
+    assembled_route: dict | None = None
+
+    if line_selection_sent and payload.line_selection is not None:
+        if not _requires_line_selection(new_type):
+            return _line_selection_not_allowed()
+        assembly_body, assembly_error = await _assemble_line_selection(
+            user_id, terminals, payload.line_selection
+        )
+        if assembly_error is not None:
+            return assembly_error
+        assert assembly_body is not None
+        assembled_route = assembly_body["route"]
+        line_selection_assign = _pack_line_selection(payload.line_selection, assembly_body)
+
+    if type_became_selection and assembled_route is None:
+        return _line_selection_required()
+
+    if type_became_greenfield:
+        route_was_sent_early = "route" in payload.model_fields_set
+        if not route_was_sent_early or payload.route is None:
+            return _greenfield_route_required()
+        line_selection_assign = None
+
+    if new_type == "greenfield" and line_selection_sent and payload.line_selection is not None:
+        return _line_selection_not_allowed()
+
+    selection_assembled = assembled_route is not None
+    recalculate = (
+        "changes" in payload.model_fields_set
+        or "defaults_id" in payload.model_fields_set
+        or selection_assembled
     )
 
     route_was_sent = "route" in payload.model_fields_set
@@ -678,7 +832,23 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
 
     prepared: tuple[RouteGeometry, float] | None = None
     if recalculate:
-        if route_was_sent:
+        if selection_assembled and assembled_route is not None:
+            flags = await _inside_footprint(assembled_route, terminals)
+            snapped = snap_route_to_terminals(
+                assembled_route,
+                terminals.sending,
+                terminals.receiving,
+                inside_footprint=flags,
+            )
+            if isinstance(snapped, TerminalMismatch):
+                return _error(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    "route_terminals_mismatch",
+                    mismatch_message(snapped),
+                )
+            assembled_route = snapped
+            measure_route = assembled_route
+        elif route_was_sent:
             measure_route = snapped_route if snapped_route is not None else payload.route
         else:
             measure_route = _route_to_measure(None, False, stored["route"])
@@ -700,6 +870,8 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
         if isinstance(measured, JSONResponse):
             return measured
         new_changes, releases = measured
+        if selection_assembled:
+            releases = {**(releases or {}), "corridors": CORRIDORS_RELEASE}
         calc_fields, error_response = _calculate(new_name, new_changes)
         if error_response is not None:
             return error_response
@@ -736,12 +908,18 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
     # Only fields the caller sent. A name-only PATCH must not null the route.
     # A sent geometry is the snapped copy, so every scenario shares the
     # project's exact ends. An explicit null still clears the column.
-    if route_was_sent:
-        to_store = snapped_route if snapped_route is not None else payload.route
+    if route_was_sent or selection_assembled:
+        if selection_assembled and assembled_route is not None:
+            to_store = assembled_route
+        else:
+            to_store = snapped_route if snapped_route is not None else payload.route
         params.append(_geojson_param(to_store))
         assignments.append(
             f"route = ST_SetSRID(ST_GeomFromGeoJSON(${len(params)}::text), 4326)"
         )
+    if line_selection_assign is not _LINE_SELECTION_UNSET:
+        params.append(_jsonb_param(line_selection_assign))
+        assignments.append(f"line_selection = ${len(params)}::jsonb")
     if "segments" in payload.model_fields_set:
         params.append(_jsonb_param(payload.segments))
         assignments.append(f"segments = ${len(params)}::jsonb")
@@ -871,12 +1049,12 @@ async def duplicate_scenario(user_id: str, scenario_id: str) -> JSONResponse:
             insert into public.scenario (
                 user_id, name, source, defaults_id, changes,
                 results, calculator, inputs_id, computed_at, calc_error,
-                route, segments, layer_releases, project_id
+                route, segments, layer_releases, project_id, line_selection
             )
             select
                 user_id, $2, 'manual', defaults_id, changes,
                 results, calculator, inputs_id, computed_at, calc_error,
-                route, segments, layer_releases, project_id
+                route, segments, layer_releases, project_id, line_selection
             from public.scenario
             where id = $1
             returning {_SCENARIO_COLUMNS}

@@ -9,7 +9,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(6);
+select plan(7);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures (bootstrap role bypasses RLS)
@@ -109,6 +109,17 @@ select is(
    where id = '22222222-0000-0000-0000-000000000001'),
   '33333333-0000-0000-0000-000000000011',
   'scenario_read returns project_id'
+);
+
+select ok(
+  exists(
+    select 1
+    from pg_attribute
+    where attrelid = 'public.scenario_read'::regclass
+      and attname = 'line_selection'
+      and not attisdropped
+  ),
+  'scenario_read returns line_selection'
 );
 
 reset role;
