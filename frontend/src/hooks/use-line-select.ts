@@ -11,10 +11,7 @@ import {
   hoverCorridorGidFilter,
   lineSelectTooltip,
   overlappingCandidates,
-  startTrace,
   toggleGid,
-  traceStep,
-  type LineTrace,
   type CorridorCandidate,
 } from '@/lib/line-select';
 
@@ -154,11 +151,6 @@ export function useLineSelect(
   const hoverPopupRef = useRef<Popup | null>(null);
   const hoveredGidRef = useRef<number | null>(null);
   const [hoveredGid, setHoveredGid] = useState<number | null>(null);
-  // Drag trace (test version): pieces picked up while the mouse is held down.
-  const traceRef = useRef<{ trace: LineTrace; base: number[] } | null>(null);
-  const suppressClickRef = useRef(false);
-  const onSelectedGidsRef = useRef(onSelectedGids);
-  onSelectedGidsRef.current = onSelectedGids;
   activeRef.current = active;
   selectedRef.current = selectedGids;
 
@@ -264,69 +256,9 @@ export function useLineSelect(
       hideTooltip();
     };
 
-    const candidatesAt = (features: MapGeoJSONFeature[]): CorridorCandidate[] =>
-      overlappingCandidates(
-        features
-          .map((feature) => corridorCandidateFromFeature(feature))
-          .filter((row): row is CorridorCandidate => row !== null),
-      );
-
-    const applyTraceAdds = (added: CorridorCandidate[]): void => {
-      const current = traceRef.current;
-      if (!current || added.length === 0) return;
-      for (const candidate of added) onPieceSeenRef.current?.(candidate);
-      const merged = [...current.base];
-      for (const gid of current.trace.gids) if (!merged.includes(gid)) merged.push(gid);
-      onSelectedGidsRef.current(merged, added[added.length - 1]);
-    };
-
-    const onTraceStart = (event: MapLayerMouseEvent): void => {
-      if (!activeRef.current) return;
-      const original = event.originalEvent;
-      if (original.button !== 0 || original.metaKey || original.ctrlKey || original.shiftKey) return;
-      const candidates = candidatesAt(corridorFeatures(event.point));
-      // Overlapping pieces open the picker on click; a selected piece is removed by click.
-      if (candidates.length !== 1) return;
-      if (selectedRef.current.includes(candidates[0]!.gid)) return;
-      const step = traceStep(startTrace(), candidates);
-      traceRef.current = { trace: step.trace, base: [...selectedRef.current] };
-      suppressClickRef.current = true;
-      event.preventDefault();
-      map.dragPan.disable();
-      applyTraceAdds(step.added);
-    };
-
-    const onTraceMove = (event: MapMouseEvent): void => {
-      const current = traceRef.current;
-      if (!current || !map.getLayer(CORRIDOR_HIT)) return;
-      const { x, y } = event.point;
-      const features = map.queryRenderedFeatures(
-        [
-          [x - 4, y - 4],
-          [x + 4, y + 4],
-        ],
-        { layers: [CORRIDOR_HIT] },
-      );
-      const step = traceStep(current.trace, candidatesAt(features));
-      if (step.added.length === 0) return;
-      traceRef.current = { trace: step.trace, base: current.base };
-      applyTraceAdds(step.added);
-    };
-
-    const onTraceEnd = (): void => {
-      if (!traceRef.current) return;
-      traceRef.current = null;
-      map.dragPan.enable();
-    };
-
     const onClick = (event: MapLayerMouseEvent): void => {
       if (!activeRef.current) return;
       event.preventDefault();
-      if (suppressClickRef.current) {
-        // The mousedown that started a trace already selected the piece.
-        suppressClickRef.current = false;
-        return;
-      }
       const features = corridorFeatures(event.point);
       const candidates = overlappingCandidates(
         features
@@ -357,19 +289,12 @@ export function useLineSelect(
     map.on('mouseleave', CORRIDOR_HIT, onLeave);
     map.on('click', CORRIDOR_HIT, onClick);
     map.on('contextmenu', SELECTED_LAYER, onPieceContextMenuEvent);
-    map.on('mousedown', CORRIDOR_HIT, onTraceStart);
-    map.on('mousemove', onTraceMove);
-    window.addEventListener('mouseup', onTraceEnd);
 
     return () => {
       map.off('mousemove', CORRIDOR_HIT, onMove);
       map.off('mouseleave', CORRIDOR_HIT, onLeave);
       map.off('click', CORRIDOR_HIT, onClick);
       map.off('contextmenu', SELECTED_LAYER, onPieceContextMenuEvent);
-      map.off('mousedown', CORRIDOR_HIT, onTraceStart);
-      map.off('mousemove', onTraceMove);
-      window.removeEventListener('mouseup', onTraceEnd);
-      onTraceEnd();
       hideTooltip();
     };
   }, [map, active, toggle, onPickerOpen]);

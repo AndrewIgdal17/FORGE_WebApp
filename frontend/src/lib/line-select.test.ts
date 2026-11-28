@@ -12,8 +12,6 @@ import {
   selectionSummary,
   stretchEndForAssembly,
   toggleGid,
-  startTrace,
-  traceStep,
   type CorridorCandidate,
 } from '@/lib/line-select';
 
@@ -239,44 +237,5 @@ describe('shouldRecordPiece', () => {
     expect(shouldRecordPiece({ 45081: details }, 45081, { ...details, voltage_kv: 69 })).toBe(true);
     expect(shouldRecordPiece({ 45081: details }, 45081, { ...details, sub_2: 'Other' })).toBe(true);
     expect(shouldRecordPiece({ 45081: details }, 45081, { ...details, sub_1: null })).toBe(true);
-  });
-});
-
-describe('traceStep', () => {
-  const piece = (gid: number, voltage_kv: number | null) =>
-    ({ gid, voltage_kv, sub_1: null, sub_2: null, source: 'osm', circuits: null }) as CorridorCandidate;
-
-  it('starts on the first piece and takes its voltage', () => {
-    const step = traceStep(startTrace(), [piece(1, 115)]);
-    expect(step.trace).toEqual({ voltage: 115, gids: [1] });
-    expect(step.added.map((c) => c.gid)).toEqual([1]);
-  });
-
-  it('adds later pieces only at the same voltage', () => {
-    let trace = traceStep(startTrace(), [piece(1, 115)]).trace;
-    const step = traceStep(trace, [piece(2, 230)]);
-    expect(step.added).toEqual([]);
-    trace = traceStep(step.trace, [piece(3, 115)]).trace;
-    expect(trace.gids).toEqual([1, 3]);
-  });
-
-  it('adds nothing where two same-voltage pieces overlap (a parallel line)', () => {
-    const trace = traceStep(startTrace(), [piece(1, 115)]).trace;
-    const step = traceStep(trace, [piece(2, 115), piece(4, 115)]);
-    expect(step.added).toEqual([]);
-    expect(step.trace.gids).toEqual([1]);
-  });
-
-  it('does not add a piece twice, and a missing voltage only matches a missing voltage', () => {
-    let trace = traceStep(startTrace(), [piece(1, null)]).trace;
-    expect(traceStep(trace, [piece(1, null)]).added).toEqual([]);
-    expect(traceStep(trace, [piece(2, 115)]).added).toEqual([]);
-    trace = traceStep(trace, [piece(5, null)]).trace;
-    expect(trace.gids).toEqual([1, 5]);
-  });
-
-  it('does not start where two pieces overlap', () => {
-    const step = traceStep(startTrace(), [piece(1, 115), piece(2, 115)]);
-    expect(step.trace.gids).toEqual([]);
   });
 });
