@@ -53,6 +53,7 @@ import { getValueAtPath } from '@/lib/path';
 import { isMultiLineString, scenarioMapRoute } from '@/lib/route-geometry';
 import type { TerminalFootprints } from '@/lib/terminals';
 import { useFormStore } from '@/stores/form-store';
+import { terminalsAfterTypeChange } from '@/lib/terminal-pick';
 import {
   clearLastWorkspace,
   projectScenarioMap,
@@ -1124,18 +1125,16 @@ function WorkspaceBody(): ReactElement {
 
   const pickingNewProject = terminalPick !== null && draft !== null && !draft.project_id;
 
-  // Esc steps a pick back: from receiving it clears the pending sending pick and
-  // returns to sending; from sending it ends the pick. Listens only while picking.
+  // Esc at the receiving step clears the pending sending pick and returns to
+  // sending. At the sending step it does nothing. Listens only while picking,
+  // and ignores Esc that a dialog (such as the point confirmation) handles.
   useEffect(() => {
-    if (terminalPick === null) return;
+    if (terminalPick !== 'receiving' || !pendingSending) return;
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return;
-      if (terminalPick === 'receiving' && pendingSending) {
-        setPendingSending(null);
-        setTerminalPick('sending');
-      } else {
-        setTerminalPick(null);
-      }
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (event.target instanceof Element && event.target.closest('[role="dialog"]')) return;
+      setPendingSending(null);
+      setTerminalPick('sending');
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -1155,6 +1154,21 @@ function WorkspaceBody(): ReactElement {
     if (replacesExistingLine(prior) !== replacesExistingLine(activeProjectType)) {
       updateDrawn({ route: null, segments: null });
       setPendingLineSelection(undefined);
+    }
+    if (draft && !draft.project_id) {
+      const change = terminalsAfterTypeChange(
+        draft.terminals,
+        pendingSending,
+        typeof activeProjectType === 'string' ? activeProjectType : null,
+      );
+      if (change.hint) {
+        setDraft((current) =>
+          current && !current.project_id ? { ...current, terminals: change.terminals } : current,
+        );
+        setPendingSending(change.pendingSending);
+        setTerminalPick(change.restartAt);
+        toast('Pick a substation');
+      }
     }
   }, [activeProjectType]);
 
