@@ -51,18 +51,20 @@ order by gid
 """
 
 _TRANSFORM_TERMINALS_SQL = """
+-- Every parameter is typed: Postgres cannot infer a type for a NULL
+-- stretch end ($5, $6) inside the CASE, and refuses the query.
 select
-  ST_X(ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 5070)) as send_x,
-  ST_Y(ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 5070)) as send_y,
-  ST_X(ST_Transform(ST_SetSRID(ST_MakePoint($3, $4), 4326), 5070)) as recv_x,
-  ST_Y(ST_Transform(ST_SetSRID(ST_MakePoint($3, $4), 4326), 5070)) as recv_y,
+  ST_X(ST_Transform(ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326), 5070)) as send_x,
+  ST_Y(ST_Transform(ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326), 5070)) as send_y,
+  ST_X(ST_Transform(ST_SetSRID(ST_MakePoint($3::float8, $4::float8), 4326), 5070)) as recv_x,
+  ST_Y(ST_Transform(ST_SetSRID(ST_MakePoint($3::float8, $4::float8), 4326), 5070)) as recv_y,
   case
-    when $5 is null then null
-    else ST_X(ST_Transform(ST_SetSRID(ST_MakePoint($5, $6), 4326), 5070))
+    when $5::float8 is null then null
+    else ST_X(ST_Transform(ST_SetSRID(ST_MakePoint($5::float8, $6::float8), 4326), 5070))
   end as stretch_x,
   case
-    when $5 is null then null
-    else ST_Y(ST_Transform(ST_SetSRID(ST_MakePoint($5, $6), 4326), 5070))
+    when $5::float8 is null then null
+    else ST_Y(ST_Transform(ST_SetSRID(ST_MakePoint($5::float8, $6::float8), 4326), 5070))
   end as stretch_y
 """
 
