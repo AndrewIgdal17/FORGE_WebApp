@@ -20,6 +20,31 @@ export type CorridorCandidate = {
   circuits: number | null;
 };
 
+/** Voltage and substation names for one corridor piece. */
+export type PieceDetails = {
+  voltage_kv: number | null;
+  sub_1: string | null;
+  sub_2: string | null;
+};
+
+function namePart(value: string | null): string {
+  return value?.trim() ?? '';
+}
+
+/** "138 kV · Reusens – Opossum Creek" for a piece; missing parts are named in plain words. */
+export function pieceLabel(piece: PieceDetails): string {
+  const voltage =
+    piece.voltage_kv === null
+      ? 'voltage not in the data'
+      : `${Math.round(piece.voltage_kv).toLocaleString('en-US')} kV`;
+  const sub1 = namePart(piece.sub_1);
+  const sub2 = namePart(piece.sub_2);
+  let ends = 'unnamed';
+  if (sub1 && sub2) ends = `${sub1} – ${sub2}`;
+  else if (sub1 || sub2) ends = sub1 || sub2;
+  return `${voltage} · ${ends}`;
+}
+
 export function toggleGid(selected: number[], gid: number): number[] {
   const index = selected.indexOf(gid);
   if (index >= 0) {

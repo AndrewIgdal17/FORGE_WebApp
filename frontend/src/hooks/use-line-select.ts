@@ -127,7 +127,8 @@ function syncHoverFilter(map: MapLibreMap, gid: number | null): void {
 export interface UseLineSelectOptions {
   active: boolean;
   selectedGids: number[];
-  onSelectedGids: (gids: number[]) => void;
+  /** `added` is the candidate just selected; absent when a piece was removed. */
+  onSelectedGids: (gids: number[], added?: CorridorCandidate) => void;
   onPickerOpen: (candidates: CorridorCandidate[]) => void;
   /** Right-click on a selected piece; the caller opens the piece menu at the client point. */
   onPieceContextMenu?: (gid: number, clientPoint: { x: number; y: number }) => void;
@@ -149,8 +150,10 @@ export function useLineSelect(
   selectedRef.current = selectedGids;
 
   const toggle = useCallback(
-    (gid: number) => {
-      onSelectedGids(toggleGid(selectedRef.current, gid));
+    (candidate: CorridorCandidate) => {
+      const current = selectedRef.current;
+      const added = current.includes(candidate.gid) ? undefined : candidate;
+      onSelectedGids(toggleGid(current, candidate.gid), added);
     },
     [onSelectedGids],
   );
@@ -258,7 +261,7 @@ export function useLineSelect(
       );
       if (candidates.length === 0) return;
       if (candidates.length === 1) {
-        toggle(candidates[0]!.gid);
+        toggle(candidates[0]!);
         return;
       }
       onPickerOpen(candidates);

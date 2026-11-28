@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   hoverCorridorGidFilter,
+  pieceLabel,
   lineSelectionStaleInView,
   nearestPointOnLine,
   overlappingCandidates,
@@ -181,6 +182,37 @@ describe('selectionSummary', () => {
   it('reads no connectors when the list is empty', () => {
     expect(selectionSummary([{ miles: 5 }], [])).toBe(
       'From line data: 1 piece, 5.0 mi, no connectors',
+    );
+  });
+});
+describe('pieceLabel', () => {
+  it('names voltage and both substations', () => {
+    expect(
+      pieceLabel({ voltage_kv: 138, sub_1: 'Reusens', sub_2: 'Opossum Creek' }),
+    ).toBe('138 kV · Reusens – Opossum Creek');
+  });
+
+  it('rounds the voltage to whole kV', () => {
+    expect(pieceLabel({ voltage_kv: 137.6, sub_1: 'A', sub_2: 'B' })).toBe('138 kV · A – B');
+  });
+
+  it('says the voltage is missing when it is null', () => {
+    expect(pieceLabel({ voltage_kv: null, sub_1: 'A', sub_2: 'B' })).toBe(
+      'voltage not in the data · A – B',
+    );
+  });
+
+  it('says unnamed when neither substation is named', () => {
+    expect(pieceLabel({ voltage_kv: 69, sub_1: null, sub_2: null })).toBe('69 kV · unnamed');
+  });
+
+  it('treats blank names as missing', () => {
+    expect(pieceLabel({ voltage_kv: 69, sub_1: '  ', sub_2: '' })).toBe('69 kV · unnamed');
+  });
+
+  it('shows the one named substation when only one is named', () => {
+    expect(pieceLabel({ voltage_kv: 69, sub_1: 'Reusens', sub_2: null })).toBe(
+      '69 kV · Reusens',
     );
   });
 });

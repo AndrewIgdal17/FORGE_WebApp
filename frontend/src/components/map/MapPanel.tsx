@@ -53,6 +53,7 @@ import {
   OLD_CONDUCTOR_PATH,
   prefillChanges,
   selectionSummary,
+  type PieceDetails,
   stretchEndForAssembly,
   toggleGid,
   useLineDataPrefill,
@@ -196,6 +197,8 @@ export function MapPanel({
   hasDrawTerminalsRef.current = drawTerminals != null;
 
   const [selectedGids, setSelectedGids] = useState<number[]>(initialSelectedGids ?? []);
+  // Voltage and names of each piece the user clicked, keyed by gid.
+  const [pieceDetails, setPieceDetails] = useState<Record<number, PieceDetails>>({});
   const [pickerCandidates, setPickerCandidates] = useState<CorridorCandidate[] | null>(null);
   const [assembledPieces, setAssembledPieces] = useState<AssembleLinePiece[]>([]);
   const [assembledConnectors, setAssembledConnectors] = useState<LineConnector[]>(storedConnectors ?? []);
@@ -284,7 +287,8 @@ export function MapPanel({
         { label: 'Remove piece', onSelect: () => handleRemoveGid(gid) },
       ]);
     },
-    onSelectedGids: (gids) => {
+    onSelectedGids: (gids, added) => {
+      if (added) setPieceDetails((current) => ({ ...current, [added.gid]: added }));
       setSelectedGids(gids);
       setAssembledPieces([]);
       setAssembledConnectors([]);
@@ -632,6 +636,7 @@ export function MapPanel({
   }
 
   function handlePickerChoose(candidate: CorridorCandidate): void {
+    setPieceDetails((current) => ({ ...current, [candidate.gid]: candidate }));
     setSelectedGids((current) => toggleGid(current, candidate.gid));
     setAssembledPieces([]);
     setAssembledConnectors([]);
@@ -695,6 +700,7 @@ export function MapPanel({
       {lineSelectActive ? (
         <LineSelectPanel
           selectedGids={selectedGids}
+          pieceDetails={pieceDetails}
           pieces={assembledPieces}
           connectors={assembledConnectors}
           summary={lineSummary}
