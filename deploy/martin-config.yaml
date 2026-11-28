@@ -24,5 +24,6 @@ postgres:
       source_id_format: "{schema}.{function}"
 
 pmtiles:
+  allow_http: false
   sources:
     basemap: /basemap/northamerica.pmtiles
