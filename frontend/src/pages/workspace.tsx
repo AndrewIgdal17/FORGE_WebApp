@@ -1228,7 +1228,7 @@ function WorkspaceBody(): ReactElement {
     terrainMilesTotal(data ?? {}) > 0 &&
     calculationRoute(drawn, null) != null &&
     currentRowWidthFt() != null &&
-    createBlockedReason(draft?.nerc_regions ?? []) === null;
+    createBlockedReason(draft) === null;
   const calculationAllowed =
     required !== null && canCalculate(required, routeDrawn);
   const routeInputReady = required !== null && canDraw(required);
@@ -1511,7 +1511,7 @@ function WorkspaceBody(): ReactElement {
             createMode={createMode}
             canCreate={canCreate && calculationAllowed}
             createBlockedReason={
-              createMode ? createBlockedReason(draft?.nerc_regions ?? []) : null
+              createMode ? createBlockedReason(draft) : null
             }
             canCalculate={calculationAllowed}
             onCalculate={() => { void runCalculation(); }}

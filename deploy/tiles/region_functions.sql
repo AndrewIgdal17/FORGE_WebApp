@@ -43,14 +43,21 @@ CREATE INDEX IF NOT EXISTS nerc_regions_buffered_gix
   ON tiles_private.nerc_regions_buffered USING gist (geom_buffered);
 
 CREATE OR REPLACE FUNCTION tiles_private.refresh_nerc_regions_buffered()
-RETURNS trigger
-LANGUAGE plpgsql
+RETURNS void
+LANGUAGE sql
 AS $$
-BEGIN
   DELETE FROM tiles_private.nerc_regions_buffered;
   INSERT INTO tiles_private.nerc_regions_buffered (code, geom_buffered)
   SELECT code, ST_Multi(ST_Buffer(ST_SimplifyPreserveTopology(geom, 500), 25000))
   FROM ref.nerc_regions;
+$$;
+
+CREATE OR REPLACE FUNCTION tiles_private.refresh_nerc_regions_buffered_trg()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  PERFORM tiles_private.refresh_nerc_regions_buffered();
   RETURN NULL;
 END
 $$;
@@ -59,7 +66,7 @@ DROP TRIGGER IF EXISTS nerc_regions_refresh_buffered ON ref.nerc_regions;
 CREATE TRIGGER nerc_regions_refresh_buffered
   AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON ref.nerc_regions
   FOR EACH STATEMENT
-  EXECUTE FUNCTION tiles_private.refresh_nerc_regions_buffered();
+  EXECUTE FUNCTION tiles_private.refresh_nerc_regions_buffered_trg();
 
 -- Validated list of region codes from the tile query params. NULL when the
 -- list is missing, empty, or has any code outside the six.
@@ -222,8 +229,6 @@ AS $$
   FROM tile
 $$;
 
--- Initial fill (the trigger only fires on later changes).
-DELETE FROM tiles_private.nerc_regions_buffered;
-INSERT INTO tiles_private.nerc_regions_buffered (code, geom_buffered)
-SELECT code, ST_Multi(ST_Buffer(ST_SimplifyPreserveTopology(geom, 500), 25000))
-FROM ref.nerc_regions;
+-- Initial fill (the trigger only fires on later changes). One statement, so
+-- it is atomic under psql autocommit.
+SELECT tiles_private.refresh_nerc_regions_buffered();

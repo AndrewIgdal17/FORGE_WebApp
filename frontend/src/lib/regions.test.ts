@@ -120,12 +120,18 @@ describe('terminalRegionCheck', () => {
 });
 
 describe('createBlockedReason', () => {
-  it('blocks a draft with no regions and says why', () => {
-    expect(createBlockedReason([])).toBe(
-      'Pick at least one NERC region (use Add on the terminal warning)',
-    );
+  const why = 'Pick at least one NERC region (use Add on the terminal warning)';
+  it('blocks a draft with no project and no regions, and says why', () => {
+    expect(createBlockedReason({ project_id: null, nerc_regions: [] })).toBe(why);
+    expect(createBlockedReason({ nerc_regions: [] })).toBe(why);
   });
   it('allows a draft with a region', () => {
-    expect(createBlockedReason(['WECC'])).toBeNull();
+    expect(createBlockedReason({ project_id: null, nerc_regions: ['WECC'] })).toBeNull();
+  });
+  it('does not block a draft that belongs to a project (its regions apply)', () => {
+    expect(createBlockedReason({ project_id: 'p1', nerc_regions: [] })).toBeNull();
+  });
+  it('does not block when there is no draft', () => {
+    expect(createBlockedReason(null)).toBeNull();
   });
 });

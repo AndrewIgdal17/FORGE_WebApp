@@ -84,9 +84,16 @@ export function terminalRegionCheck(
   return { ok: false, suggested };
 }
 
-/** Why a draft cannot be created yet, or null. The server rejects a project with no regions. */
-export function createBlockedReason(nercRegions: readonly string[]): string | null {
-  return nercRegions.length === 0
+/**
+ * Why a draft cannot be created yet, or null. The server rejects a new project
+ * with no regions; a draft that already belongs to a project (a new scenario)
+ * uses the project's regions, so it is never blocked here.
+ */
+export function createBlockedReason(
+  draft: { project_id?: string | null; nerc_regions: readonly string[] } | null,
+): string | null {
+  if (!draft || draft.project_id) return null;
+  return draft.nerc_regions.length === 0
     ? 'Pick at least one NERC region (use Add on the terminal warning)'
     : null;
 }
