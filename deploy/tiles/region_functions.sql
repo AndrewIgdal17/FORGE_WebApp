@@ -20,22 +20,46 @@
 -- missing, empty or invalid list (any code outside the six) gives an empty
 -- tile, never an error.
 --
--- The 25 km buffer is precomputed once per region as a stored generated
--- column (ref.nerc_regions.geom_buffered, simplified to ~500 m first; 25 km
--- of slack makes that harmless). No function unions or buffers per request.
--- The column stays fresh when the loader reloads ref.nerc_regions.
+-- The 25 km buffer is precomputed once per region into
+-- tiles_private.nerc_regions_buffered (simplified to ~500 m first; 25 km of
+-- slack makes that harmless). It lives outside the ref schema so Martin, which
+-- auto-publishes ref tables, sees only one geometry column on ref.nerc_regions.
+-- A statement-level trigger on ref.nerc_regions refreshes it after any change,
+-- so a loader reload keeps it fresh. No function unions or buffers per request.
 
--- Replaced by ref.region_codes_param and the geom_buffered column.
+-- Replaced by ref.region_codes_param and tiles_private.nerc_regions_buffered.
 DROP FUNCTION IF EXISTS ref.regions_union_buffered(text[]);
+DROP INDEX IF EXISTS ref.nerc_regions_geom_buffered_gix;
+ALTER TABLE ref.nerc_regions DROP COLUMN IF EXISTS geom_buffered;
 
-ALTER TABLE ref.nerc_regions
-  ADD COLUMN IF NOT EXISTS geom_buffered geometry(MultiPolygon, 5070)
-  GENERATED ALWAYS AS (
-    ST_Multi(ST_Buffer(ST_SimplifyPreserveTopology(geom, 500), 25000))
-  ) STORED;
+CREATE SCHEMA IF NOT EXISTS tiles_private;
 
-CREATE INDEX IF NOT EXISTS nerc_regions_geom_buffered_gix
-  ON ref.nerc_regions USING gist (geom_buffered);
+CREATE TABLE IF NOT EXISTS tiles_private.nerc_regions_buffered (
+  code text PRIMARY KEY,
+  geom_buffered public.geometry(MultiPolygon, 5070) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS nerc_regions_buffered_gix
+  ON tiles_private.nerc_regions_buffered USING gist (geom_buffered);
+
+CREATE OR REPLACE FUNCTION tiles_private.refresh_nerc_regions_buffered()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  DELETE FROM tiles_private.nerc_regions_buffered;
+  INSERT INTO tiles_private.nerc_regions_buffered (code, geom_buffered)
+  SELECT code, ST_Multi(ST_Buffer(ST_SimplifyPreserveTopology(geom, 500), 25000))
+  FROM ref.nerc_regions;
+  RETURN NULL;
+END
+$$;
+
+DROP TRIGGER IF EXISTS nerc_regions_refresh_buffered ON ref.nerc_regions;
+CREATE TRIGGER nerc_regions_refresh_buffered
+  AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON ref.nerc_regions
+  FOR EACH STATEMENT
+  EXECUTE FUNCTION tiles_private.refresh_nerc_regions_buffered();
 
 -- Validated list of region codes from the tile query params. NULL when the
 -- list is missing, empty, or has any code outside the six.
@@ -81,7 +105,7 @@ AS $$
     WHERE p.codes IS NOT NULL
       AND c.geom && p.bbox
       AND EXISTS (
-        SELECT 1 FROM ref.nerc_regions nr
+        SELECT 1 FROM tiles_private.nerc_regions_buffered nr
         WHERE nr.code = ANY (p.codes)
           AND ST_Intersects(c.geom, nr.geom_buffered)
       )
@@ -117,7 +141,7 @@ AS $$
     WHERE p.codes IS NOT NULL
       AND s.geom && p.bbox
       AND EXISTS (
-        SELECT 1 FROM ref.nerc_regions nr
+        SELECT 1 FROM tiles_private.nerc_regions_buffered nr
         WHERE nr.code = ANY (p.codes)
           AND ST_Intersects(s.geom, nr.geom_buffered)
       )
@@ -153,7 +177,7 @@ AS $$
     WHERE p.codes IS NOT NULL
       AND h.geom && p.bbox
       AND EXISTS (
-        SELECT 1 FROM ref.nerc_regions nr
+        SELECT 1 FROM tiles_private.nerc_regions_buffered nr
         WHERE nr.code = ANY (p.codes)
           AND ST_Intersects(h.geom, nr.geom_buffered)
       )
@@ -189,7 +213,7 @@ AS $$
     WHERE p.codes IS NOT NULL
       AND r.geom && p.bbox
       AND EXISTS (
-        SELECT 1 FROM ref.nerc_regions nr
+        SELECT 1 FROM tiles_private.nerc_regions_buffered nr
         WHERE nr.code = ANY (p.codes)
           AND ST_Intersects(r.geom, nr.geom_buffered)
       )
@@ -197,3 +221,9 @@ AS $$
   SELECT coalesce(ST_AsMVT(tile, 'ref.rail_narn', 4096, 'geom', 'gid'), ''::bytea)
   FROM tile
 $$;
+
+-- Initial fill (the trigger only fires on later changes).
+DELETE FROM tiles_private.nerc_regions_buffered;
+INSERT INTO tiles_private.nerc_regions_buffered (code, geom_buffered)
+SELECT code, ST_Multi(ST_Buffer(ST_SimplifyPreserveTopology(geom, 500), 25000))
+FROM ref.nerc_regions;

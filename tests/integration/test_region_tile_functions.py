@@ -125,6 +125,7 @@ async def world(conn):
               gid integer PRIMARY KEY, name text, volt_class text,
               geom public.geometry(Point, 5070)
             );
+            DROP TRIGGER IF EXISTS nerc_regions_refresh_buffered ON ref.nerc_regions;
             DELETE FROM ref.nerc_regions;
             """
         )
@@ -276,7 +277,7 @@ async def test_function_bodies_use_the_precomputed_buffer_not_union_or_buffer(wo
         name,
     )
     lowered = body.lower()
-    assert "geom_buffered" in lowered
+    assert "tiles_private.nerc_regions_buffered" in lowered
     assert "st_union" not in lowered
     assert "st_buffer" not in lowered
     helper = await world.fetchval(
@@ -284,3 +285,57 @@ async def test_function_bodies_use_the_precomputed_buffer_not_union_or_buffer(wo
     )
     assert "st_union" not in helper.lower()
     assert "st_buffer" not in helper.lower()
+
+
+@pytest.mark.anyio
+async def test_ref_nerc_regions_has_exactly_one_geometry_column(world):
+    # Martin auto-publishes ref tables; a second geometry column could add an
+    # ambiguous source. The buffered shapes live in tiles_private instead.
+    count = await world.fetchval(
+        "SELECT count(*) FROM geometry_columns "
+        "WHERE f_table_schema = 'ref' AND f_table_name = 'nerc_regions'"
+    )
+    assert count == 1
+    buffered = await world.fetchval(
+        "SELECT count(*) FROM geometry_columns "
+        "WHERE f_table_schema = 'tiles_private' AND f_table_name = 'nerc_regions_buffered'"
+    )
+    assert buffered == 1
+
+
+@pytest.mark.anyio
+async def test_applying_the_file_twice_is_clean(world):
+    await world.execute(SQL_FILE.read_text())
+    assert await world.fetchval("SELECT count(*) FROM tiles_private.nerc_regions_buffered") == 3
+
+
+@pytest.mark.anyio
+async def test_trigger_refreshes_buffered_table_on_insert_update_delete(world):
+    async def codes():
+        rows = await world.fetch(
+            "SELECT code FROM tiles_private.nerc_regions_buffered ORDER BY code"
+        )
+        return [r["code"] for r in rows]
+
+    assert await codes() == ["SERC", "TRE", "WECC"]
+    await world.execute(
+        "INSERT INTO ref.nerc_regions (code, name, geom) VALUES "
+        "('MRO', 'MRO', ST_Multi(ST_GeomFromText($1, 5070)))",
+        _box_wkt((1_000_000, 1_000_000, 1_500_000, 1_500_000)),
+    )
+    assert await codes() == ["MRO", "SERC", "TRE", "WECC"]
+    before = await world.fetchval(
+        "SELECT ST_Area(geom_buffered) FROM tiles_private.nerc_regions_buffered WHERE code = 'MRO'"
+    )
+    await world.execute(
+        "UPDATE ref.nerc_regions SET geom = ST_Multi(ST_GeomFromText($1, 5070)) WHERE code = 'MRO'",
+        _box_wkt((1_000_000, 1_000_000, 2_000_000, 2_000_000)),
+    )
+    after = await world.fetchval(
+        "SELECT ST_Area(geom_buffered) FROM tiles_private.nerc_regions_buffered WHERE code = 'MRO'"
+    )
+    assert after > before
+    await world.execute("DELETE FROM ref.nerc_regions WHERE code = 'MRO'")
+    assert await codes() == ["SERC", "TRE", "WECC"]
+    await world.execute("TRUNCATE ref.nerc_regions")
+    assert await codes() == []
