@@ -303,6 +303,7 @@ export function MapPanel({
   useLineSelect(map, {
     active: lineSelectActive,
     selectedGids,
+    traceStart: terminalMarkers.find((marker) => marker.role === 'sending')?.point ?? null,
     onPieceContextMenu: (gid, clientPoint) => {
       openContextMenu(clientPoint.x, clientPoint.y, [
         { label: 'Remove piece', onSelect: () => handleRemoveGid(gid) },

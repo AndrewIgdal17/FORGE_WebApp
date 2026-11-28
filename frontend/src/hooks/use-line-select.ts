@@ -22,6 +22,8 @@ const CORRIDOR_HIT = hitLayerId('ref.corridors');
 const SELECTED_SOURCE = 'forge-line-selected';
 const SELECTED_LAYER = 'forge-line-selected-highlight';
 const HOVER_LAYER = 'forge-line-hover-highlight';
+const TRACE_START_RADIUS_PX = 24;
+const TRACE_MOVE_THRESHOLD_PX = 4;
 
 function escapeHtml(value: string): string {
   return value
@@ -137,14 +139,25 @@ export interface UseLineSelectOptions {
   onPieceContextMenu?: (gid: number, clientPoint: { x: number; y: number }) => void;
   /** Called with each corridor piece the pointer hovers or clicks, so its details can be kept. */
   onPieceSeen?: (candidate: CorridorCandidate) => void;
+  /** The sending terminal; a drag that starts on or near it traces the line from there. */
+  traceStart?: [number, number] | null;
 }
 
 export function useLineSelect(
   map: MapLibreMap | null,
   options: UseLineSelectOptions,
 ): { hoveredGid: number | null } {
-  const { active, selectedGids, onSelectedGids, onPickerOpen, onPieceContextMenu, onPieceSeen } =
-    options;
+  const {
+    active,
+    selectedGids,
+    onSelectedGids,
+    onPickerOpen,
+    onPieceContextMenu,
+    onPieceSeen,
+    traceStart = null,
+  } = options;
+  const traceStartRef = useRef(traceStart);
+  traceStartRef.current = traceStart;
   const activeRef = useRef(active);
   const onPieceContextMenuRef = useRef(onPieceContextMenu);
   onPieceContextMenuRef.current = onPieceContextMenu;
@@ -155,7 +168,12 @@ export function useLineSelect(
   const hoveredGidRef = useRef<number | null>(null);
   const [hoveredGid, setHoveredGid] = useState<number | null>(null);
   // Drag trace (test version): pieces picked up while the mouse is held down.
-  const traceRef = useRef<{ trace: LineTrace; base: number[] } | null>(null);
+  const traceRef = useRef<{
+    trace: LineTrace;
+    base: number[];
+    start: { x: number; y: number };
+    moved: boolean;
+  } | null>(null);
   const suppressClickRef = useRef(false);
   const onSelectedGidsRef = useRef(onSelectedGids);
   onSelectedGidsRef.current = onSelectedGids;
@@ -251,6 +269,8 @@ export function useLineSelect(
           .filter((row): row is CorridorCandidate => row !== null),
       );
       const top = candidates[0];
+      // A crosshair shows the piece can be clicked or traced.
+      map.getCanvas().style.cursor = top ? 'crosshair' : '';
       if (!top) {
         hideTooltip();
         return;
@@ -261,6 +281,7 @@ export function useLineSelect(
     };
 
     const onLeave = (): void => {
+      map.getCanvas().style.cursor = '';
       hideTooltip();
     };
 
@@ -280,26 +301,38 @@ export function useLineSelect(
       onSelectedGidsRef.current(merged, added[added.length - 1]);
     };
 
-    const onTraceStart = (event: MapLayerMouseEvent): void => {
-      if (!activeRef.current) return;
-      const original = event.originalEvent;
-      if (original.button !== 0 || original.metaKey || original.ctrlKey || original.shiftKey) return;
-      const candidates = candidatesAt(corridorFeatures(event.point));
-      // Overlapping pieces open the picker on click; a selected piece is removed by click.
-      if (candidates.length !== 1) return;
-      if (selectedRef.current.includes(candidates[0]!.gid)) return;
-      const step = traceStep(startTrace(), candidates);
-      traceRef.current = { trace: step.trace, base: [...selectedRef.current] };
-      suppressClickRef.current = true;
-      event.preventDefault();
-      map.dragPan.disable();
-      applyTraceAdds(step.added);
+    const containerPoint = (event: MouseEvent): { x: number; y: number } => {
+      const rect = map.getContainer().getBoundingClientRect();
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
     };
 
-    const onTraceMove = (event: MapMouseEvent): void => {
+    // A trace starts on the sending terminal or on any line piece. Map panning
+    // is switched off before MapLibre sees the press, so the drag traces instead.
+    const onTraceDown = (event: MouseEvent): void => {
+      if (!activeRef.current || !map.getLayer(CORRIDOR_HIT)) return;
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+      const point = containerPoint(event);
+      const start = traceStartRef.current;
+      let nearSending = false;
+      if (start) {
+        const pin = map.project(start);
+        nearSending = Math.hypot(pin.x - point.x, pin.y - point.y) <= TRACE_START_RADIUS_PX;
+      }
+      const onPiece =
+        map.queryRenderedFeatures([point.x, point.y], { layers: [CORRIDOR_HIT] }).length > 0;
+      if (!nearSending && !onPiece) return;
+      traceRef.current = { trace: startTrace(), base: [...selectedRef.current], start: point, moved: false };
+      map.dragPan.disable();
+    };
+
+    const onTraceMove = (event: MouseEvent): void => {
       const current = traceRef.current;
       if (!current || !map.getLayer(CORRIDOR_HIT)) return;
-      const { x, y } = event.point;
+      const { x, y } = containerPoint(event);
+      if (!current.moved) {
+        if (Math.hypot(x - current.start.x, y - current.start.y) < TRACE_MOVE_THRESHOLD_PX) return;
+        current.moved = true;
+      }
       const features = map.queryRenderedFeatures(
         [
           [x - 4, y - 4],
@@ -309,14 +342,17 @@ export function useLineSelect(
       );
       const step = traceStep(current.trace, candidatesAt(features));
       if (step.added.length === 0) return;
-      traceRef.current = { trace: step.trace, base: current.base };
+      traceRef.current = { ...current, trace: step.trace };
       applyTraceAdds(step.added);
     };
 
     const onTraceEnd = (): void => {
-      if (!traceRef.current) return;
+      const current = traceRef.current;
+      if (!current) return;
       traceRef.current = null;
       map.dragPan.enable();
+      // A real drag must not also count as a click on the piece under the cursor.
+      if (current.moved) suppressClickRef.current = true;
     };
 
     const onClick = (event: MapLayerMouseEvent): void => {
@@ -357,8 +393,9 @@ export function useLineSelect(
     map.on('mouseleave', CORRIDOR_HIT, onLeave);
     map.on('click', CORRIDOR_HIT, onClick);
     map.on('contextmenu', SELECTED_LAYER, onPieceContextMenuEvent);
-    map.on('mousedown', CORRIDOR_HIT, onTraceStart);
-    map.on('mousemove', onTraceMove);
+    const container = map.getContainer();
+    container.addEventListener('mousedown', onTraceDown, true);
+    window.addEventListener('mousemove', onTraceMove);
     window.addEventListener('mouseup', onTraceEnd);
 
     return () => {
@@ -366,8 +403,8 @@ export function useLineSelect(
       map.off('mouseleave', CORRIDOR_HIT, onLeave);
       map.off('click', CORRIDOR_HIT, onClick);
       map.off('contextmenu', SELECTED_LAYER, onPieceContextMenuEvent);
-      map.off('mousedown', CORRIDOR_HIT, onTraceStart);
-      map.off('mousemove', onTraceMove);
+      container.removeEventListener('mousedown', onTraceDown, true);
+      window.removeEventListener('mousemove', onTraceMove);
       window.removeEventListener('mouseup', onTraceEnd);
       onTraceEnd();
       hideTooltip();

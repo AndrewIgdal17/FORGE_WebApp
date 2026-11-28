@@ -87,7 +87,7 @@ export function LineSelectPanel({
         </button>
       </div>
       <p className="mt-1 text-xs text-slate-500">
-        Hold and drag along the line to pick up its pieces (same voltage only). Click a piece to add or remove it.
+        Press on the sending substation and drag along the line to the receiving one; pieces at that line's voltage join as you pass. Click a piece to add or remove it.
       </p>
       <ol className="mt-3 grid gap-2">
         {listedPieces.map((piece, index) => (
