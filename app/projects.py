@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse, Response
 from . import auth as auth_module
 from . import db as db_module
 from .models import ProjectCreate, ProjectUpdate, TerminalIn, sanitize_for_json
+from .regions import check_terminals_in_regions, normalize_regions
 from .scenarios import (
     _error,
     _rate_limited,
@@ -37,7 +38,7 @@ _PROJECT_COLUMNS = (
     "sending_name, receiving_name, "
     "ST_AsGeoJSON(sending_point)::jsonb AS sending_point, "
     "ST_AsGeoJSON(receiving_point)::jsonb AS receiving_point, "
-    "base_scenario_id, revision, created_at, updated_at"
+    "base_scenario_id, nerc_regions, revision, created_at, updated_at"
 )
 
 _NAME_LIMIT = "Project name must be 1–200 characters."
@@ -63,6 +64,11 @@ def _project_to_dict(record) -> dict:
     return sanitize_for_json(row)
 
 
+def _stored_point(value: Any) -> tuple[float, float]:
+    coordinates = _decode_jsonb(value)["coordinates"]
+    return float(coordinates[0]), float(coordinates[1])
+
+
 def _point_terminal(point: tuple[float, float]) -> dict:
     lon, lat = point
     return {
@@ -71,6 +77,13 @@ def _point_terminal(point: tuple[float, float]) -> dict:
         "lon": float(lon),
         "lat": float(lat),
     }
+
+
+def _normalized_regions(codes: list[str] | None) -> list[str] | JSONResponse:
+    try:
+        return normalize_regions(list(codes or []))
+    except ValueError as exc:
+        return _error(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_changes", str(exc))
 
 
 def _checked_name(name: str) -> JSONResponse | None:
@@ -163,6 +176,9 @@ def _with_base(project: dict, scenario_id: UUID | str) -> dict:
 
 
 async def create_project(user_id: str, payload: ProjectCreate) -> JSONResponse:
+    regions = _normalized_regions(payload.nerc_regions)
+    if isinstance(regions, JSONResponse):
+        return regions
     resolved = await _resolve_pair(user_id, payload)
     if isinstance(resolved, JSONResponse):
         return resolved
@@ -179,6 +195,17 @@ async def create_project(user_id: str, payload: ProjectCreate) -> JSONResponse:
     name_error = _checked_name(name)
     if name_error is not None:
         return name_error
+
+    async with db_module.forge_api_transaction(user_id) as conn:
+        outside = await check_terminals_in_regions(
+            conn,
+            (sending["lon"], sending["lat"]),
+            (receiving["lon"], receiving["lat"]),
+            regions,
+            names=(sending["name"], receiving["name"]),
+        )
+    if outside is not None:
+        return outside
 
     prepared = await prepare_scenario_insert(
         user_id,
@@ -200,14 +227,15 @@ async def create_project(user_id: str, payload: ProjectCreate) -> JSONResponse:
                 user_id, name,
                 sending_substation_gid, receiving_substation_gid,
                 sending_name, receiving_name,
-                sending_point, receiving_point
+                sending_point, receiving_point, nerc_regions
             )
             values (
                 $1, $2,
                 $3, $4,
                 $5, $6,
                 ST_SetSRID(ST_MakePoint($7, $8), 4326),
-                ST_SetSRID(ST_MakePoint($9, $10), 4326)
+                ST_SetSRID(ST_MakePoint($9, $10), 4326),
+                $11::text[]
             )
             returning {_PROJECT_COLUMNS}
             """,
@@ -221,6 +249,7 @@ async def create_project(user_id: str, payload: ProjectCreate) -> JSONResponse:
             sending["lat"],
             receiving["lon"],
             receiving["lat"],
+            regions,
         )
         scenario_record = await insert_scenario(
             conn, user_id, project_record["id"], prepared
@@ -298,18 +327,36 @@ async def update_project(user_id: str, project_id: str, payload: ProjectUpdate) 
                 )
             new_base = base_uuid
 
+        new_regions = existing["nerc_regions"]
+        if "nerc_regions" in payload.model_fields_set:
+            regions = _normalized_regions(payload.nerc_regions)
+            if isinstance(regions, JSONResponse):
+                return regions
+            outside = await check_terminals_in_regions(
+                conn,
+                _stored_point(existing["sending_point"]),
+                _stored_point(existing["receiving_point"]),
+                regions,
+                names=(existing["sending_name"], existing["receiving_name"]),
+            )
+            if outside is not None:
+                return outside
+            new_regions = regions
+
         if not auth_module.rate_limiter.allow_write(user_id):
             return _rate_limited()
 
         record = await conn.fetchrow(
             f"""
             update public.project
-            set name = $1, base_scenario_id = $2, revision = revision + 1
-            where id = $3 and revision = $4
+            set name = $1, base_scenario_id = $2, nerc_regions = $3::text[],
+                revision = revision + 1
+            where id = $4 and revision = $5
             returning {_PROJECT_COLUMNS}
             """,
             new_name,
             new_base,
+            new_regions,
             existing["id"],
             payload.revision,
         )
@@ -361,13 +408,13 @@ async def duplicate_project(user_id: str, project_id: str) -> JSONResponse:
                 user_id, name,
                 sending_substation_gid, receiving_substation_gid,
                 sending_name, receiving_name,
-                sending_point, receiving_point
+                sending_point, receiving_point, nerc_regions
             )
             select
                 $1, $2,
                 sending_substation_gid, receiving_substation_gid,
                 sending_name, receiving_name,
-                sending_point, receiving_point
+                sending_point, receiving_point, nerc_regions
             from public.project
             where id = $3
             returning {_PROJECT_COLUMNS}

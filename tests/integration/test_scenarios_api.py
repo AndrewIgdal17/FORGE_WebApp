@@ -26,6 +26,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
+import anyio
 import asyncpg
 import forge
 import httpx
@@ -269,6 +270,7 @@ def _make_project(client, token: str, scenario: dict | None = None) -> dict:
     response = client.post(
         "/api/projects",
         json={
+            "nerc_regions": ["TRE"],
             "sending": {"point": [-97.74, 30.27]},
             "receiving": {"point": [-96.80, 32.78]},
             "scenario": body,
@@ -733,3 +735,54 @@ def test_duplicate_names_with_counter_within_project(client, make_user):
     )
     assert refused.status_code == 403
     assert refused.json()["error"]["code"] == "not_owner"
+
+
+# Terminal regions. The project POST checks each terminal against ref.nerc_regions,
+# so the local table needs a region over the test terminals (Austin and Dallas).
+_TERMINAL_REGION_SQL = """
+insert into ref.nerc_regions (code, name, geom)
+values (
+  'TRE', 'Texas RE',
+  ST_Multi(ST_Transform(ST_MakeEnvelope(-100, 25, -94, 35, 4326), 5070))
+)
+"""
+
+
+def _install_terminal_region() -> bool:
+    """Cover the test terminals with one region, unless ref.nerc_regions is loaded.
+
+    A loaded table is left alone; this run then depends on its shapes.
+    """
+
+    async def _run() -> bool:
+        conn = await asyncpg.connect(dsn=SUPERUSER_DATABASE_URL)
+        try:
+            if await conn.fetchval("select count(*) from ref.nerc_regions"):
+                return False
+            await conn.execute(_TERMINAL_REGION_SQL)
+            return True
+        finally:
+            await conn.close()
+
+    return anyio.run(_run)
+
+
+def _remove_terminal_region() -> None:
+    async def _run() -> None:
+        conn = await asyncpg.connect(dsn=SUPERUSER_DATABASE_URL)
+        try:
+            await conn.execute("delete from ref.nerc_regions")
+        finally:
+            await conn.close()
+
+    anyio.run(_run)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _terminal_region():
+    installed = _install_terminal_region()
+    try:
+        yield
+    finally:
+        if installed:
+            _remove_terminal_region()

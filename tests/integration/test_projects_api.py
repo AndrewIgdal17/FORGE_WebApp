@@ -27,6 +27,8 @@ from tests.integration.test_scenarios_api import (
     _create_payload,
     _delete_user,
     _login,
+    _install_terminal_region,
+    _remove_terminal_region,
     _stack_is_reachable,
 )
 
@@ -169,6 +171,16 @@ def _remove_substations(created_table: bool) -> None:
     anyio.run(_run)
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _terminal_region():
+    installed = _install_terminal_region()
+    try:
+        yield
+    finally:
+        if installed:
+            _remove_terminal_region()
+
+
 @pytest.fixture(scope="module")
 def substation_pair():
     state = _install_substations()
@@ -188,6 +200,7 @@ def _project_body() -> dict:
         "coordinates": [[list(SEND), list(RECV)]],
     }
     return {
+        "nerc_regions": ["TRE"],
         "sending": {"substation_gid": SEND_GID},
         "receiving": {"substation_gid": RECV_GID},
         "scenario": scenario,
@@ -210,6 +223,7 @@ def test_create_project_with_substation_gids(client, make_user, substation_pair)
     assert project["receiving_name"] == receiving["name"]
     assert project["name"] == f"{sending['name']} → {receiving['name']}"
     assert project["base_scenario_id"] == scenario["id"]
+    assert project["nerc_regions"] == ["TRE"]
     assert project["revision"] == 1
     assert scenario["calc_error"] is None
     assert scenario["results"] is not None
@@ -218,6 +232,19 @@ def test_create_project_with_substation_gids(client, make_user, substation_pair)
     assert project["sending_point"]["coordinates"][1] == pytest.approx(sending["lat"])
     assert project["receiving_point"]["coordinates"][0] == pytest.approx(receiving["lon"])
     assert project["receiving_point"]["coordinates"][1] == pytest.approx(receiving["lat"])
+
+
+def test_terminal_outside_every_region_is_422_without_a_suggestion(client, make_user, substation_pair):
+    _, headers = make_user("sea")
+    body = _project_body()
+    body["sending"] = {"point": [-60.0, 20.0]}
+
+    response = client.post("/api/projects", json=body, headers=headers)
+
+    assert response.status_code == 422, response.text
+    error = response.json()["error"]
+    assert error["code"] == "terminal_outside_regions"
+    assert error["detail"] == {"end": "sending", "suggested_region": None}
 
 
 def test_non_owner_patch_is_403(client, make_user, substation_pair):
@@ -254,6 +281,7 @@ def test_duplicate_by_another_user_owns_the_copies(client, make_user, substation
     assert body["project"]["user_id"] == other_id
     assert body["project"]["user_id"] != owner_id
     assert body["project"]["name"] == f"{original['project']['name']} (copy)"
+    assert body["project"]["nerc_regions"] == ["TRE"]
     assert body["project"]["id"] != original["project"]["id"]
     assert len(body["scenarios"]) == 1
     copied = body["scenarios"][0]
@@ -365,6 +393,7 @@ def test_route_ending_inside_footprint_is_accepted_and_snapped(
     response = client.post(
         "/api/projects",
         json={
+            "nerc_regions": ["TRE"],
             "sending": {"substation_gid": POLY_SEND_GID},
             "receiving": {"substation_gid": POLY_RECV_GID},
             "scenario": scenario,

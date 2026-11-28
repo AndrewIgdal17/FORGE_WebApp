@@ -6,6 +6,7 @@ tests/integration/test_regions_sql.py.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from contextlib import asynccontextmanager
 
@@ -114,3 +115,76 @@ def test_endpoint_sql_simplifies_to_about_1km_and_outputs_4326(monkeypatch):
     assert "ST_SimplifyPreserveTopology(geom, 1000)" in sql
     assert "ST_Transform(" in sql and ", 4326)" in sql
     assert "from ref.nerc_regions" in sql
+
+
+# --- Terminal check (the SQL is run against the local database in
+# tests/integration/test_regions_sql.py; these tests read the rows it returns).
+
+SENDING = (-97.74, 30.27)
+RECEIVING = (-96.80, 32.78)
+
+
+def _end(end_name: str, ticked_m, suggested_code=None) -> dict:
+    return {"end_name": end_name, "ticked_m": ticked_m, "suggested_code": suggested_code}
+
+
+def _check(rows, names=None):
+    conn = _Conn(rows)
+    return asyncio.run(
+        regions.check_terminals_in_regions(conn, SENDING, RECEIVING, ["TRE"], names=names)
+    ), conn
+
+
+def test_terminal_10km_outside_a_ticked_region_is_accepted():
+    result, conn = _check([_end("sending", 10_000.0), _end("receiving", 0.0)])
+
+    assert result is None
+    assert len(conn.calls) == 1
+
+
+def test_terminal_40km_outside_suggests_the_unticked_neighbour():
+    result, _conn = _check(
+        [_end("sending", 40_000.0, "MRO"), _end("receiving", 0.0)],
+        names=("Austin", "Dallas"),
+    )
+
+    assert result.status_code == 422
+    error = json.loads(result.body)["error"]
+    assert error["code"] == "terminal_outside_regions"
+    assert error["detail"] == {"end": "sending", "suggested_region": "MRO"}
+    assert "Austin" in error["message"]
+    assert "MRO" in error["message"]
+
+
+def test_point_outside_every_region_suggests_null_and_says_coverage():
+    result, _conn = _check([_end("sending", 600_000.0, None), _end("receiving", 0.0)])
+
+    assert result.status_code == 422
+    error = json.loads(result.body)["error"]
+    assert error["detail"] == {"end": "sending", "suggested_region": None}
+    assert "outside FORGE's coverage" in error["message"]
+
+
+def test_receiving_end_is_named_when_only_it_fails():
+    result, _conn = _check([_end("sending", 0.0), _end("receiving", 30_000.0, "WECC")])
+
+    assert result.status_code == 422
+    assert json.loads(result.body)["error"]["detail"] == {
+        "end": "receiving",
+        "suggested_region": "WECC",
+    }
+
+
+def test_sending_end_is_reported_first_when_both_fail():
+    result, _conn = _check(
+        [_end("sending", 40_000.0, "MRO"), _end("receiving", 50_000.0, None)]
+    )
+
+    assert json.loads(result.body)["error"]["detail"]["end"] == "sending"
+
+
+def test_no_ticked_region_distance_counts_as_outside():
+    result, _conn = _check([_end("sending", None, "MRO"), _end("receiving", 0.0)])
+
+    assert result.status_code == 422
+    assert json.loads(result.body)["error"]["detail"]["end"] == "sending"

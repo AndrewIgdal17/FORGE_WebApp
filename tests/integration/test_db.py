@@ -85,12 +85,13 @@ async def test_forge_api_transaction_rolls_back_on_error(pool, real_user_id):
                 """
                 insert into public.project (
                     user_id, name, sending_name, receiving_name,
-                    sending_point, receiving_point
+                    sending_point, receiving_point, nerc_regions
                 )
                 values (
                     $1, 'temp', 'Sending', 'Receiving',
                     ST_SetSRID(ST_MakePoint(-97.74, 30.27), 4326),
-                    ST_SetSRID(ST_MakePoint(-96.80, 32.78), 4326)
+                    ST_SetSRID(ST_MakePoint(-96.80, 32.78), 4326),
+                    array['TRE']::text[]
                 )
                 returning id
                 """,

@@ -80,6 +80,7 @@ def _project_row(**overrides) -> dict:
         "sending_point": {"type": "Point", "coordinates": list(SEND)},
         "receiving_point": {"type": "Point", "coordinates": list(RECV)},
         "base_scenario_id": None,
+        "nerc_regions": ["TRE"],
         "revision": 1,
         "created_at": NOW,
         "updated_at": NOW,
@@ -174,6 +175,8 @@ def _kinds(conn: _Conn) -> list[str]:
         low = " ".join(sql.lower().split())
         if "ref.substations" in low:
             kinds.append("lookup")
+        elif "ref.nerc_regions" in low:
+            kinds.append("region_check")
         elif low.startswith("insert into public.project"):
             kinds.append("insert_project")
         elif low.startswith("insert into public.scenario"):
@@ -241,8 +244,21 @@ def _patch_footprint_pool(monkeypatch) -> None:
     monkeypatch.setattr(scenarios_module.db_module, "get_db_pool", lambda: _Read())
 
 
+def _regions_fetch(sending_m=0.0, sending_suggest=None, receiving_m=0.0, receiving_suggest=None):
+    """Rows the terminal check returns: distance to the ticked regions, and a suggestion."""
+
+    def fetch(sql, _args):
+        assert "ref.nerc_regions" in sql
+        return [
+            {"end_name": "sending", "ticked_m": sending_m, "suggested_code": sending_suggest},
+            {"end_name": "receiving", "ticked_m": receiving_m, "suggested_code": receiving_suggest},
+        ]
+
+    return fetch
+
+
 def test_create_project_inserts_project_then_scenario_and_sets_base(monkeypatch):
-    conn = _Conn(_substation_fetchrow)
+    conn = _Conn(_substation_fetchrow, _regions_fetch())
     entered = _patch_db(monkeypatch, conn)
     analysis = _patch_analysis(monkeypatch)
     _patch_calc(monkeypatch)
@@ -250,35 +266,37 @@ def test_create_project_inserts_project_then_scenario_and_sets_base(monkeypatch)
 
     payload = ProjectCreate(
         sending={"substation_gid": SEND_GID},
+        nerc_regions=["TRE"],
         receiving={"substation_gid": RECV_GID},
         scenario=ScenarioCreate(**_scenario_body()),
     )
     response = asyncio.run(projects_module.create_project(USER_ID, payload))
 
     assert response.status_code == 201, response.body
-    assert _kinds(conn) == ["lookup", "lookup", "insert_project", "insert_scenario", "set_base"]
-    assert entered == [USER_ID, USER_ID]
+    assert _kinds(conn) == ["lookup", "lookup", "region_check", "insert_project", "insert_scenario", "set_base"]
+    assert entered == [USER_ID, USER_ID, USER_ID]
 
     lookup_sql = conn.calls[0][0].lower()
     assert "ref.substations" in lookup_sql
     assert "st_transform" in lookup_sql
     assert "name" in lookup_sql
 
-    _project_sql, project_args = conn.calls[2]
+    _project_sql, project_args = conn.calls[3]
     assert project_args[2] == SEND_GID
     assert project_args[3] == RECV_GID
     assert project_args[4] == SEND_NAME
     assert project_args[5] == RECV_NAME
     assert project_args[1] == f"{SEND_NAME} → {RECV_NAME}"
+    assert project_args[10] == ["TRE"]
 
-    _scenario_sql, scenario_args = conn.calls[3]
+    _scenario_sql, scenario_args = conn.calls[4]
     assert PROJECT_ID in scenario_args
     stored_route = json.loads(scenario_args[10])
     assert stored_route["coordinates"][0][0] == [SEND[0], SEND[1]]
     assert stored_route["coordinates"][-1][-1] == [RECV[0], RECV[1]]
     assert analysis[0][0].model_dump()["coordinates"][0][0] == [SEND[0], SEND[1]]
 
-    _base_sql, base_args = conn.calls[4]
+    _base_sql, base_args = conn.calls[5]
     assert base_args[0] == SCENARIO_ID
     assert base_args[1] == PROJECT_ID
 
@@ -289,13 +307,14 @@ def test_create_project_inserts_project_then_scenario_and_sets_base(monkeypatch)
 
 
 def test_create_project_route_mismatch_returns_422_and_inserts_nothing(monkeypatch):
-    conn = _Conn(_substation_fetchrow)
+    conn = _Conn(_substation_fetchrow, _regions_fetch())
     entered = _patch_db(monkeypatch, conn)
     analysis = _patch_analysis(monkeypatch)
     _patch_calc(monkeypatch)
 
     payload = ProjectCreate(
         sending={"point": list(SEND)},
+        nerc_regions=["TRE"],
         receiving={"point": list(RECV)},
         scenario=ScenarioCreate(**_scenario_body(route=FAR_ROUTE)),
     )
@@ -305,19 +324,20 @@ def test_create_project_route_mismatch_returns_422_and_inserts_nothing(monkeypat
     body = json.loads(response.body)
     assert body["error"]["code"] == "route_terminals_mismatch"
     assert "sending" in body["error"]["message"]
-    assert conn.calls == []
-    assert entered == []
+    assert not any(k.startswith("insert") for k in _kinds(conn))
+    assert entered == [USER_ID]
     assert analysis == []
 
 
 def test_create_project_two_point_terminals_names_points(monkeypatch):
-    conn = _Conn(_substation_fetchrow)
+    conn = _Conn(_substation_fetchrow, _regions_fetch())
     _patch_db(monkeypatch, conn)
     _patch_analysis(monkeypatch)
     _patch_calc(monkeypatch)
 
     payload = ProjectCreate(
         sending={"point": [-97.74, 30.27]},
+        nerc_regions=["TRE"],
         receiving={"point": [-96.80, 32.78]},
         scenario=ScenarioCreate(**_scenario_body(route={
             "type": "MultiLineString",
@@ -327,8 +347,8 @@ def test_create_project_two_point_terminals_names_points(monkeypatch):
     response = asyncio.run(projects_module.create_project(USER_ID, payload))
 
     assert response.status_code == 201, response.body
-    assert _kinds(conn) == ["insert_project", "insert_scenario", "set_base"]
-    _sql, args = conn.calls[0]
+    assert _kinds(conn) == ["region_check", "insert_project", "insert_scenario", "set_base"]
+    _sql, args = conn.calls[1]
     assert args[2] is None
     assert args[3] is None
     assert args[4] == "Point at 30.2700, -97.7400"
@@ -479,6 +499,11 @@ def test_duplicate_remaps_base_and_sets_manual_source(monkeypatch):
         assert "defaults_id" in sql.lower()
         assert "calculator" in sql.lower()
         assert args[0] == UUID(USER_ID)
+    project_inserts = [
+        sql for sql, _args in conn.calls
+        if sql.lower().lstrip().startswith("insert into public.project")
+    ]
+    assert "nerc_regions" in project_inserts[0].lower()
     base_updates = [
         args
         for sql, args in conn.calls
@@ -493,3 +518,121 @@ def test_duplicate_remaps_base_and_sets_manual_source(monkeypatch):
     assert body["project"]["base_scenario_id"] == str(NEW_BASE_ID)
     assert [row["source"] for row in body["scenarios"]] == ["manual", "manual"]
     assert body["scenarios"][1]["id"] == str(NEW_BASE_ID)
+
+
+def test_create_project_terminal_outside_regions_is_422_and_inserts_nothing(monkeypatch):
+    conn = _Conn(_substation_fetchrow, _regions_fetch(sending_m=40_000.0, sending_suggest="MRO"))
+    _patch_db(monkeypatch, conn)
+    analysis = _patch_analysis(monkeypatch)
+    _patch_calc(monkeypatch)
+
+    payload = ProjectCreate(
+        nerc_regions=["TRE"],
+        sending={"substation_gid": SEND_GID},
+        receiving={"substation_gid": RECV_GID},
+        scenario=ScenarioCreate(**_scenario_body()),
+    )
+    response = asyncio.run(projects_module.create_project(USER_ID, payload))
+
+    assert response.status_code == 422
+    error = json.loads(response.body)["error"]
+    assert error["code"] == "terminal_outside_regions"
+    assert error["detail"] == {"end": "sending", "suggested_region": "MRO"}
+    assert SEND_NAME in error["message"]
+    assert not any(k.startswith("insert") for k in _kinds(conn))
+    assert analysis == []
+
+
+def test_create_project_rejects_an_unknown_region_before_any_query(monkeypatch):
+    conn = _Conn(_substation_fetchrow, _regions_fetch())
+    entered = _patch_db(monkeypatch, conn)
+
+    payload = ProjectCreate(
+        nerc_regions=["WECC", "FRCC"],
+        sending={"point": list(SEND)},
+        receiving={"point": list(RECV)},
+        scenario=ScenarioCreate(**_scenario_body()),
+    )
+    response = asyncio.run(projects_module.create_project(USER_ID, payload))
+
+    assert response.status_code == 422
+    error = json.loads(response.body)["error"]
+    assert error["code"] == "invalid_changes"
+    assert "FRCC" in error["message"]
+    assert conn.calls == []
+    assert entered == []
+
+
+def test_create_project_stores_regions_sorted_and_deduplicated(monkeypatch):
+    conn = _Conn(_substation_fetchrow, _regions_fetch())
+    _patch_db(monkeypatch, conn)
+    _patch_analysis(monkeypatch)
+    _patch_calc(monkeypatch)
+
+    payload = ProjectCreate(
+        nerc_regions=["SERC", "TRE", "SERC"],
+        sending={"point": list(SEND)},
+        receiving={"point": list(RECV)},
+        scenario=ScenarioCreate(**_scenario_body()),
+    )
+    response = asyncio.run(projects_module.create_project(USER_ID, payload))
+
+    assert response.status_code == 201, response.body
+    _sql, args = conn.calls[1]
+    assert args[10] == ["TRE", "SERC"]
+
+
+def _patch_payload(**fields) -> ProjectUpdate:
+    return ProjectUpdate(revision=1, **fields)
+
+
+def test_patch_regions_recheck_the_stored_terminals_and_refuse_a_miss(monkeypatch):
+    conn = _Conn(
+        _owned_project_fetchrow(is_paper=False, base_found=True),
+        _regions_fetch(receiving_m=40_000.0, receiving_suggest="MRO"),
+    )
+    _patch_db(monkeypatch, conn)
+
+    response = asyncio.run(
+        projects_module.update_project(
+            USER_ID, str(PROJECT_ID), _patch_payload(nerc_regions=["WECC"])
+        )
+    )
+
+    assert response.status_code == 422
+    error = json.loads(response.body)["error"]
+    assert error["code"] == "terminal_outside_regions"
+    assert error["detail"] == {"end": "receiving", "suggested_region": "MRO"}
+    assert not any(sql.lower().lstrip().startswith("update") for sql, _args in conn.calls)
+
+
+def test_patch_regions_stores_sorted_codes_after_the_check(monkeypatch):
+    conn = _Conn(_owned_project_fetchrow(is_paper=False, base_found=True), _regions_fetch())
+    _patch_db(monkeypatch, conn)
+
+    response = asyncio.run(
+        projects_module.update_project(
+            USER_ID, str(PROJECT_ID), _patch_payload(nerc_regions=["SERC", "TRE"])
+        )
+    )
+
+    assert response.status_code == 200, response.body
+    update_args = [
+        args for sql, args in conn.calls if sql.lower().lstrip().startswith("update public.project")
+    ][0]
+    assert update_args[2] == ["TRE", "SERC"]
+
+
+def test_patch_with_an_unknown_region_is_422(monkeypatch):
+    conn = _Conn(_owned_project_fetchrow(is_paper=False, base_found=True), _regions_fetch())
+    _patch_db(monkeypatch, conn)
+
+    response = asyncio.run(
+        projects_module.update_project(
+            USER_ID, str(PROJECT_ID), _patch_payload(nerc_regions=["NOPE"])
+        )
+    )
+
+    assert response.status_code == 422
+    assert json.loads(response.body)["error"]["code"] == "invalid_changes"
+    assert not any(sql.lower().lstrip().startswith("update") for sql, _args in conn.calls)

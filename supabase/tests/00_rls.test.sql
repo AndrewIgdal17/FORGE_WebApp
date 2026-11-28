@@ -28,7 +28,7 @@ values
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'user-b@test.local');
 
 insert into public.project (
-  id, user_id, name, sending_name, receiving_name, sending_point, receiving_point
+  id, user_id, name, sending_name, receiving_name, sending_point, receiving_point, nerc_regions
 )
 values
   ('33333333-0000-0000-0000-000000000001',
@@ -37,14 +37,14 @@ values
    'Laredo',
    'Rio Grande',
    ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
-   ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326)),
+   ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326), array['TRE']::text[]),
   ('33333333-0000-0000-0000-000000000002',
    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
    'b project',
    'Laredo',
    'Rio Grande',
    ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
-   ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326));
+   ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326), array['TRE']::text[]);
 
 insert into public.scenario (id, user_id, name, source, defaults_id, changes, project_id)
 values
@@ -155,14 +155,14 @@ select is(
 
 select throws_ok(
   $$ insert into public.project (
-       user_id, name, sending_name, receiving_name, sending_point, receiving_point
+       user_id, name, sending_name, receiving_name, sending_point, receiving_point, nerc_regions
      ) values (
        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
        'x',
        'Laredo',
        'Rio Grande',
        ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
-       ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326)
+       ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326), array['TRE']::text[]
      ) $$,
   '42501',
   null,
@@ -308,28 +308,28 @@ set local request.jwt.claim.sub = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 select lives_ok(
   $$ insert into public.project (
-       user_id, name, sending_name, receiving_name, sending_point, receiving_point
+       user_id, name, sending_name, receiving_name, sending_point, receiving_point, nerc_regions
      ) values (
        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
        'forge_api for A',
        'Laredo',
        'Rio Grande',
        ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
-       ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326)
+       ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326), array['TRE']::text[]
      ) $$,
   'forge_api acting for A can insert a project owned by A'
 );
 
 select throws_ok(
   $$ insert into public.project (
-       user_id, name, sending_name, receiving_name, sending_point, receiving_point
+       user_id, name, sending_name, receiving_name, sending_point, receiving_point, nerc_regions
      ) values (
        'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
        'forge_api for B',
        'Laredo',
        'Rio Grande',
        ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
-       ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326)
+       ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326), array['TRE']::text[]
      ) $$,
   '42501',
   null,
@@ -409,15 +409,15 @@ select throws_ok(
 -- ---------------------------------------------------------------------------
 
 insert into public.project (
-  id, user_id, name, sending_name, receiving_name, sending_point, receiving_point
-) values (
+  id, user_id, name, sending_name, receiving_name, sending_point, receiving_point, nerc_regions
+     ) values (
   '33333333-0000-0000-0000-000000000003',
   'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
   'cascade project',
   'Laredo',
   'Rio Grande',
   ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
-  ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326)
+  ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326), array['TRE']::text[]
 );
 
 insert into public.scenario (
@@ -447,15 +447,15 @@ select is(
 );
 
 insert into public.project (
-  id, user_id, name, sending_name, receiving_name, sending_point, receiving_point
-) values (
+  id, user_id, name, sending_name, receiving_name, sending_point, receiving_point, nerc_regions
+     ) values (
   '33333333-0000-0000-0000-000000000004',
   'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
   'base project',
   'Laredo',
   'Rio Grande',
   ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
-  ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326)
+  ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326), array['TRE']::text[]
 );
 
 insert into public.scenario (
@@ -486,14 +486,14 @@ select is(
 
 select throws_ok(
   $$ insert into public.project (
-       user_id, name, sending_name, receiving_name, sending_point, receiving_point
+       user_id, name, sending_name, receiving_name, sending_point, receiving_point, nerc_regions
      ) values (
        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
        'same points',
        'Laredo',
        'Laredo',
        ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
-       ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326)
+       ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326), array['TRE']::text[]
      ) $$,
   '23514',
   'new row for relation "project" violates check constraint "project_points_differ"',
@@ -517,7 +517,7 @@ select lives_ok(
   'a project with two valid NERC regions inserts'
 );
 
-select lives_ok(
+select throws_ok(
   $$ insert into public.project (
        user_id, name, sending_name, receiving_name, sending_point, receiving_point, nerc_regions
      ) values (
@@ -529,7 +529,9 @@ select lives_ok(
        ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326),
        null
      ) $$,
-  'a project with null NERC regions inserts (not-null comes in a later migration)'
+  '23502',
+  null,
+  'a project with null NERC regions is refused (not null)'
 );
 
 select throws_ok(

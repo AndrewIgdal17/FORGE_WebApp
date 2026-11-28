@@ -90,6 +90,7 @@ class ProjectCreate(BaseModel):
     """
 
     name: str | None = None
+    nerc_regions: list[str]
     sending: TerminalIn
     receiving: TerminalIn
     scenario: ScenarioCreate
@@ -99,6 +100,7 @@ class ProjectUpdate(BaseModel):
     revision: int
     name: str | None = None
     base_scenario_id: str | None = None
+    nerc_regions: list[str] | None = None
 
 
 class LineAssembleRequest(BaseModel):
