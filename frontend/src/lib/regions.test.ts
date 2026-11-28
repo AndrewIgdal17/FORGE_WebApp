@@ -6,6 +6,7 @@ import {
   REGION_NAMES,
   REGION_SUGGEST_MAX_M,
   REGION_TOLERANCE_M,
+  createBlockedReason,
   regionShapes,
   sortRegions,
   terminalRegionCheck,
@@ -115,5 +116,16 @@ describe('terminalRegionCheck', () => {
   it('does not suggest a region that is already ticked', () => {
     const point: [number, number] = [-40 / KM_PER_DEG, 0.5];
     expect(terminalRegionCheck(point, ['WECC', 'TRE'], SHAPES)).toEqual({ ok: true });
+  });
+});
+
+describe('createBlockedReason', () => {
+  it('blocks a draft with no regions and says why', () => {
+    expect(createBlockedReason([])).toBe(
+      'Pick at least one NERC region (use Add on the terminal warning)',
+    );
+  });
+  it('allows a draft with a region', () => {
+    expect(createBlockedReason(['WECC'])).toBeNull();
   });
 });

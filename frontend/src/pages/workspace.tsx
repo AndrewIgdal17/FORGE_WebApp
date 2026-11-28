@@ -47,7 +47,7 @@ import type { LineSelectionIn, RequiredField, RequiredResponse } from '@/lib/api
 import { diffChanges } from '@/lib/changes';
 import { debounce } from '@/lib/debounce';
 import { duplicateAction } from '@/lib/duplicate-action';
-import { regionName, regionShapes, sortRegions, terminalRegionCheck } from '@/lib/regions';
+import { createBlockedReason, regionName, regionShapes, sortRegions, terminalRegionCheck } from '@/lib/regions';
 import { sameTerminal } from '@/lib/terminal-pick';
 import { useLineDataPrefill } from '@/lib/line-select';
 import { canCalculate, canDraw, panelFields } from '@/lib/required-gates';
@@ -1227,7 +1227,8 @@ function WorkspaceBody(): ReactElement {
     createMode &&
     terrainMilesTotal(data ?? {}) > 0 &&
     calculationRoute(drawn, null) != null &&
-    currentRowWidthFt() != null;
+    currentRowWidthFt() != null &&
+    createBlockedReason(draft?.nerc_regions ?? []) === null;
   const calculationAllowed =
     required !== null && canCalculate(required, routeDrawn);
   const routeInputReady = required !== null && canDraw(required);
@@ -1509,6 +1510,9 @@ function WorkspaceBody(): ReactElement {
             onExportCsv={handleExportCsv}
             createMode={createMode}
             canCreate={canCreate && calculationAllowed}
+            createBlockedReason={
+              createMode ? createBlockedReason(draft?.nerc_regions ?? []) : null
+            }
             canCalculate={calculationAllowed}
             onCalculate={() => { void runCalculation(); }}
             onCreate={() => { void handleCreate(); }}

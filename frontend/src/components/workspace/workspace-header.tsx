@@ -54,6 +54,8 @@ export interface WorkspaceHeaderProps {
   onExportCsv: () => void;
   createMode?: boolean;
   canCreate?: boolean;
+  /** Shown as the Create button's title and helper text when regions are missing. */
+  createBlockedReason?: string | null;
   canCalculate?: boolean;
   onCalculate?: () => void;
   onCreate?: () => void;
@@ -73,6 +75,7 @@ export function WorkspaceHeader({
   onExportCsv,
   createMode = false,
   canCreate = false,
+  createBlockedReason = null,
   canCalculate = false,
   onCalculate,
   onCreate,
@@ -219,9 +222,22 @@ export function WorkspaceHeader({
       </Button>
       <div className="relative flex" ref={menuRoot}>
         {createMode ? (
-          <Button type="button" size="sm" disabled={!canCreate} onClick={() => onCreate?.()}>
-            Create
-          </Button>
+          <>
+            {createBlockedReason && (
+              <span className="mr-2 text-xs text-muted-foreground" data-create-blocked>
+                {createBlockedReason}
+              </span>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              disabled={!canCreate}
+              title={createBlockedReason ?? undefined}
+              onClick={() => onCreate?.()}
+            >
+              Create
+            </Button>
+          </>
         ) : (
           <>
             <Button

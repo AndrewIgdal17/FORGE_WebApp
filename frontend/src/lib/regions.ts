@@ -83,3 +83,10 @@ export function terminalRegionCheck(
   }
   return { ok: false, suggested };
 }
+
+/** Why a draft cannot be created yet, or null. The server rejects a project with no regions. */
+export function createBlockedReason(nercRegions: readonly string[]): string | null {
+  return nercRegions.length === 0
+    ? 'Pick at least one NERC region (use Add on the terminal warning)'
+    : null;
+}
