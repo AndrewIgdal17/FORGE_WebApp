@@ -47,6 +47,26 @@ def _outside_wkt(table: str) -> str:
     return "MULTILINESTRING((2000000 0, 2100000 0))"
 
 
+# Extra fixtures. NEAR is ~20 km west of WECC (inside the 25 km buffer), FAR
+# ~30 km west (outside it). TRE holds INSIDE_TRE. SERC has no features.
+def _wkt(table: str, kind: str) -> str:
+    points = {
+        "NEAR_WECC": (-2_020_000, 1_500_000),
+        "FAR_WECC": (-2_030_000, 1_500_000),
+        "INSIDE_TRE": (250_000, -1_000_000),
+    }
+    x, y = points[kind]
+    if table == "ref.substations_display":
+        return f"POINT({x} {y})"
+    # 100 km long (a shorter line collapses to under a pixel at z=0). NEAR and
+    # FAR extend away from WECC so their closest point is the stated distance.
+    x2 = x + 100_000 if kind == "INSIDE_TRE" else x - 100_000
+    return f"MULTILINESTRING(({x} {y}, {x2} {y}))"
+
+
+SERC_BOX = (3_000_000, 0, 3_500_000, 500_000)
+
+
 def _name(table: str, where: str) -> str:
     return f"FIXTURE_{table.split('.')[1].upper()}_{where}"
 
@@ -111,20 +131,31 @@ async def world(conn):
         await conn.execute(
             "INSERT INTO ref.nerc_regions (code, name, geom) VALUES "
             "('WECC', 'WECC', ST_Multi(ST_GeomFromText($1, 5070))), "
-            "('TRE', 'Texas RE', ST_Multi(ST_GeomFromText($2, 5070)))",
+            "('TRE', 'Texas RE', ST_Multi(ST_GeomFromText($2, 5070))), "
+            "('SERC', 'SERC', ST_Multi(ST_GeomFromText($3, 5070)))",
             _box_wkt(WECC_BOX),
             _box_wkt(TRE_BOX),
+            _box_wkt(SERC_BOX),
         )
         for table in ["ref.corridors", "ref.highways_nhs", "ref.rail_narn", "ref.substations_display"]:
             await conn.execute(f"DELETE FROM {table}")
             await conn.execute(
                 f"INSERT INTO {table} (gid, name, volt_class, geom) VALUES "
                 "(1, $1, '345', ST_GeomFromText($2, 5070)), "
-                "(2, $3, '345', ST_GeomFromText($4, 5070))",
+                "(2, $3, '345', ST_GeomFromText($4, 5070)), "
+                "(3, $5, '345', ST_GeomFromText($6, 5070)), "
+                "(4, $7, '345', ST_GeomFromText($8, 5070)), "
+                "(5, $9, '345', ST_GeomFromText($10, 5070))",
                 _name(table, "INSIDE_WECC"),
                 _inside_wkt(table),
                 _name(table, "OUTSIDE"),
                 _outside_wkt(table),
+                _name(table, "NEAR_WECC"),
+                _wkt(table, "NEAR_WECC"),
+                _name(table, "FAR_WECC"),
+                _wkt(table, "FAR_WECC"),
+                _name(table, "INSIDE_TRE"),
+                _wkt(table, "INSIDE_TRE"),
             )
         await conn.execute(SQL_FILE.read_text())
         yield conn
@@ -160,7 +191,11 @@ async def test_tile_over_inside_feature_returns_bytes_with_its_properties(world,
 @pytest.mark.anyio
 @pytest.mark.parametrize("function", list(LAYERS))
 async def test_region_without_the_feature_returns_empty_tile(world, function):
-    assert await _tile(world, function, _tile_params("TRE")) == b""
+    # SERC holds no fixture feature; TRE holds only INSIDE_TRE (see below).
+    assert await _tile(world, function, _tile_params("SERC")) == b""
+    table, _ = LAYERS[function]
+    tre = await _tile(world, function, _tile_params("TRE"))
+    assert _name(table, "INSIDE_WECC").encode() not in tre
 
 
 @pytest.mark.anyio
@@ -174,3 +209,78 @@ async def test_empty_or_invalid_regions_return_empty_tile(world, function, regio
 @pytest.mark.parametrize("function", list(LAYERS))
 async def test_missing_query_params_return_empty_tile(world, function):
     assert await _tile(world, function, "{}") == b""
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("function", list(LAYERS))
+async def test_buffer_keeps_20km_outside_and_drops_30km_outside(world, function):
+    table, _ = LAYERS[function]
+    tile = await _tile(world, function, _tile_params("WECC"))
+    assert _name(table, "NEAR_WECC").encode() in tile
+    assert _name(table, "FAR_WECC").encode() not in tile
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("function", list(LAYERS))
+async def test_two_region_list_returns_features_of_both(world, function):
+    table, _ = LAYERS[function]
+    tile = await _tile(world, function, _tile_params("TRE,WECC"))
+    assert _name(table, "INSIDE_WECC").encode() in tile
+    assert _name(table, "INSIDE_TRE").encode() in tile
+    assert _name(table, "OUTSIDE").encode() not in tile
+    assert _name(table, "FAR_WECC").encode() not in tile
+
+
+async def _tile_xyz_at(conn, wkt: str, z: int) -> tuple[int, int]:
+    row = await conn.fetchrow(
+        "SELECT ST_X(p) AS px, ST_Y(p) AS py FROM "
+        "(SELECT ST_Transform(ST_GeomFromText($1, 5070), 3857) AS p) s",
+        wkt,
+    )
+    half = 20037508.342789244
+    size = 2 * half / (2**z)
+    return int((row["px"] + half) // size), int((half - row["py"]) // size)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("function", list(LAYERS))
+async def test_higher_zoom_tile_over_feature_is_non_empty_and_neighbour_is_empty(
+    world, function
+):
+    table, _ = LAYERS[function]
+    z = 8
+    # Tile over the feature's own location (point, or midpoint of the line).
+    spot = "POINT(-1500000 1500000)" if table == "ref.substations_display" else "POINT(-1750000 1500000)"
+    x, y = await _tile_xyz_at(world, spot, z)
+    own = bytes(
+        await world.fetchval(
+            f"SELECT {function}($1, $2, $3, $4::json)", z, x, y, _tile_params("WECC")
+        )
+    )
+    assert len(own) > 0
+    assert _name(table, "INSIDE_WECC").encode() in own
+    neighbour = await world.fetchval(
+        f"SELECT {function}($1, $2, $3, $4::json)", z, x, y + 2, _tile_params("WECC")
+    )
+    assert bytes(neighbour) == b""
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("function", list(LAYERS))
+async def test_function_bodies_use_the_precomputed_buffer_not_union_or_buffer(world, function):
+    schema, name = function.split(".")
+    body = await world.fetchval(
+        "SELECT prosrc FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+        "WHERE n.nspname = $1 AND p.proname = $2",
+        schema,
+        name,
+    )
+    lowered = body.lower()
+    assert "geom_buffered" in lowered
+    assert "st_union" not in lowered
+    assert "st_buffer" not in lowered
+    helper = await world.fetchval(
+        "SELECT prosrc FROM pg_proc WHERE proname = 'region_codes_param'"
+    )
+    assert "st_union" not in helper.lower()
+    assert "st_buffer" not in helper.lower()
