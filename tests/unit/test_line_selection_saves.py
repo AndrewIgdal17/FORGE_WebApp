@@ -333,7 +333,7 @@ def test_switch_to_greenfield_without_route_is_422(monkeypatch):
     assert _updates(conn) == []
 
 
-def test_switch_to_greenfield_with_route_clears_selection(monkeypatch):
+def test_switch_to_greenfield_with_prior_line_route_is_422(monkeypatch):
     conn, assembly_calls = _owned_conn(monkeypatch)
 
     response = asyncio.run(
@@ -344,6 +344,34 @@ def test_switch_to_greenfield_with_route_clears_selection(monkeypatch):
                 revision=1,
                 changes=_changes("greenfield"),
                 route=ROUTE,
+                row_width_ft=100.0,
+            ),
+        )
+    )
+
+    assert response.status_code == 422
+    assert _error(response)["code"] == "invalid_changes"
+    assert assembly_calls == []
+    assert _updates(conn) == []
+
+
+DRAWN_GREENFIELD_ROUTE = {
+    "type": "MultiLineString",
+    "coordinates": [[list(SEND), [-97.50, 31.10], list(RECV)]],
+}
+
+
+def test_switch_to_greenfield_with_route_clears_selection(monkeypatch):
+    conn, assembly_calls = _owned_conn(monkeypatch)
+
+    response = asyncio.run(
+        scenarios_module.update_scenario(
+            USER_ID,
+            str(SCENARIO_ID),
+            ScenarioUpdate(
+                revision=1,
+                changes=_changes("greenfield"),
+                route=DRAWN_GREENFIELD_ROUTE,
                 row_width_ft=100.0,
             ),
         )
@@ -391,6 +419,32 @@ def test_greenfield_with_selection_is_not_allowed(monkeypatch):
     assert response.status_code == 422
     assert _error(response)["code"] == "line_selection_not_allowed"
     assert assembly_calls == []
+
+
+def test_update_input_recalc_keeps_corridors_in_layer_releases(monkeypatch):
+    conn, assembly_calls = _owned_conn(monkeypatch)
+
+    response = asyncio.run(
+        scenarios_module.update_scenario(
+            USER_ID,
+            str(SCENARIO_ID),
+            ScenarioUpdate(
+                revision=1,
+                changes=_changes("reconductoring", **{"02_market_assumptions.energy_price": 40.0}),
+                row_width_ft=100.0,
+            ),
+        )
+    )
+
+    assert response.status_code == 200, response.body
+    assert assembly_calls == []
+    update_sql, args = _updates(conn)[0]
+    assert "layer_releases" in update_sql.lower()
+    layer_idx = next(
+        index for index, value in enumerate(args) if isinstance(value, str) and "corridors" in value
+    )
+    releases = json.loads(args[layer_idx])
+    assert releases.get("corridors") == CORRIDORS_RELEASE
 
 
 def test_duplicate_copies_line_selection(monkeypatch):

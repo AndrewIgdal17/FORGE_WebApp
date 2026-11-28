@@ -279,3 +279,73 @@ def test_response_carries_corridors_release(monkeypatch):
     row = _corridor_row(7, [(0.0, 0.0), (2000.0, 0.0)])
     body, _ = _assemble(monkeypatch, {7: row}, gids=[7], sending_gid=None, receiving_gid=None)
     assert body["corridors_release"] == CORRIDORS_RELEASE
+
+
+def test_invalid_stretch_end_returns_422(monkeypatch):
+    conn = _Conn({101: _corridor_row(101, [(0.0, 0.0), (2000.0, 0.0)])})
+
+    @asynccontextmanager
+    async def _tx(_user_id):
+        yield conn
+
+    monkeypatch.setattr(lines_module.db_module, "forge_api_transaction", _tx)
+    monkeypatch.setattr(
+        lines_module.auth_module.rate_limiter,
+        "allow_write",
+        lambda _user_id, now=None: True,
+    )
+
+    response = asyncio.run(
+        lines_module.assemble_line(
+            USER_ID,
+            LineAssembleRequest(
+                gids=[101],
+                sending=SEND_4326,
+                receiving=RECV_4326,
+                stretch_end=(RECV_4326[0] + 0.01, RECV_4326[1]),
+                receiving_gid=None,
+            ),
+        )
+    )
+    assert response.status_code == 422
+    err = json.loads(response.body)["error"]
+    assert err["code"] == "invalid_stretch_end"
+
+
+def test_point_receiving_without_stretch_gets_connector(monkeypatch):
+    """A point terminal off the chain needs a receiving connector, not a stretch cut."""
+    near_off_end = (SEND_4326[0] + 0.002, SEND_4326[1] + 0.00015)
+    a = _corridor_row(101, [(300.0, 0.0), (1000.0, 0.0)])
+    b = _corridor_row(102, [(1000.0, 0.0), (2000.0, 0.0)])
+    conn = _Conn({101: a, 102: b})
+
+    @asynccontextmanager
+    async def _tx(_user_id):
+        yield conn
+
+    monkeypatch.setattr(lines_module.db_module, "forge_api_transaction", _tx)
+    pool = _Pool(conn)
+    monkeypatch.setattr(lines_module.db_module, "get_db_pool", lambda: pool)
+    monkeypatch.setattr(
+        lines_module.auth_module.rate_limiter,
+        "allow_write",
+        lambda _user_id, now=None: True,
+    )
+
+    response = asyncio.run(
+        lines_module.assemble_line(
+            USER_ID,
+            LineAssembleRequest(
+                gids=[101, 102],
+                sending=SEND_4326,
+                receiving=near_off_end,
+                sending_gid=101,
+                receiving_gid=None,
+                stretch_end=None,
+            ),
+        )
+    )
+    assert response.status_code == 200, response.body
+    body = json.loads(response.body)
+    receiving_conn = [c for c in body["connectors"] if c["end"] == "receiving"]
+    assert len(receiving_conn) == 1

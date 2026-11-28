@@ -9,6 +9,24 @@ Point = tuple[float, float]
 
 PIECE_JOIN_TOLERANCE_M: float = 25.0
 CONNECTOR_MAX_M: float = 1000.0
+_STRETCH_COORD_EPS: float = 1e-6
+
+
+def validate_stretch_end(
+    stretch_end: tuple[float, float] | None,
+    receiving: tuple[float, float],
+    receiving_gid: int | None,
+) -> None:
+    """``stretch_end`` must be absent or exactly the project's receiving point."""
+    if stretch_end is None:
+        return
+    if receiving_gid is not None:
+        raise AssemblyError("invalid_stretch_end", {})
+    if (
+        abs(stretch_end[0] - receiving[0]) > _STRETCH_COORD_EPS
+        or abs(stretch_end[1] - receiving[1]) > _STRETCH_COORD_EPS
+    ):
+        raise AssemblyError("invalid_stretch_end", {})
 
 # Overhead AC line classes (voltage kV → old capacity MW), ties go to higher kV.
 _VOLTAGE_CAPACITY: list[tuple[int, int]] = [

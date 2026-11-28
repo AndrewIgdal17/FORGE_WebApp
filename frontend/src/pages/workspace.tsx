@@ -1136,7 +1136,7 @@ function WorkspaceBody(): ReactElement {
     const prior = projectTypeRef.current;
     projectTypeRef.current = activeProjectType;
     if (replacesExistingLine(prior) !== replacesExistingLine(activeProjectType)) {
-      updateDrawn(undefined);
+      updateDrawn({ route: null, segments: null });
       setPendingLineSelection(undefined);
     }
   }, [activeProjectType]);
@@ -1394,7 +1394,9 @@ function WorkspaceBody(): ReactElement {
                       drawingEnabled={drawingEnabled}
                       lineSelectEnabled={lineSelectEnabled}
                       existingRoute={
-                        draft ? scenarioMapRoute(drawn ?? null) : scenarioMapRoute(activeScenario)
+                        draft
+                          ? calculationRoute(drawn, null)
+                          : calculationRoute(drawn, activeScenario)
                       }
                       initialSelectedGids={
                         activeScenario?.line_selection?.gids ?? undefined

@@ -94,6 +94,127 @@ function squaredDistance(a: [number, number], b: [number, number]): number {
 }
 
 /** Nearest point on a polyline (EPSG:4326 coordinates). */
+export const PIECE_JOIN_TOLERANCE_M = 25;
+
+const EARTH_RADIUS_M = 6_371_000;
+
+export function haversineMeters(a: [number, number], b: [number, number]): number {
+  const toRad = (degrees: number): number => (degrees * Math.PI) / 180;
+  const dLat = toRad(b[1] - a[1]);
+  const dLon = toRad(b[0] - a[0]);
+  const lat1 = toRad(a[1]);
+  const lat2 = toRad(b[1]);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function nearestOnPolylineM(
+  point: [number, number],
+  line: ReadonlyArray<[number, number]>,
+): { point: [number, number]; distanceM: number } {
+  if (line.length === 0) return { point, distanceM: Number.POSITIVE_INFINITY };
+  if (line.length === 1) {
+    return { point: [line[0]![0], line[0]![1]], distanceM: haversineMeters(point, line[0]!) };
+  }
+  let best: [number, number] = line[0]!;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < line.length - 1; index += 1) {
+    const start = line[index]!;
+    const end = line[index + 1]!;
+    const snapped = nearestPointOnLine(point, [start, end]);
+    const dist = haversineMeters(point, snapped);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = snapped;
+    }
+  }
+  return { point: best, distanceM: bestDist };
+}
+
+function nearestEndMeters(piece: [number, number][], anchor: [number, number]): number {
+  return Math.min(haversineMeters(piece[0]!, anchor), haversineMeters(piece[piece.length - 1]!, anchor));
+}
+
+function orientPiece(piece: [number, number][], anchor: [number, number]): [number, number][] {
+  if (haversineMeters(piece[0]!, anchor) <= haversineMeters(piece[piece.length - 1]!, anchor)) {
+    return [...piece];
+  }
+  return [...piece].reverse();
+}
+
+/** Best-effort chain in click/view space; the server order is authoritative. */
+export function orderChainFromTiles(
+  pieceLines: ReadonlyArray<ReadonlyArray<[number, number]>>,
+  sending: [number, number],
+  joinToleranceM = PIECE_JOIN_TOLERANCE_M,
+): [number, number][] {
+  const remaining = pieceLines.map((line) => [...line]);
+  if (remaining.length === 0) return [];
+
+  let bestIdx = 0;
+  let bestD = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < remaining.length; index += 1) {
+    const d = nearestEndMeters(remaining[index]!, sending);
+    if (d < bestD) {
+      bestD = d;
+      bestIdx = index;
+    }
+  }
+
+  const first = remaining.splice(bestIdx, 1)[0]!;
+  const orientedFirst = orientPiece(first, sending);
+  const chain: [number, number][] = [...orientedFirst];
+
+  while (remaining.length > 0) {
+    const chainEnd = chain[chain.length - 1]!;
+    bestIdx = 0;
+    bestD = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < remaining.length; index += 1) {
+      const d = nearestEndMeters(remaining[index]!, chainEnd);
+      if (d < bestD) {
+        bestD = d;
+        bestIdx = index;
+      }
+    }
+    if (bestD > joinToleranceM) break;
+
+    const next = remaining.splice(bestIdx, 1)[0]!;
+    const oriented = orientPiece(next, chainEnd);
+    if (haversineMeters(oriented[0]!, chainEnd) > joinToleranceM) break;
+    for (let vertex = 1; vertex < oriented.length; vertex += 1) {
+      chain.push(oriented[vertex]!);
+    }
+  }
+
+  return chain;
+}
+
+/**
+ * Send ``stretch_end`` only when the receiving point lies on the ordered chain
+ * within the join tolerance and away from the chain ends.
+ */
+export function stretchEndForAssembly(
+  sending: [number, number],
+  receiving: [number, number],
+  pieceLines: ReadonlyArray<ReadonlyArray<[number, number]>>,
+  receivingIsPointTerminal: boolean,
+): [number, number] | null {
+  if (!receivingIsPointTerminal || pieceLines.length === 0) return null;
+  const chain = orderChainFromTiles(pieceLines, sending);
+  if (chain.length < 2) return null;
+
+  const { distanceM } = nearestOnPolylineM(receiving, chain);
+  if (distanceM > PIECE_JOIN_TOLERANCE_M) return null;
+
+  const toStart = haversineMeters(receiving, chain[0]!);
+  const toEnd = haversineMeters(receiving, chain[chain.length - 1]!);
+  if (toStart <= PIECE_JOIN_TOLERANCE_M || toEnd <= PIECE_JOIN_TOLERANCE_M) return null;
+
+  return receiving;
+}
+
 export function nearestPointOnLine(
   point: [number, number],
   coords: ReadonlyArray<[number, number]>,

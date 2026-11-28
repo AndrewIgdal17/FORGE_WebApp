@@ -8,6 +8,7 @@ import {
   prefillChanges,
   routeFullyInMapView,
   selectionSummary,
+  stretchEndForAssembly,
   stretchTerminalName,
   toggleGid,
   type CorridorCandidate,
@@ -77,6 +78,34 @@ describe('stretchTerminalName', () => {
 
   it('omits voltage when missing', () => {
     expect(stretchTerminalName(null)).toBe('Point on line');
+  });
+});
+
+describe('stretchEndForAssembly', () => {
+  const sending: [number, number] = [-97.74, 30.27];
+  const piece: [number, number][] = [
+    [-97.74, 30.271],
+    [-97.74, 30.281],
+  ];
+
+  it('returns null when the receiving point is far from the chain', () => {
+    const receiving: [number, number] = [-97.72, 30.28];
+    expect(stretchEndForAssembly(sending, receiving, [piece], true)).toBeNull();
+  });
+
+  it('returns null when the receiving point is at the chain end', () => {
+    const receiving: [number, number] = [-97.74, 30.281];
+    expect(stretchEndForAssembly(sending, receiving, [piece], true)).toBeNull();
+  });
+
+  it('returns the receiving point when it lies on the chain away from the ends', () => {
+    const receiving: [number, number] = [-97.74, 30.276];
+    expect(stretchEndForAssembly(sending, receiving, [piece], true)).toEqual(receiving);
+  });
+
+  it('returns null for substation receiving terminals', () => {
+    const receiving: [number, number] = [-97.74, 30.276];
+    expect(stretchEndForAssembly(sending, receiving, [piece], false)).toBeNull();
   });
 });
 

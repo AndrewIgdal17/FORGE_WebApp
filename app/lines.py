@@ -23,6 +23,7 @@ from .line_assembly import (
     piece_spans_along_chain,
     pieces_beyond_cut,
     prefill,
+    validate_stretch_end,
 )
 from .models import LineAssembleRequest
 from .scenarios import _error, _rate_limited, require_user
@@ -119,6 +120,8 @@ def _assembly_message(err: AssemblyError) -> str:
         return "Selected pieces are not connected."
     if code == "piece_beyond_stretch":
         return f"Piece {d.get('gid')} lies wholly beyond the stretch cut."
+    if code == "invalid_stretch_end":
+        return "The stretch point must be the project's receiving terminal."
     if code == "connector_too_long":
         return (
             f"The {d.get('end')} connector is {d['distance_m']:.0f} m; "
@@ -221,6 +224,11 @@ async def assemble_line(user_id: str, payload: LineAssembleRequest) -> JSONRespo
 
 
 async def _assemble_with_conn(conn, payload: LineAssembleRequest) -> JSONResponse:
+    validate_stretch_end(
+        payload.stretch_end,
+        payload.receiving,
+        payload.receiving_gid,
+    )
     rows = await conn.fetch(_CORRIDORS_SQL, payload.gids)
     by_gid = {int(row["gid"]): row for row in rows}
     missing = [gid for gid in payload.gids if gid not in by_gid]

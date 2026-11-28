@@ -10,6 +10,7 @@ import {
   VOLTAGE_COLOR_EXPRESSION,
   VOLTAGE_WIDTH_EXPRESSION,
 } from '@/data/color-maps';
+import { solidRouteGeometry, type RouteConnectorSegment } from '@/lib/route-display';
 import { useMapStore } from '@/stores/map-store';
 
 const TILE_ORIGIN = 'https://tiles.forge-calc.com';
@@ -106,9 +107,7 @@ export const PREVIEW_OVERLAYS: readonly MapOverlay[] = [
 
 const EMPTY_ROUTE: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-export interface RouteConnectorSegment {
-  coordinates: [number, number][];
-}
+export type { RouteConnectorSegment };
 
 export interface RouteMapProps {
   onMap: (map: MapLibreMap | null) => void;
@@ -650,13 +649,14 @@ export function RouteMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    syncRouteData(map, existingRoute);
+    const solid = solidRouteGeometry(existingRoute, connectorSegments);
+    syncRouteData(map, solid);
     if (!existingRoute) {
       fittedKey.current = null;
       return;
     }
     fitExisting(map, existingRoute, fittedKey);
-  }, [existingRoute, ready]);
+  }, [existingRoute, connectorSegments, ready]);
 
   useEffect(() => {
     const map = mapRef.current;

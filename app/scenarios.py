@@ -402,6 +402,26 @@ def _greenfield_route_required() -> JSONResponse:
     )
 
 
+def _route_geojson_dict(route: Any) -> dict | None:
+    if route is None:
+        return None
+    if isinstance(route, dict):
+        return route
+    if isinstance(route, str):
+        try:
+            parsed = json.loads(route)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
+def _routes_equivalent(left: dict | None, right: dict | None) -> bool:
+    if left is None or right is None:
+        return False
+    return json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
+
+
 def _pack_line_selection(
     selection: LineSelectionIn, assembly_body: dict[str, Any]
 ) -> dict[str, Any]:
@@ -800,6 +820,12 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
         route_was_sent_early = "route" in payload.model_fields_set
         if not route_was_sent_early or payload.route is None:
             return _greenfield_route_required()
+        stored_selection = _decode_jsonb(stored.get("line_selection"))
+        if stored_selection is not None and _routes_equivalent(
+            _route_geojson_dict(payload.route),
+            _route_geojson_dict(stored.get("route")),
+        ):
+            return _greenfield_route_required()
         line_selection_assign = None
 
     if new_type == "greenfield" and line_selection_sent and payload.line_selection is not None:
@@ -872,6 +898,13 @@ async def update_scenario(user_id: str, scenario_id: str, payload: ScenarioUpdat
         new_changes, releases = measured
         if selection_assembled:
             releases = {**(releases or {}), "corridors": CORRIDORS_RELEASE}
+        elif _requires_line_selection(new_type):
+            stored_selection = _decode_jsonb(stored.get("line_selection"))
+            if isinstance(stored_selection, dict) and stored_selection.get("corridors_release"):
+                releases = {
+                    **(releases or {}),
+                    "corridors": stored_selection["corridors_release"],
+                }
         calc_fields, error_response = _calculate(new_name, new_changes)
         if error_response is not None:
             return error_response

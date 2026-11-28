@@ -52,6 +52,7 @@ import {
   OLD_CONDUCTOR_PATH,
   prefillChanges,
   selectionSummary,
+  stretchEndForAssembly,
   stretchTerminalName,
   toggleGid,
   useLineDataPrefill,
@@ -198,15 +199,26 @@ export function MapPanel({
     if (storedConnectors) setAssembledConnectors(storedConnectors);
   }, [storedConnectors]);
 
+  const lineSelectWasEnabledRef = useRef(lineSelectEnabled);
   useEffect(() => {
-    if (!lineSelectEnabled) {
+    const wasEnabled = lineSelectWasEnabledRef.current;
+    lineSelectWasEnabledRef.current = lineSelectEnabled;
+    if (wasEnabled && !lineSelectEnabled) {
       setSelectedGids([]);
       setAssembledPieces([]);
       setAssembledConnectors([]);
       setLineSummary(null);
       setAssembleError(null);
+      return;
     }
-  }, [lineSelectEnabled]);
+    if (!wasEnabled && lineSelectEnabled) {
+      setSelectedGids(initialSelectedGids ?? []);
+      setAssembledPieces([]);
+      setAssembledConnectors(storedConnectors ?? []);
+      setLineSummary(null);
+      setAssembleError(null);
+    }
+  }, [lineSelectEnabled, initialSelectedGids, storedConnectors]);
 
   const lineSelectActive = lineSelectEnabled && drawTerminals != null && terminalPick == null;
   useLineSelect(map, {
@@ -214,6 +226,8 @@ export function MapPanel({
     selectedGids,
     onSelectedGids: (gids) => {
       setSelectedGids(gids);
+      setAssembledPieces([]);
+      setAssembledConnectors([]);
       setAssembleError(null);
       setLineSummary(null);
       onLineSelectionCommitRef.current?.(null);
@@ -487,10 +501,36 @@ export function MapPanel({
   const displayedRoute = lineSelectEnabled ? lineRoute ?? showExisting : showExisting;
   const statsRoute = routeGeoJSON ?? lineRoute ?? showExisting;
 
+  function pieceLinesFromMap(gids: number[]): [number, number][][] {
+    if (!map || gids.length === 0) return [];
+    const layers = [hitLayerId('ref.corridors'), 'ref.corridors'].filter(
+      (id) => map.getLayer(id) !== undefined,
+    );
+    if (layers.length === 0) return [];
+    const byGid = new Map<number, [number, number][]>();
+    for (const feature of map.queryRenderedFeatures({ layers })) {
+      const raw = feature.properties?.gid;
+      const gid = typeof raw === 'number' ? raw : Number(raw);
+      if (!Number.isFinite(gid) || !gids.includes(gid) || byGid.has(gid)) continue;
+      const coords = coordsFromLineGeometry(feature.geometry);
+      if (coords.length >= 2) byGid.set(gid, coords);
+    }
+    return gids.flatMap((gid) => {
+      const line = byGid.get(gid);
+      return line ? [line] : [];
+    });
+  }
+
   async function handleUseLine(): Promise<void> {
     if (!drawTerminals || selectedGids.length === 0) return;
-    const stretchEnd =
-      terminalSubstations?.receiving === null ? drawTerminals.receiving : null;
+    const receivingIsPoint = terminalSubstations?.receiving === null;
+    const pieceLines = pieceLinesFromMap(selectedGids);
+    const stretchEnd = stretchEndForAssembly(
+      drawTerminals.sending,
+      drawTerminals.receiving,
+      pieceLines,
+      receivingIsPoint,
+    );
     setAssembling(true);
     setAssembleError(null);
     try {
@@ -527,6 +567,8 @@ export function MapPanel({
 
   function handlePickerChoose(candidate: CorridorCandidate): void {
     setSelectedGids((current) => toggleGid(current, candidate.gid));
+    setAssembledPieces([]);
+    setAssembledConnectors([]);
     setPickerCandidates(null);
     setAssembleError(null);
     onLineSelectionCommitRef.current?.(null);
@@ -534,6 +576,8 @@ export function MapPanel({
 
   function handleRemoveGid(gid: number): void {
     setSelectedGids((current) => current.filter((value) => value !== gid));
+    setAssembledPieces([]);
+    setAssembledConnectors([]);
     setAssembleError(null);
     onLineSelectionCommitRef.current?.(null);
   }
@@ -556,11 +600,12 @@ export function MapPanel({
   }
 
   const connectorSegments = useMemo(
-  () =>
-    assembledConnectors.map((connector) => ({
-      coordinates: connector.coordinates,
-    })),
-  [assembledConnectors],
+    () =>
+      assembledConnectors.map((connector) => ({
+        end: connector.end,
+        coordinates: connector.coordinates,
+      })),
+    [assembledConnectors],
   );
 
   return (
