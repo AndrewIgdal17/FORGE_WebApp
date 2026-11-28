@@ -3,7 +3,12 @@ import type { ReactElement, SyntheticEvent } from 'react';
 import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { AssembleLinePiece, LineConnector } from '@/lib/api';
-import { pieceLabel, selectionSummary, type PieceDetails } from '@/lib/line-select';
+import {
+  pieceLabel,
+  selectionSummary,
+  UNKNOWN_PIECE_DETAILS,
+  type PieceDetails,
+} from '@/lib/line-select';
 
 // Bottom-left, above the map legend chip (bottom-16); the Layers panel owns top-right.
 export const LINE_SELECT_PANEL_CLASS =
@@ -55,7 +60,8 @@ export function LineSelectPanel({
     );
   }
 
-  const listedPieces =
+  // Restored selections carry known: false until their tile feature is seen.
+  const listedPieces: Array<AssembleLinePiece & { known?: boolean }> =
     pieces.length > 0
       ? pieces
       : selectedGids.map((gid) => ({
@@ -65,6 +71,7 @@ export function LineSelectPanel({
           sub_2: pieceDetails[gid]?.sub_2 ?? null,
           source: '',
           miles: 0,
+          known: pieceDetails[gid] !== undefined,
         }));
 
   return (
@@ -89,7 +96,9 @@ export function LineSelectPanel({
             className="flex items-start justify-between gap-2 rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5 text-sm"
           >
             <div className="min-w-0">
-              <p className="font-medium text-slate-900">{pieceLabel(piece)}</p>
+              <p className="font-medium text-slate-900">
+                {pieceLabel(piece.known === false ? UNKNOWN_PIECE_DETAILS : piece)}
+              </p>
               <p className="text-xs text-slate-500">
                 gid {piece.gid}
                 {piece.miles > 0 ? ` · ${piece.miles.toFixed(1)} mi` : ''}

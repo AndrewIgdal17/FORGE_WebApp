@@ -132,16 +132,21 @@ export interface UseLineSelectOptions {
   onPickerOpen: (candidates: CorridorCandidate[]) => void;
   /** Right-click on a selected piece; the caller opens the piece menu at the client point. */
   onPieceContextMenu?: (gid: number, clientPoint: { x: number; y: number }) => void;
+  /** Called with each corridor piece the pointer hovers or clicks, so its details can be kept. */
+  onPieceSeen?: (candidate: CorridorCandidate) => void;
 }
 
 export function useLineSelect(
   map: MapLibreMap | null,
   options: UseLineSelectOptions,
 ): { hoveredGid: number | null } {
-  const { active, selectedGids, onSelectedGids, onPickerOpen, onPieceContextMenu } = options;
+  const { active, selectedGids, onSelectedGids, onPickerOpen, onPieceContextMenu, onPieceSeen } =
+    options;
   const activeRef = useRef(active);
   const onPieceContextMenuRef = useRef(onPieceContextMenu);
   onPieceContextMenuRef.current = onPieceContextMenu;
+  const onPieceSeenRef = useRef(onPieceSeen);
+  onPieceSeenRef.current = onPieceSeen;
   const selectedRef = useRef(selectedGids);
   const hoverPopupRef = useRef<Popup | null>(null);
   const hoveredGidRef = useRef<number | null>(null);
@@ -242,6 +247,7 @@ export function useLineSelect(
         hideTooltip();
         return;
       }
+      for (const candidate of candidates) onPieceSeenRef.current?.(candidate);
       if (hoveredGidRef.current === top.gid && hoverPopupRef.current?.isOpen()) return;
       showTooltip(top, event.lngLat);
     };
@@ -260,6 +266,7 @@ export function useLineSelect(
           .filter((row): row is CorridorCandidate => row !== null),
       );
       if (candidates.length === 0) return;
+      for (const candidate of candidates) onPieceSeenRef.current?.(candidate);
       if (candidates.length === 1) {
         toggle(candidates[0]!);
         return;

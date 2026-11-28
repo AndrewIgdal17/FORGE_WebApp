@@ -31,8 +31,17 @@ function namePart(value: string | null): string {
   return value?.trim() ?? '';
 }
 
-/** "138 kV · Reusens – Opossum Creek" for a piece; missing parts are named in plain words. */
-export function pieceLabel(piece: PieceDetails): string {
+/** A piece restored from a saved selection, whose tile feature has not been seen yet. */
+export const UNKNOWN_PIECE_DETAILS = { details: 'unknown' } as const;
+
+export type PieceLabelInput = PieceDetails | typeof UNKNOWN_PIECE_DETAILS;
+
+/**
+ * "138 kV · Reusens – Opossum Creek" for a piece; missing parts are named in plain words.
+ * Pieces whose details are not known yet read "Saved piece" rather than claiming the data lacks them.
+ */
+export function pieceLabel(piece: PieceLabelInput): string {
+  if ('details' in piece) return 'Saved piece';
   const voltage =
     piece.voltage_kv === null
       ? 'voltage not in the data'

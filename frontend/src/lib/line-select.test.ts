@@ -215,4 +215,8 @@ describe('pieceLabel', () => {
       '69 kV · Reusens',
     );
   });
+
+  it('reads Saved piece when the piece details are unknown', () => {
+    expect(pieceLabel({ details: 'unknown' })).toBe('Saved piece');
+  });
 });

@@ -297,6 +297,11 @@ export function MapPanel({
       onLineSelectionCommitRef.current?.(null);
     },
     onPickerOpen: setPickerCandidates,
+    onPieceSeen: (candidate) => {
+      setPieceDetails((current) =>
+        current[candidate.gid] ? current : { ...current, [candidate.gid]: candidate },
+      );
+    },
   });
 
   const [zoom, setZoom] = useState<number | null>(null);
