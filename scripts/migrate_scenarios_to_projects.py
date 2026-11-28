@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Attach each stored scenario to a project.
 
+NOTE: this is a one-off that was already run on 2026-11-27-era data. It will
+fail after migration 20261128000200 (project.nerc_regions is NOT NULL) because
+it inserts projects without regions. Do not re-run it without adding regions.
+
 --report (the default) prints the grouping and writes nothing.
 --apply inserts one project per owner and terminal pair, sets project_id,
 snaps each route's ends, and sets the base, in one transaction. A scenario
