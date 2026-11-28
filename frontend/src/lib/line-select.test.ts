@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   hoverCorridorGidFilter,
   pieceLabel,
+  shouldRecordPiece,
   lineSelectionStaleInView,
   nearestPointOnLine,
   overlappingCandidates,
@@ -218,5 +219,23 @@ describe('pieceLabel', () => {
 
   it('reads Saved piece when the piece details are unknown', () => {
     expect(pieceLabel({ details: 'unknown' })).toBe('Saved piece');
+  });
+});
+
+describe('shouldRecordPiece', () => {
+  const details = { voltage_kv: 138, sub_1: 'Reusens', sub_2: 'Opossum Creek' };
+
+  it('records a gid that has no details yet', () => {
+    expect(shouldRecordPiece({}, 45081, details)).toBe(true);
+  });
+
+  it('skips a gid whose details are unchanged', () => {
+    expect(shouldRecordPiece({ 45081: details }, 45081, { ...details })).toBe(false);
+  });
+
+  it('records a gid whose voltage or names changed', () => {
+    expect(shouldRecordPiece({ 45081: details }, 45081, { ...details, voltage_kv: 69 })).toBe(true);
+    expect(shouldRecordPiece({ 45081: details }, 45081, { ...details, sub_2: 'Other' })).toBe(true);
+    expect(shouldRecordPiece({ 45081: details }, 45081, { ...details, sub_1: null })).toBe(true);
   });
 });

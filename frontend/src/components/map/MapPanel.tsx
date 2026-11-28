@@ -53,6 +53,7 @@ import {
   OLD_CONDUCTOR_PATH,
   prefillChanges,
   selectionSummary,
+  shouldRecordPiece,
   type PieceDetails,
   stretchEndForAssembly,
   toggleGid,
@@ -199,6 +200,23 @@ export function MapPanel({
   const [selectedGids, setSelectedGids] = useState<number[]>(initialSelectedGids ?? []);
   // Voltage and names of each piece the user clicked, keyed by gid.
   const [pieceDetails, setPieceDetails] = useState<Record<number, PieceDetails>>({});
+  // Mirrors pieceDetails so writes can be skipped synchronously, before React re-renders.
+  const pieceDetailsRef = useRef<Record<number, PieceDetails>>({});
+  function recordPieceDetails(candidate: CorridorCandidate): void {
+    const current = pieceDetailsRef.current;
+    if (!shouldRecordPiece(current, candidate.gid, candidate)) return;
+    const next = { ...current, [candidate.gid]: candidate };
+    pieceDetailsRef.current = next;
+    setPieceDetails(next);
+  }
+  function forgetPieceDetails(gid: number): void {
+    const current = pieceDetailsRef.current;
+    if (!(gid in current)) return;
+    const next = { ...current };
+    delete next[gid];
+    pieceDetailsRef.current = next;
+    setPieceDetails(next);
+  }
   const [pickerCandidates, setPickerCandidates] = useState<CorridorCandidate[] | null>(null);
   const [assembledPieces, setAssembledPieces] = useState<AssembleLinePiece[]>([]);
   const [assembledConnectors, setAssembledConnectors] = useState<LineConnector[]>(storedConnectors ?? []);
@@ -288,7 +306,7 @@ export function MapPanel({
       ]);
     },
     onSelectedGids: (gids, added) => {
-      if (added) setPieceDetails((current) => ({ ...current, [added.gid]: added }));
+      if (added) recordPieceDetails(added);
       setSelectedGids(gids);
       setAssembledPieces([]);
       setAssembledConnectors([]);
@@ -297,11 +315,7 @@ export function MapPanel({
       onLineSelectionCommitRef.current?.(null);
     },
     onPickerOpen: setPickerCandidates,
-    onPieceSeen: (candidate) => {
-      setPieceDetails((current) =>
-        current[candidate.gid] ? current : { ...current, [candidate.gid]: candidate },
-      );
-    },
+    onPieceSeen: recordPieceDetails,
   });
 
   const [zoom, setZoom] = useState<number | null>(null);
@@ -641,7 +655,8 @@ export function MapPanel({
   }
 
   function handlePickerChoose(candidate: CorridorCandidate): void {
-    setPieceDetails((current) => ({ ...current, [candidate.gid]: candidate }));
+    if (selectedGids.includes(candidate.gid)) forgetPieceDetails(candidate.gid);
+    else recordPieceDetails(candidate);
     setSelectedGids((current) => toggleGid(current, candidate.gid));
     setAssembledPieces([]);
     setAssembledConnectors([]);
@@ -651,6 +666,7 @@ export function MapPanel({
   }
 
   function handleRemoveGid(gid: number): void {
+    forgetPieceDetails(gid);
     setSelectedGids((current) => current.filter((value) => value !== gid));
     setAssembledPieces([]);
     setAssembledConnectors([]);

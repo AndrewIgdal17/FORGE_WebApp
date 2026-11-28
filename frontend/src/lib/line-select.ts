@@ -36,6 +36,21 @@ export const UNKNOWN_PIECE_DETAILS = { details: 'unknown' } as const;
 
 export type PieceLabelInput = PieceDetails | typeof UNKNOWN_PIECE_DETAILS;
 
+/** True when `seen` has no entry for gid, or its voltage or names differ from `details`. */
+export function shouldRecordPiece(
+  seen: Readonly<Record<number, PieceDetails>>,
+  gid: number,
+  details: PieceDetails,
+): boolean {
+  const previous = seen[gid];
+  if (!previous) return true;
+  return (
+    previous.voltage_kv !== details.voltage_kv ||
+    previous.sub_1 !== details.sub_1 ||
+    previous.sub_2 !== details.sub_2
+  );
+}
+
 /**
  * "138 kV · Reusens – Opossum Creek" for a piece; missing parts are named in plain words.
  * Pieces whose details are not known yet read "Saved piece" rather than claiming the data lacks them.
