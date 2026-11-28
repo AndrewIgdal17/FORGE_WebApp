@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactElement } from 'react';
+import { Link } from 'react-router';
 import {
   ScenarioToolbar,
   type ScenarioToolbarProps,
@@ -8,6 +9,39 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { BcrScoreboard } from '@/components/workspace/bcr-scoreboard';
 import { cn } from '@/lib/utils';
+
+export type CalculationStatusDisplay =
+  | { kind: 'spinner' }
+  | { kind: 'none'; title: string }
+  | { kind: 'text'; text: string };
+
+/** How the command bar shows the calculation status: a spinner while running,
+ * nothing for a routine "Calculated in …" (kept as a tooltip), text otherwise. */
+export function calculationStatusDisplay(status: string): CalculationStatusDisplay {
+  if (status.startsWith('Calculating')) return { kind: 'spinner' };
+  if (status.startsWith('Calculated in')) return { kind: 'none', title: status };
+  return { kind: 'text', text: status };
+}
+
+function CalculationStatus({ status }: { status: string }): ReactElement | null {
+  const display = calculationStatusDisplay(status);
+  if (display.kind === 'spinner') {
+    return (
+      <span
+        role="status"
+        aria-label="Calculating"
+        data-calc-status
+        className="inline-block size-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600"
+      />
+    );
+  }
+  if (display.kind === 'none') return <span data-calc-status title={display.title} className="sr-only">{display.title}</span>;
+  return (
+    <p className="text-xs text-slate-500" data-calc-status>
+      {display.text}
+    </p>
+  );
+}
 
 export interface WorkspaceHeaderProps {
   scenarioName: string;
@@ -106,15 +140,28 @@ export function WorkspaceHeader({
     action();
   }
 
+  const inProject = Boolean(locationProjectId && scenarioToolbar);
+
   return (
     <header className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2">
-      {locationProjectId && scenarioToolbar ? (
-        <div className="w-full basis-full border-b border-slate-100 pb-2">
-          <ScenarioToolbar {...scenarioToolbar} />
-        </div>
-      ) : null}
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        {editing ? (
+        {inProject && scenarioToolbar ? (
+          <>
+            <nav aria-label="Project" className="flex min-w-0 items-center gap-1.5 text-sm">
+              <Link
+                to="/app/projects"
+                className="truncate font-semibold text-slate-900 hover:text-forge-primary"
+                title="Back to Projects"
+              >
+                {scenarioToolbar.project.name}
+              </Link>
+              <span aria-hidden className="text-slate-400">
+                ›
+              </span>
+            </nav>
+            <ScenarioToolbar {...scenarioToolbar} />
+          </>
+        ) : editing ? (
           <Input
             aria-label="Scenario name"
             autoFocus
@@ -157,9 +204,7 @@ export function WorkspaceHeader({
         ) : null}
       </div>
 
-      <p className="text-xs text-slate-500" data-calc-status>
-        {calculationStatus}
-      </p>
+      <CalculationStatus status={calculationStatus} />
 
       <BcrScoreboard results={results} />
 
