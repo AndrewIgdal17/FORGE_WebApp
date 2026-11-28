@@ -1,0 +1,28 @@
+# Martin 1.16 config for tiles.forge-calc.com (turgon, container `martin`).
+# Reconstructed from the live file on turgon (/srv/forge/martin-config.yaml).
+#
+# connection_string is not stored here. Martin substitutes ${DATABASE_URL}
+# from the environment, which comes from martin.env on turgon. Check that the
+# variable name matches martin.env before deploying.
+#
+# Function sources (ref.*_by_region) are read only after `docker restart martin`.
+
+listen_addresses: 0.0.0.0:3000
+
+cors:
+  origin:
+    - https://forge-calc.com
+
+postgres:
+  connection_string: ${DATABASE_URL}
+  auto_publish:
+    from_schemas:
+      - ref
+    tables:
+      source_id_format: "{schema}.{table}"
+    functions:
+      source_id_format: "{schema}.{function}"
+
+pmtiles:
+  sources:
+    basemap: /basemap/northamerica.pmtiles
