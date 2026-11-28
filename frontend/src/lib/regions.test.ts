@@ -2,6 +2,7 @@ import type { Feature, MultiPolygon, Polygon } from 'geojson';
 import { describe, expect, it } from 'vitest';
 
 import {
+  regionLabelPoints,
   REGION_CODES,
   REGION_NAMES,
   REGION_SUGGEST_MAX_M,
@@ -133,5 +134,37 @@ describe('createBlockedReason', () => {
   });
   it('does not block when there is no draft', () => {
     expect(createBlockedReason(null)).toBeNull();
+  });
+});
+
+describe('regionLabelPoints', () => {
+  const square = (x0: number, y0: number, size: number): number[][] => [
+    [x0, y0],
+    [x0 + size, y0],
+    [x0 + size, y0 + size],
+    [x0, y0 + size],
+    [x0, y0],
+  ];
+
+  it('gives each region one label point, inside its largest piece', () => {
+    const shapes: RegionShape[] = [
+      {
+        code: 'WECC',
+        geometry: {
+          type: 'MultiPolygon',
+          coordinates: [[square(-125, 30, 1)], [square(-115, 32, 10)]],
+        },
+      },
+      { code: 'SERC', geometry: { type: 'Polygon', coordinates: [square(-90, 30, 5)] } },
+    ];
+    const labels = regionLabelPoints(shapes);
+    expect(labels.features).toHaveLength(2);
+    const wecc = labels.features.find((f) => f.properties.code === 'WECC')!;
+    const [x, y] = wecc.geometry.coordinates as [number, number];
+    expect(x).toBeGreaterThanOrEqual(-115);
+    expect(x).toBeLessThanOrEqual(-105);
+    expect(y).toBeGreaterThanOrEqual(32);
+    expect(y).toBeLessThanOrEqual(42);
+    expect(wecc.properties.name).toBe('WECC');
   });
 });

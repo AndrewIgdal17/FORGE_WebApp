@@ -30,7 +30,7 @@ import {
   tickedBounds,
 } from '@/lib/region-tiles';
 import { solidRouteGeometry, type RouteConnectorSegment } from '@/lib/route-display';
-import { regionShapes, sortRegions, type RegionShape } from '@/lib/regions';
+import { regionLabelPoints, regionShapes, sortRegions, type RegionShape } from '@/lib/regions';
 import { useMapStore } from '@/stores/map-store';
 
 const US_CENTER: [number, number] = [-81.3412, 35.7332]; // Hickory, NC
@@ -148,6 +148,8 @@ export const REFERENCE_OVERLAYS: readonly MapOverlay[] = [
 ];
 
 const NERC_LABEL_LAYER_ID = 'ref.nerc_regions-label';
+/** One point per region (see regionLabelPoints); tile labels repeated per tile. */
+const NERC_LABEL_SOURCE_ID = 'forge-nerc-region-labels';
 const MASK_SOURCE_ID = 'forge-region-mask';
 const MASK_LAYER_ID = 'forge-region-mask-fill';
 const OUTLINE_SOURCE_ID = 'forge-region-outline';
@@ -517,6 +519,7 @@ function applyRegionShapes(
   regions: readonly string[],
   shapes: readonly RegionShape[] | null,
 ): void {
+  if (shapes) setGeoJsonData(map, NERC_LABEL_SOURCE_ID, regionLabelPoints(shapes));
   if (regions.length === 0 || !shapes) {
     removeLayerAndSource(map, MASK_LAYER_ID, MASK_SOURCE_ID);
     removeLayerAndSource(map, OUTLINE_LAYER_ID, OUTLINE_SOURCE_ID);
@@ -603,15 +606,20 @@ function applyReferenceLayers(map: MapLibreMap, show: boolean): void {
       );
     }
   }
+  if (!map.getSource(NERC_LABEL_SOURCE_ID)) {
+    map.addSource(NERC_LABEL_SOURCE_ID, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+    });
+  }
   if (!map.getLayer(NERC_LABEL_LAYER_ID)) {
     map.addLayer(
       {
       id: NERC_LABEL_LAYER_ID,
       type: 'symbol',
-      source: 'ref.nerc_regions',
-      'source-layer': 'ref.nerc_regions',
+      source: NERC_LABEL_SOURCE_ID,
       layout: {
-        'text-field': ['get', 'code'],
+        'text-field': ['get', 'name'],
         'text-font': ['Noto Sans Regular'],
         'text-size': 12,
       },

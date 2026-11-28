@@ -1,5 +1,6 @@
+import pointOnFeature from '@turf/point-on-feature';
 import pointToPolygonDistance from '@turf/point-to-polygon-distance';
-import type { FeatureCollection, MultiPolygon, Polygon } from 'geojson';
+import type { FeatureCollection, MultiPolygon, Point, Polygon, Position } from 'geojson';
 
 /** NERC regions in the server's order (app/regions.py). */
 export const REGION_CODES = ['WECC', 'TRE', 'MRO', 'NPCC', 'RF', 'SERC'] as const;
@@ -97,3 +98,39 @@ export function createBlockedReason(
     ? 'Pick at least one NERC region (use Add on the terminal warning)'
     : null;
 }
+
+function ringArea(ring: Position[]): number {
+  let twice = 0;
+  for (let index = 0; index < ring.length - 1; index++) {
+    const [x1, y1] = ring[index]!;
+    const [x2, y2] = ring[index + 1]!;
+    twice += (x1 as number) * (y2 as number) - (x2 as number) * (y1 as number);
+  }
+  return Math.abs(twice) / 2;
+}
+
+/**
+ * One label point per region, inside its largest piece, so a region's name is
+ * drawn once instead of once per map tile its outline touches.
+ */
+export function regionLabelPoints(
+  shapes: readonly RegionShape[],
+): FeatureCollection<Point, { code: string; name: string }> {
+  return {
+    type: 'FeatureCollection',
+    features: shapes.map((shape) => {
+      const parts: Position[][][] =
+        shape.geometry.type === 'Polygon' ? [shape.geometry.coordinates] : shape.geometry.coordinates;
+      let largest = parts[0]!;
+      for (const part of parts) if (ringArea(part[0]!) > ringArea(largest[0]!)) largest = part;
+      const point = pointOnFeature({ type: 'Polygon', coordinates: largest });
+      const name = (REGION_NAMES as Record<string, string>)[shape.code] ?? shape.code;
+      return {
+        type: 'Feature' as const,
+        properties: { code: shape.code, name },
+        geometry: point.geometry,
+      };
+    }),
+  };
+}
+
