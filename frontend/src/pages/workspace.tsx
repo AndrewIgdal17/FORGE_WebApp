@@ -47,6 +47,7 @@ import type { LineSelectionIn, RequiredField, RequiredResponse } from '@/lib/api
 import { diffChanges } from '@/lib/changes';
 import { debounce } from '@/lib/debounce';
 import { duplicateAction } from '@/lib/duplicate-action';
+import { sameTerminal } from '@/lib/terminal-pick';
 import { useLineDataPrefill } from '@/lib/line-select';
 import { canCalculate, canDraw, panelFields } from '@/lib/required-gates';
 import { getValueAtPath } from '@/lib/path';
@@ -982,6 +983,13 @@ function WorkspaceBody(): ReactElement {
     setTerminalPick(null);
   }
 
+  // Cancel button on the terminal-picking banner. Nothing is saved yet, so it
+  // drops the draft without a confirmation.
+  function handleCancelNewProject(): void {
+    abandonDraft();
+    navigate('/app/projects');
+  }
+
   function handlePickTerminal(terminal: DraftTerminal): void {
     if (terminalPick === 'sending') {
       setPendingSending(terminal);
@@ -991,6 +999,10 @@ function WorkspaceBody(): ReactElement {
     if (terminalPick !== 'receiving') return;
     const sending = pendingSending;
     if (!sending) return;
+    if (sameTerminal(sending, terminal)) {
+      toast('Pick a different substation for the receiving end');
+      return;
+    }
     setDraft((current) => {
       if (!current || current.project_id) return current;
       return { ...current, terminals: { sending, receiving: terminal } };
@@ -1468,6 +1480,7 @@ function WorkspaceBody(): ReactElement {
                       terminalPick={pickingNewProject ? terminalPick : null}
                       projectType={typeof activeProjectType === 'string' ? activeProjectType : null}
                       onPickTerminal={handlePickTerminal}
+                      onCancelNewProject={handleCancelNewProject}
                       isDraftProject={draft !== null && !draft.project_id}
                       onRemoveTerminal={handleRemoveTerminal}
                       storedLineGids={activeScenario?.line_selection?.gids}

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   pinMenuItems,
   removeTerminalResult,
+  sameTerminal,
   terminalClickAction,
   terminalsAfterTypeChange,
 } from '@/lib/terminal-pick';
@@ -152,5 +153,31 @@ describe('pinMenuItems', () => {
     expect(pinMenuItems(false)).toEqual([
       { label: 'Terminals are fixed for this project', disabled: true, action: null },
     ]);
+  });
+});
+
+describe('sameTerminal', () => {
+  it('treats the same substation gid as the same terminal', () => {
+    expect(sameTerminal(sub(7), sub(7))).toBe(true);
+  });
+
+  it('treats different substation gids as different terminals', () => {
+    expect(sameTerminal(sub(7), sub(8))).toBe(false);
+  });
+
+  it('treats two points within 1 m as the same terminal', () => {
+    // 0.000005 deg of longitude at 30 N is about 0.5 m.
+    expect(sameTerminal(point(-97), point(-97.000005))).toBe(true);
+  });
+
+  it('treats two points more than 1 m apart as different terminals', () => {
+    // 0.0001 deg of longitude at 30 N is about 10 m.
+    expect(sameTerminal(point(-97), point(-97.0001))).toBe(false);
+  });
+
+  it('never treats a point and a substation as the same terminal', () => {
+    const sameSpot: DraftTerminal = { substation_gid: null, name: 'Point', point: [-97, 30] };
+    expect(sameTerminal(sub(7), sameSpot)).toBe(false);
+    expect(sameTerminal(sameSpot, sub(7))).toBe(false);
   });
 });

@@ -89,6 +89,8 @@ export interface MapPanelProps {
   /** Draft project type (e.g. 'greenfield', 'reconductoring'); decides what a terminal click may place. */
   projectType?: string | null;
   onPickTerminal?: (terminal: DraftTerminal) => void;
+  /** Cancel button on the terminal-picking banner; drops the new-project draft. */
+  onCancelNewProject?: () => void;
   /** True while the project is a draft (no saved project yet); its terminals can be removed. */
   isDraftProject?: boolean;
   onRemoveTerminal?: (role: TerminalRole) => void;
@@ -168,6 +170,7 @@ export function MapPanel({
   terminalPick = null,
   projectType = null,
   onPickTerminal,
+  onCancelNewProject,
   isDraftProject = false,
   onRemoveTerminal,
   storedLineGids,
@@ -710,11 +713,22 @@ export function MapPanel({
       {terminalPick ? (
         <div
           data-terminal-banner
-          className="pointer-events-none absolute top-4 left-1/2 z-20 -translate-x-1/2 rounded-md bg-slate-900/90 px-4 py-2 text-sm text-white"
+          className="pointer-events-none absolute top-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-md bg-slate-900/90 px-4 py-2 text-sm text-white"
         >
-          {terminalPick === 'sending'
-            ? 'Click the sending substation'
-            : 'Click the receiving substation'}
+          <span>
+            {terminalPick === 'sending'
+              ? 'Click the sending substation'
+              : 'Click the receiving substation'}
+          </span>
+          {onCancelNewProject ? (
+            <button
+              type="button"
+              onClick={onCancelNewProject}
+              className="pointer-events-auto rounded px-2 py-0.5 text-slate-200 underline underline-offset-2 hover:text-white focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
+            >
+              Cancel new project
+            </button>
+          ) : null}
         </div>
       ) : null}
       <MapTooltip map={map} isDrawing={isDrawing} lineSelecting={lineSelectActive} />

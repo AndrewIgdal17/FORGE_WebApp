@@ -1,3 +1,5 @@
+import { haversineM } from '@/lib/terminals';
+
 /**
  * What a click does while a terminal is being picked on the map.
  * Reconductoring and rebuild terminals are substations only; greenfield also
@@ -89,6 +91,14 @@ export function removeTerminalResult<T extends PickTerminal>(
 ): { sending: T | null; receiving: T | null; pick: TerminalRole } {
   if (role === 'sending') return { sending: null, receiving: null, pick: 'sending' };
   return { sending: state.sending, receiving: null, pick: 'receiving' };
+}
+
+/** Two picked terminals are the same when they are one substation, or two points within 1 m. */
+export function sameTerminal(a: PickTerminal, b: PickTerminal): boolean {
+  if (a.substation_gid !== null || b.substation_gid !== null) {
+    return a.substation_gid === b.substation_gid;
+  }
+  return haversineM(a.point, b.point) <= 1;
 }
 
 export type PinMenuAction = 'remove' | null;
