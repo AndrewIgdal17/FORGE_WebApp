@@ -396,3 +396,35 @@ export function lineSelectTooltip(candidate: CorridorCandidate): string {
   const source = candidate.source || '—';
   return `${voltage} · ${ends} · ${source}`;
 }
+/** A drag trace in progress: the voltage it locked onto at the start, and the pieces it picked up. */
+export interface LineTrace {
+  voltage: number | null | undefined;
+  gids: number[];
+}
+
+export function startTrace(): LineTrace {
+  return { voltage: undefined, gids: [] };
+}
+
+/**
+ * One pointer step of a drag trace over the corridor pieces under the cursor.
+ * The first step needs exactly one piece and locks the trace to its voltage.
+ * Later steps add pieces at that voltage only, and add nothing where two such
+ * pieces overlap (a parallel line), so the trace never jumps between them.
+ */
+export function traceStep(
+  trace: LineTrace,
+  candidates: readonly CorridorCandidate[],
+): { trace: LineTrace; added: CorridorCandidate[] } {
+  const unique = overlappingCandidates([...candidates]);
+  if (trace.voltage === undefined) {
+    if (unique.length !== 1) return { trace, added: [] };
+    const first = unique[0]!;
+    return { trace: { voltage: first.voltage_kv, gids: [first.gid] }, added: [first] };
+  }
+  const matching = unique.filter((candidate) => candidate.voltage_kv === trace.voltage);
+  if (matching.length !== 1) return { trace, added: [] };
+  const next = matching[0]!;
+  if (trace.gids.includes(next.gid)) return { trace, added: [] };
+  return { trace: { voltage: trace.voltage, gids: [...trace.gids, next.gid] }, added: [next] };
+}

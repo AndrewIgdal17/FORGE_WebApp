@@ -87,7 +87,7 @@ export function LineSelectPanel({
         </button>
       </div>
       <p className="mt-1 text-xs text-slate-500">
-        Click corridor pieces on the map. A second click removes a piece.
+        Hold and drag along the line to pick up its pieces (same voltage only). Click a piece to add or remove it.
       </p>
       <ol className="mt-3 grid gap-2">
         {listedPieces.map((piece, index) => (
