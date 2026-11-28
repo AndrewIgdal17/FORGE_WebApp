@@ -253,12 +253,25 @@ export function MapPanel({
   isDraftRef.current = isDraftProject;
   const onRemoveTerminalRef = useRef(onRemoveTerminal);
   onRemoveTerminalRef.current = onRemoveTerminal;
+  // Removing a terminal makes the selected pieces and their preview stale: the
+  // line must be selected again between the new terminals.
+  function removeTerminalAndClearLine(role: TerminalRole): void {
+    setSelectedGids([]);
+    setAssembledPieces([]);
+    setAssembledConnectors([]);
+    setLineSummary(null);
+    setAssembleError(null);
+    onLineSelectionCommitRef.current?.(null);
+    onRemoveTerminalRef.current?.(role);
+  }
+  const removeTerminalAndClearLineRef = useRef(removeTerminalAndClearLine);
+  removeTerminalAndClearLineRef.current = removeTerminalAndClearLine;
   const onTerminalContextMenu = useCallback<TerminalContextMenuHandler>((role, clientPoint) => {
     const items = pinMenuItems(isDraftRef.current).map((item): MapContextMenuItem => ({
       label: item.label,
       disabled: item.disabled,
       onSelect:
-        item.action === 'remove' ? () => onRemoveTerminalRef.current?.(role) : undefined,
+        item.action === 'remove' ? () => removeTerminalAndClearLineRef.current(role) : undefined,
     }));
     openContextMenu(clientPoint.x, clientPoint.y, items);
   }, []);
@@ -441,7 +454,7 @@ export function MapPanel({
     const onClick = (event: MouseEvent): void => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      if (target.closest('.maplibregl-ctrl, button, a, input, [role="dialog"], [data-terminal-role]')) return;
+      if (target.closest('.maplibregl-ctrl, button, a, input, [role="dialog"]')) return;
       const rect = container.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;

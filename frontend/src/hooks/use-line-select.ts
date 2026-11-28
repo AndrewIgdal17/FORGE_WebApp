@@ -265,9 +265,9 @@ export function useLineSelect(
     };
 
     const onPieceContextMenuEvent = (event: MapLayerMouseEvent): void => {
-      if (!activeRef.current) return;
       const original = event.originalEvent;
       original.preventDefault();
+      if (!activeRef.current) return;
       const [feature] = map.queryRenderedFeatures(event.point, { layers: [SELECTED_LAYER] });
       if (!feature) return;
       const candidate = corridorCandidateFromFeature(feature);
