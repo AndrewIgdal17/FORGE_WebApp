@@ -50,6 +50,7 @@ function sampleProjectResponse(
     sending_point: GEO_SEND,
     receiving_point: GEO_RECV,
     base_scenario_id: base.base_scenario_id,
+    nerc_regions: base.nerc_regions,
     revision: base.revision,
     created_at: base.created_at,
     updated_at: base.updated_at,
@@ -72,6 +73,7 @@ function sampleProject(overrides: Partial<Project> = {}): Project {
     sending_point: [-97.74, 30.27],
     receiving_point: [-97.75, 30.28],
     base_scenario_id: 's1',
+    nerc_regions: ['WECC'],
     revision: 1,
     created_at: '2026-11-09T00:00:00Z',
     updated_at: '2026-11-09T00:00:00Z',
@@ -100,6 +102,29 @@ describe('isProjectReadOnly', () => {
         'user-a',
       ),
     ).toBe(true);
+  });
+});
+
+describe('setRegions', () => {
+  beforeEach(() => {
+    vi.mocked(updateProject).mockReset();
+    useProjectStore.setState({ projects: [sampleProject()], loading: false, loaded: true });
+  });
+
+  it('PATCHes nerc_regions with the revision and stores the returned regions', async () => {
+    vi.mocked(updateProject).mockResolvedValue(
+      sampleProjectResponse({ nerc_regions: ['MRO', 'WECC'], revision: 2 }),
+    );
+
+    await useProjectStore.getState().setRegions('p1', ['MRO', 'WECC'], 1);
+
+    expect(updateProject).toHaveBeenCalledWith('p1', {
+      revision: 1,
+      nerc_regions: ['MRO', 'WECC'],
+    });
+    const stored = useProjectStore.getState().projects[0];
+    expect(stored.nerc_regions).toEqual(['MRO', 'WECC']);
+    expect(stored.revision).toBe(2);
   });
 });
 
@@ -140,6 +165,36 @@ describe('loadProjects', () => {
     const project = useProjectStore.getState().projects[0];
     expect(project.sending_point).toEqual([-97.7401, 30.2702]);
     expect(project.receiving_point).toEqual([-81.2841, 35.5928]);
+  });
+
+  it('maps nerc_regions from the row, empty when absent', async () => {
+    const row = {
+      id: 'p1',
+      user_id: 'user-a',
+      name: 'Line',
+      sending_name: 'Send',
+      receiving_name: 'Recv',
+      sending_substation_gid: 10,
+      receiving_substation_gid: null,
+      sending_point_geojson: { type: 'Point', coordinates: [-97.7401, 30.2702] },
+      receiving_point_geojson: { type: 'Point', coordinates: [-81.2841, 35.5928] },
+      base_scenario_id: 's1',
+      nerc_regions: ['WECC', 'RF'],
+      revision: 1,
+      created_at: '2026-11-09T00:00:00Z',
+      updated_at: '2026-11-09T00:00:00Z',
+    };
+    tables.from.mockImplementation(() => ({
+      select: () => ({
+        order: () => Promise.resolve({ data: [row, { ...row, id: 'p2', nerc_regions: undefined }], error: null }),
+      }),
+    }));
+
+    await useProjectStore.getState().loadProjects();
+
+    const [first, second] = useProjectStore.getState().projects;
+    expect(first.nerc_regions).toEqual(['WECC', 'RF']);
+    expect(second.nerc_regions).toEqual([]);
   });
 
   it('does not store a missing sending_point_geojson as [0, 0]', async () => {

@@ -1071,6 +1071,22 @@ function WorkspaceBody(): ReactElement {
     }
   }
 
+  // "Add <region>" on the route note for a saved project the user owns. The
+  // server re-checks the terminals; adding a region only loosens the check.
+  async function handleAddProjectRegion(
+    project: { id: string; nerc_regions: string[]; revision: number },
+    code: string,
+  ): Promise<void> {
+    try {
+      await useProjectStore
+        .getState()
+        .setRegions(project.id, sortRegions([...project.nerc_regions, code]), project.revision);
+      toast.success(`Added ${regionName(code)} to the project`);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Could not add the region');
+    }
+  }
+
   // Warnings that still describe the terminal shown for their end. A warning
   // for a terminal that has since been replaced, removed, or reset is hidden.
   function liveRegionWarnings(): Array<{ end: 'sending' | 'receiving'; warning: RegionWarning }> {
@@ -1586,6 +1602,20 @@ function WorkspaceBody(): ReactElement {
                       onRemoveTerminal={handleRemoveTerminal}
                       storedLineGids={activeScenario?.line_selection?.gids}
                       onLineDataStaleChange={setLineDataStale}
+                      projectRegions={
+                        draft && !draft.project_id
+                          ? draft.nerc_regions
+                          : (locationProject?.nerc_regions ?? null)
+                      }
+                      onAddRegion={
+                        draft && !draft.project_id
+                          ? handleAddRegion
+                          : locationProject && locationProject.user_id === currentUserId
+                            ? (code: string) => {
+                                void handleAddProjectRegion(locationProject, code);
+                              }
+                            : undefined
+                      }
                     />
                   </div>
                 ) : (

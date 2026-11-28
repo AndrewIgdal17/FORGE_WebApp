@@ -22,6 +22,8 @@ const DEFAULT_LAYERS: Record<string, MapLayerState> = {
   'ref.highways_nhs': { visible: false, opacity: 0.6 },
   'ref.rail_narn': { visible: false, opacity: 0.6 },
   'ref.substations_display': { visible: false, opacity: 0.8 },
+  'ref.nerc_regions': { visible: true, opacity: 0.8 },
+  'ref.interconnections': { visible: false, opacity: 0.8 },
 };
 
 const DEFAULT_HIDDEN_ATTRIBUTES: Record<string, string[]> = {

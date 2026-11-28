@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { regionName } from '@/lib/regions';
 import type { Project } from '@/stores/project-store';
 
 export interface ProjectCardProps {
@@ -37,6 +38,11 @@ export function ProjectCard({
           <CardDescription className="text-xs opacity-80">
             {project.sending_name} → {project.receiving_name}
           </CardDescription>
+          {project.nerc_regions.length > 0 ? (
+            <CardDescription className="mt-1 text-xs opacity-80">
+              {project.nerc_regions.map(regionName).join(', ')}
+            </CardDescription>
+          ) : null}
           <CardDescription className="mt-1 text-xs opacity-60">
             {scenarioCount} scenario{scenarioCount === 1 ? '' : 's'}
             {ownerName ? ` · ${ownerName}` : ''}

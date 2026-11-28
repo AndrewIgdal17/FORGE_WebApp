@@ -19,6 +19,8 @@ export interface Project {
   sending_point: [number, number];
   receiving_point: [number, number];
   base_scenario_id: string | null;
+  /** Region codes in REGION_CODES order. */
+  nerc_regions: string[];
   revision: number;
   created_at: string;
   updated_at: string;
@@ -33,6 +35,7 @@ interface ProjectStore {
   loadProjects: () => Promise<void>;
   renameProject: (id: string, name: string, revision: number) => Promise<Project>;
   setBase: (id: string, scenarioId: string, revision: number) => Promise<Project>;
+  setRegions: (id: string, regions: string[], revision: number) => Promise<Project>;
   removeProject: (id: string) => Promise<void>;
   duplicate: (id: string) => Promise<Project>;
 }
@@ -73,6 +76,7 @@ function rowToProject(row: Record<string, unknown>): Project {
     receiving_point: receiving,
     base_scenario_id:
       row.base_scenario_id != null ? String(row.base_scenario_id) : null,
+    nerc_regions: Array.isArray(row.nerc_regions) ? row.nerc_regions.map(String) : [],
     revision: typeof row.revision === 'number' ? row.revision : 1,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
@@ -93,6 +97,7 @@ export function fromProjectResponse(response: ProjectResponse): Project {
     sending_point: sending,
     receiving_point: receiving,
     base_scenario_id: response.base_scenario_id,
+    nerc_regions: response.nerc_regions,
     revision: response.revision,
     created_at: response.created_at,
     updated_at: response.updated_at,
@@ -154,6 +159,18 @@ export const useProjectStore = create<ProjectStore>((set) => ({
     const response = await updateProjectApi(id, {
       revision,
       base_scenario_id: scenarioId,
+    });
+    const project = fromProjectResponse(response);
+    set((state) => ({
+      projects: upsertProject(state.projects, project),
+    }));
+    return project;
+  },
+
+  setRegions: async (id, regions, revision) => {
+    const response = await updateProjectApi(id, {
+      revision,
+      nerc_regions: regions,
     });
     const project = fromProjectResponse(response);
     set((state) => ({

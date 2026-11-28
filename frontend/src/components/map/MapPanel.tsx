@@ -37,6 +37,7 @@ import {
 import {
   ApiError,
   assembleLine,
+  getNercRegions,
   type AnalyzeResponse,
   type AssembleLinePiece,
   type AssembleResponse,
@@ -61,6 +62,8 @@ import {
   type CorridorCandidate,
 } from '@/lib/line-select';
 import { resolvedRowWidthFt, rowWidthProblem } from '@/lib/analyze-request';
+import { regionName, regionShapes, type RegionShape } from '@/lib/regions';
+import { unlistedRegionsOnRoute } from '@/lib/region-tiles';
 import { pointTerminalName } from '@/lib/terminals';
 import { pinMenuItems, terminalClickAction, type TerminalRole } from '@/lib/terminal-pick';
 import { useFormStore } from '@/stores/form-store';
@@ -97,6 +100,10 @@ export interface MapPanelProps {
   /** Gids from a stored line selection; used for stale-data notice after tiles load. */
   storedLineGids?: number[];
   onLineDataStaleChange?: (stale: boolean) => void;
+  /** NERC regions of the open project or draft. Null or empty: no region filter. */
+  projectRegions?: readonly string[] | null;
+  /** Adds a region to the open project or draft. Omitted when the user cannot change it. */
+  onAddRegion?: (code: string) => void;
 }
 
 function pickedSubstationName(name: string | null, gid: number): string {
@@ -175,6 +182,8 @@ export function MapPanel({
   onRemoveTerminal,
   storedLineGids,
   onLineDataStaleChange,
+  projectRegions = null,
+  onAddRegion,
 }: MapPanelProps): ReactElement {
   const [map, setMap] = useState<MapLibreMap | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -694,6 +703,31 @@ export function MapPanel({
     applyDrawnRouteReset();
   }
 
+  // Route note: regions the drawn or selected route enters that the project lacks.
+  const regionKey = projectRegions ? [...projectRegions].sort().join(',') : '';
+  const [regionGeometry, setRegionGeometry] = useState<RegionShape[] | null>(null);
+  useEffect(() => {
+    if (!regionKey) return;
+    let cancelled = false;
+    getNercRegions()
+      .then((collection) => {
+        if (!cancelled) setRegionGeometry(regionShapes(collection));
+      })
+      .catch(() => {
+        // Without shapes the note stays hidden; the server still checks terminals.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [regionKey]);
+  const routeOutside = useMemo(
+    () =>
+      regionGeometry && projectRegions
+        ? unlistedRegionsOnRoute(statsRoute, projectRegions, regionGeometry)
+        : [],
+    [regionGeometry, projectRegions, statsRoute],
+  );
+
   const connectorSegments = useMemo(
     () =>
       assembledConnectors.map((connector) => ({
@@ -709,6 +743,7 @@ export function MapPanel({
         onMap={setMap}
         existingRoute={displayedRoute}
         connectorSegments={connectorSegments}
+        regions={projectRegions}
       />
       {terminalPick ? (
         <div
@@ -729,6 +764,30 @@ export function MapPanel({
               Cancel new project
             </button>
           ) : null}
+        </div>
+      ) : null}
+      {routeOutside.length > 0 ? (
+        <div className="pointer-events-none absolute top-28 left-1/2 z-20 flex w-max max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col gap-2">
+          {routeOutside.map((code) => (
+            <div
+              key={code}
+              role="status"
+              className="pointer-events-auto flex flex-wrap items-center justify-center gap-3 rounded-md border border-sky-200 bg-sky-50 px-4 py-2 text-center text-sm text-sky-900"
+            >
+              <span>
+                {`Your route passes through ${regionName(code)}, which is not in this project. Add it to see its map data there.`}
+              </span>
+              {onAddRegion ? (
+                <button
+                  type="button"
+                  onClick={() => onAddRegion(code)}
+                  className="rounded border border-sky-300 bg-white px-2 py-0.5 font-medium hover:bg-sky-100 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none"
+                >
+                  Add {regionName(code)}
+                </button>
+              ) : null}
+            </div>
+          ))}
         </div>
       ) : null}
       <MapTooltip map={map} isDrawing={isDrawing} lineSelecting={lineSelectActive} />
@@ -759,7 +818,7 @@ export function MapPanel({
         loading={loading && !isDrawing}
         error={widthError ?? error}
       />
-      <LayerPanel />
+      <LayerPanel showReference={(projectRegions?.length ?? 0) > 0} />
       <MapLegend />
       <ResetButton visible={statsRoute !== null} onReset={handleReset} />
       <DrawingToolbar

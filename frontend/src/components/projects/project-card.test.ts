@@ -21,6 +21,7 @@ function sampleProject(overrides: Partial<Project> = {}): Project {
     sending_point: [-97.74, 30.27],
     receiving_point: [-97.75, 30.28],
     base_scenario_id: 's1',
+    nerc_regions: ['WECC'],
     revision: 1,
     created_at: '2026-11-09T00:00:00Z',
     updated_at: '2026-11-09T00:00:00Z',
@@ -56,6 +57,22 @@ describe('ProjectCard', () => {
     expect(html).toContain('Sub B');
     expect(html).toContain('2 scenarios');
     expect(html).toContain('andy');
+  });
+
+  it('lists the names of the project regions', () => {
+    const html = renderToStaticMarkup(
+      createElement(ProjectCard, {
+        project: sampleProject({ nerc_regions: ['WECC', 'TRE'] }),
+        scenarioCount: 1,
+        ownerName: 'andy',
+        isOwner: true,
+        onOpen: () => {},
+        onRename: () => {},
+        onDuplicate: () => {},
+        onDelete: () => {},
+      }),
+    );
+    expect(html).toContain('WECC, Texas RE');
   });
 
   it('does not show a ratio', () => {

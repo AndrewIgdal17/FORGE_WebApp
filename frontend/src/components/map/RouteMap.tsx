@@ -1,19 +1,38 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import type { Feature, FeatureCollection, LineString, MultiLineString, Point } from 'geojson';
+import type {
+  Feature,
+  FeatureCollection,
+  LineString,
+  MultiLineString,
+  MultiPolygon,
+  Point,
+  Polygon,
+} from 'geojson';
 import type { ExpressionSpecification } from '@maplibre/maplibre-gl-style-spec';
-import { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
+import { GeoJSONSource, Map as MapLibreMap, VectorTileSource } from 'maplibre-gl';
 import bbox from '@turf/bbox';
+import { getNercRegions } from '@/lib/api';
 import { forgeBasemapStyle } from '@/data/basemap-style';
 import {
   SUBREGION_FILL_EXPRESSION,
   VOLTAGE_COLOR_EXPRESSION,
   VOLTAGE_WIDTH_EXPRESSION,
 } from '@/data/color-maps';
+import {
+  REGION_FILTERED_LAYERS,
+  TILE_ORIGIN,
+  heavySourceSpec,
+  paddedBounds,
+  plainTileUrl,
+  regionMaskGeometry,
+  regionTileUrl,
+  tickedBounds,
+} from '@/lib/region-tiles';
 import { solidRouteGeometry, type RouteConnectorSegment } from '@/lib/route-display';
+import { regionShapes, sortRegions, type RegionShape } from '@/lib/regions';
 import { useMapStore } from '@/stores/map-store';
 
-const TILE_ORIGIN = 'https://tiles.forge-calc.com';
 const US_CENTER: [number, number] = [-81.3412, 35.7332]; // Hickory, NC
 const US_ZOOM = 5;
 const ROUTE_BLUE = '#3b82f6';
@@ -42,7 +61,9 @@ export interface MapOverlay {
     | 'ref.highways_nhs'
     | 'ref.rail_narn'
     | 'ref.substations_display'
-    | 'ref.blm_zones';
+    | 'ref.blm_zones'
+    | 'ref.nerc_regions'
+    | 'ref.interconnections';
   label: string;
   swatchClass: string;
   kind: 'fill' | 'line' | 'circle';
@@ -105,6 +126,34 @@ export const PREVIEW_OVERLAYS: readonly MapOverlay[] = [
   },
 ];
 
+/**
+ * Reference shapes, shown only in a project (see LayerPanel showReference).
+ * NERC regions also draw their codes as labels (NERC_LABEL_LAYER_ID).
+ */
+export const REFERENCE_OVERLAYS: readonly MapOverlay[] = [
+  {
+    id: 'ref.nerc_regions',
+    label: 'NERC regions',
+    swatchClass: 'bg-violet-500',
+    kind: 'line',
+    color: '#7c3aed',
+  },
+  {
+    id: 'ref.interconnections',
+    label: 'Interconnections',
+    swatchClass: 'bg-sky-600',
+    kind: 'line',
+    color: '#0369a1',
+  },
+];
+
+const NERC_LABEL_LAYER_ID = 'ref.nerc_regions-label';
+const MASK_SOURCE_ID = 'forge-region-mask';
+const MASK_LAYER_ID = 'forge-region-mask-fill';
+const OUTLINE_SOURCE_ID = 'forge-region-outline';
+const OUTLINE_LAYER_ID = 'forge-region-outline-line';
+const ROUTE_CASING_LAYER_ID = 'forge-existing-route-casing';
+
 const EMPTY_ROUTE: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 export type { RouteConnectorSegment };
@@ -113,6 +162,8 @@ export interface RouteMapProps {
   onMap: (map: MapLibreMap | null) => void;
   existingRoute?: MultiLineString | null;
   connectorSegments?: readonly RouteConnectorSegment[];
+  /** NERC regions of the project or draft. Null or empty: no region filter. */
+  regions?: readonly string[] | null;
 }
 
 function routeCollection(route: MultiLineString): FeatureCollection<LineString | Point> {
@@ -220,16 +271,28 @@ function addCircleHitLayer(
   );
 }
 
-function addOverlays(map: MapLibreMap): void {
+function isRegionFiltered(layerId: string): boolean {
+  return (REGION_FILTERED_LAYERS as readonly string[]).includes(layerId);
+}
+
+/** Heavy layers use the region-aware spec (see heavySourceSpec); others keep TileJSON. */
+function addVectorSource(map: MapLibreMap, layerId: string, regions: readonly string[]): void {
+  if (map.getSource(layerId)) return;
+  if (isRegionFiltered(layerId)) {
+    map.addSource(layerId, heavySourceSpec(layerId, regions));
+    return;
+  }
+  map.addSource(layerId, {
+    type: 'vector',
+    url: `${TILE_ORIGIN}/${layerId}`,
+    promoteId: 'gid',
+  });
+}
+
+function addOverlays(map: MapLibreMap, regions: readonly string[]): void {
   const layers = useMapStore.getState().layers;
   for (const overlay of MAP_OVERLAYS) {
-    if (!map.getSource(overlay.id)) {
-      map.addSource(overlay.id, {
-        type: 'vector',
-        url: `${TILE_ORIGIN}/${overlay.id}`,
-        promoteId: 'gid',
-      });
-    }
+    addVectorSource(map, overlay.id, regions);
     const state = layers[overlay.id];
     const visibility = state?.visible === false ? 'none' : 'visible';
     if (!map.getLayer(overlay.id)) {
@@ -302,13 +365,7 @@ function addOverlays(map: MapLibreMap): void {
     });
   }
   for (const overlay of PREVIEW_OVERLAYS) {
-    if (!map.getSource(overlay.id)) {
-      map.addSource(overlay.id, {
-        type: 'vector',
-        url: `${TILE_ORIGIN}/${overlay.id}`,
-        promoteId: 'gid',
-      });
-    }
+    addVectorSource(map, overlay.id, regions);
     const state = layers[overlay.id];
     const visibility = state?.visible === false ? 'none' : 'visible';
     if (map.getLayer(overlay.id)) continue;
@@ -379,6 +436,175 @@ function addOverlays(map: MapLibreMap): void {
       }
     }
   }
+}
+
+/** Route layers stay on top, so reference and outline layers go beneath them. */
+function beforeRouteId(map: MapLibreMap): string | undefined {
+  return map.getLayer(ROUTE_CASING_LAYER_ID) ? ROUTE_CASING_LAYER_ID : undefined;
+}
+
+function removeLayerAndSource(map: MapLibreMap, layerId: string, sourceId: string): void {
+  if (map.getLayer(layerId)) map.removeLayer(layerId);
+  if (map.getSource(sourceId)) map.removeSource(sourceId);
+}
+
+function setGeoJsonData(
+  map: MapLibreMap,
+  sourceId: string,
+  data: FeatureCollection | Feature,
+): void {
+  const source = map.getSource(sourceId);
+  if (source instanceof GeoJSONSource) {
+    source.setData(data as FeatureCollection);
+    return;
+  }
+  map.addSource(sourceId, { type: 'geojson', data: data as FeatureCollection });
+}
+
+/** Points the four heavy sources at the region query, or back at the plain tiles. */
+function applyRegionTiles(map: MapLibreMap, regions: readonly string[]): void {
+  for (const layerId of REGION_FILTERED_LAYERS) {
+    const source = map.getSource(layerId);
+    if (!(source instanceof VectorTileSource)) continue;
+    source.setTiles([
+      regions.length > 0 ? regionTileUrl(layerId, regions) : plainTileUrl(layerId),
+    ]);
+  }
+}
+
+/** Grey mask outside the ticked regions, their outlines, and the pan limit. */
+function applyRegionShapes(
+  map: MapLibreMap,
+  regions: readonly string[],
+  shapes: readonly RegionShape[] | null,
+): void {
+  if (regions.length === 0 || !shapes) {
+    removeLayerAndSource(map, MASK_LAYER_ID, MASK_SOURCE_ID);
+    removeLayerAndSource(map, OUTLINE_LAYER_ID, OUTLINE_SOURCE_ID);
+    map.setMaxBounds(null);
+    return;
+  }
+
+  setGeoJsonData(map, MASK_SOURCE_ID, regionMaskGeometry(shapes, regions));
+  if (!map.getLayer(MASK_LAYER_ID)) {
+    map.addLayer(
+      {
+        id: MASK_LAYER_ID,
+        type: 'fill',
+        source: MASK_SOURCE_ID,
+        paint: { 'fill-color': '#6b7280', 'fill-opacity': 0.45 },
+      },
+      map.getLayer('ref.corridors') ? 'ref.corridors' : undefined,
+    );
+  }
+
+  const ticked: Array<Feature<Polygon | MultiPolygon>> = shapes
+    .filter((shape) => regions.includes(shape.code))
+    .map((shape) => ({
+      type: 'Feature',
+      properties: { code: shape.code },
+      geometry: shape.geometry,
+    }));
+  setGeoJsonData(map, OUTLINE_SOURCE_ID, { type: 'FeatureCollection', features: ticked });
+  if (!map.getLayer(OUTLINE_LAYER_ID)) {
+    map.addLayer({
+      id: OUTLINE_LAYER_ID,
+      type: 'line',
+      source: OUTLINE_SOURCE_ID,
+      paint: { 'line-color': '#334155', 'line-width': 1.5, 'line-opacity': 0.8 },
+    }, beforeRouteId(map));
+  }
+
+  const bounds = tickedBounds(shapes, regions);
+  if (bounds) {
+    const [west, south, east, north] = paddedBounds(bounds);
+    map.setMaxBounds([
+      [west, south],
+      [east, north],
+    ]);
+  } else {
+    map.setMaxBounds(null);
+  }
+}
+
+/** Adds the reference layers when a project is shown; removes them otherwise. */
+function applyReferenceLayers(map: MapLibreMap, show: boolean): void {
+  if (!show) {
+    // Layers first: a source cannot be removed while a layer still uses it.
+    for (const layerId of [NERC_LABEL_LAYER_ID, ...REFERENCE_OVERLAYS.map((o) => o.id)]) {
+      if (map.getLayer(layerId)) map.removeLayer(layerId);
+    }
+    for (const overlay of REFERENCE_OVERLAYS) {
+      if (map.getSource(overlay.id)) map.removeSource(overlay.id);
+    }
+    return;
+  }
+  for (const overlay of REFERENCE_OVERLAYS) {
+    if (!map.getSource(overlay.id)) {
+      map.addSource(overlay.id, {
+        type: 'vector',
+        url: `${TILE_ORIGIN}/${overlay.id}`,
+        promoteId: 'gid',
+      });
+    }
+    if (!map.getLayer(overlay.id)) {
+      map.addLayer(
+        {
+          id: overlay.id,
+          type: 'line',
+          source: overlay.id,
+          'source-layer': overlay.id,
+          paint: {
+            'line-color': overlay.color,
+            'line-width': 1.5,
+            'line-opacity': 0.8,
+          },
+        },
+        beforeRouteId(map),
+      );
+    }
+  }
+  if (!map.getLayer(NERC_LABEL_LAYER_ID)) {
+    map.addLayer(
+      {
+      id: NERC_LABEL_LAYER_ID,
+      type: 'symbol',
+      source: 'ref.nerc_regions',
+      'source-layer': 'ref.nerc_regions',
+      layout: {
+        'text-field': ['get', 'code'],
+        'text-font': ['Noto Sans Regular'],
+        'text-size': 12,
+      },
+      paint: {
+        'text-color': '#4c1d95',
+        'text-halo-color': '#ffffff',
+        'text-halo-width': 1.5,
+      },
+      },
+      beforeRouteId(map),
+    );
+  }
+}
+
+/**
+ * Brings the region state to the map: tiles (only when the key changed),
+ * mask and pan limit, reference layers, then layer visibility.
+ */
+function syncRegions(
+  map: MapLibreMap,
+  regions: readonly string[],
+  shapes: readonly RegionShape[] | null,
+  appliedKey: { current: string },
+): void {
+  const key = regions.join(',');
+  if (appliedKey.current !== key) {
+    applyRegionTiles(map, regions);
+    appliedKey.current = key;
+  }
+  applyRegionShapes(map, regions, shapes);
+  applyReferenceLayers(map, regions.length > 0);
+  applyLayerState(map);
 }
 
 function connectorCollection(
@@ -550,10 +776,13 @@ function applyAttributeFilters(map: MapLibreMap): void {
 
 function applyLayerState(map: MapLibreMap): void {
   const layers = useMapStore.getState().layers;
-  for (const overlay of [...MAP_OVERLAYS, ...PREVIEW_OVERLAYS]) {
+  for (const overlay of [...MAP_OVERLAYS, ...PREVIEW_OVERLAYS, ...REFERENCE_OVERLAYS]) {
     const state = layers[overlay.id];
     if (!state) continue;
     const visibility = state.visible ? 'visible' : 'none';
+    if (overlay.id === 'ref.nerc_regions' && map.getLayer(NERC_LABEL_LAYER_ID)) {
+      map.setLayoutProperty(NERC_LABEL_LAYER_ID, 'visibility', visibility);
+    }
     if (map.getLayer(overlay.id)) {
       map.setLayoutProperty(overlay.id, 'visibility', visibility);
       if (overlay.kind === 'fill') {
@@ -581,6 +810,7 @@ export function RouteMap({
   onMap,
   existingRoute = null,
   connectorSegments = [],
+  regions = null,
 }: RouteMapProps): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -588,12 +818,22 @@ export function RouteMap({
   const fittedKey = useRef<string | null>(null);
   const existingRouteRef = useRef(existingRoute);
   const connectorSegmentsRef = useRef(connectorSegments);
+  // Region codes the heavy sources' tiles were built with; '' is the plain tiles.
+  const appliedTilesKey = useRef('');
   const [ready, setReady] = useState(false);
+  const [shapes, setShapes] = useState<RegionShape[] | null>(null);
   const layers = useMapStore((state) => state.layers);
   const hiddenAttributes = useMapStore((state) => state.hiddenAttributes);
   onMapRef.current = onMap;
   existingRouteRef.current = existingRoute;
   connectorSegmentsRef.current = connectorSegments;
+  const regionKey = sortRegions(regions ?? []).join(',');
+  const regionList = regionKey ? regionKey.split(',') : [];
+  // Read by onStyleLoad, which may run after a re-created style.
+  const regionListRef = useRef(regionList);
+  const shapesRef = useRef(shapes);
+  regionListRef.current = regionList;
+  shapesRef.current = shapes;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -611,10 +851,13 @@ export function RouteMap({
 
     const onStyleLoad = (): void => {
       if (cancelled) return;
-      addOverlays(map);
+      // Build the heavy sources from the current regions so the first tiles requested are already filtered.
+      const regionsNow = regionListRef.current;
+      addOverlays(map, regionsNow);
+      appliedTilesKey.current = regionsNow.join(',');
       addRouteLayers(map);
       addConnectorLayers(map);
-      applyLayerState(map);
+      syncRegions(map, regionsNow, shapesRef.current, appliedTilesKey);
       setReady(true);
       map.resize();
     };
@@ -645,6 +888,27 @@ export function RouteMap({
     if (!map || !ready) return;
     applyLayerState(map);
   }, [layers, hiddenAttributes, ready]);
+
+  useEffect(() => {
+    if (!regionKey) return;
+    let cancelled = false;
+    getNercRegions()
+      .then((collection) => {
+        if (!cancelled) setShapes(regionShapes(collection));
+      })
+      .catch(() => {
+        // Without shapes there is no mask or pan limit; the tiles still filter.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [regionKey]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    syncRegions(map, regionList, shapes, appliedTilesKey);
+  }, [regionKey, shapes, ready]);
 
   useEffect(() => {
     const map = mapRef.current;

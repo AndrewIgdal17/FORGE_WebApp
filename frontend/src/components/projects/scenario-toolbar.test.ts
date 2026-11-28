@@ -29,6 +29,7 @@ function sampleProject(baseId: string | null): Project {
     sending_point: [-97.74, 30.27],
     receiving_point: [-97.75, 30.28],
     base_scenario_id: baseId,
+    nerc_regions: ['WECC'],
     revision: 1,
     created_at: '2026-11-01T00:00:00Z',
     updated_at: '2026-11-01T00:00:00Z',

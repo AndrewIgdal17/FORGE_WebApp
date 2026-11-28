@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, Eye, EyeOff, Layers } from 'lucide-react';
-import { MAP_OVERLAYS, PREVIEW_OVERLAYS } from '@/components/map/RouteMap';
+import { MAP_OVERLAYS, PREVIEW_OVERLAYS, REFERENCE_OVERLAYS } from '@/components/map/RouteMap';
 import type { MapOverlay } from '@/components/map/RouteMap';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { SUBREGION_COLORS, VOLTAGE_STYLES } from '@/data/color-maps';
@@ -21,6 +21,10 @@ const LAYER_DESCRIPTIONS: Record<string, string> = {
   'ref.rail_narn': 'Freight and passenger rail lines from the FRA National Rail Network.',
   'ref.substations_display':
     'Electric power substations from merged HIFLD and OpenStreetMap data.',
+  'ref.nerc_regions':
+    'NERC regional entities (the six used by FORGE), from the HIFLD NERC Regions layer. Labels show region codes.',
+  'ref.interconnections':
+    'The three U.S. interconnections (Western, ERCOT, Eastern), from HIFLD. Reference shapes only.',
 };
 
 function LayerInfo({ id }: { id: string }): ReactElement | null {
@@ -256,7 +260,12 @@ function OverlayRow({
   );
 }
 
-export function LayerPanel(): ReactElement {
+export interface LayerPanelProps {
+  /** Shows the reference section (NERC regions, interconnections). Only in a project. */
+  showReference?: boolean;
+}
+
+export function LayerPanel({ showReference = false }: LayerPanelProps): ReactElement {
   const [minimized, setMinimized] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const baseId = useId();
@@ -329,6 +338,23 @@ export function LayerPanel(): ReactElement {
           />
         ))}
       </ul>
+      {showReference ? (
+        <>
+          <h3 className="text-xs font-medium uppercase tracking-wider text-slate-400 mt-3 mb-1 px-1">
+            Reference
+          </h3>
+          <ul className="grid gap-3">
+            {REFERENCE_OVERLAYS.map((overlay) => (
+              <OverlayRow
+                key={overlay.id}
+                overlay={overlay}
+                displayOnly={false}
+                baseId={baseId}
+              />
+            ))}
+          </ul>
+        </>
+      ) : null}
     </section>
   );
 }

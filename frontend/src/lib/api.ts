@@ -142,6 +142,8 @@ export interface ProjectUpdate {
   revision: number;
   name?: string;
   base_scenario_id?: string;
+  /** Sorted region codes; the server re-checks the terminals (owner only). */
+  nerc_regions?: string[];
 }
 
 export interface GeoJsonPoint {
@@ -160,6 +162,8 @@ export interface ProjectResponse {
   sending_point: GeoJsonPoint;
   receiving_point: GeoJsonPoint;
   base_scenario_id: string | null;
+  /** Region codes in REGION_CODES order. */
+  nerc_regions: string[];
   revision: number;
   created_at: string;
   updated_at: string;
