@@ -240,6 +240,7 @@ describe('newScenarioFromDefaults', () => {
       name: 'Scenario',
       source: 'manual',
       changes: {},
+      nerc_regions: [],
       project_id: 'p1',
     });
   });

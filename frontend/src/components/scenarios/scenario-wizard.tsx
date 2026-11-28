@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactElement } from 'react';
+import type { FeatureCollection } from 'geojson';
+import { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
+import bbox from '@turf/bbox';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -22,8 +25,9 @@ import {
   CAPACITY_OPTIONS_BY_AC_DC,
   CONDUCTOR_TYPE_BY_CONSTRUCTION,
 } from '@/data/configs';
-import type { RequiredField, RequiredResponse } from '@/lib/api';
-import { requiredInputs } from '@/lib/api';
+import { forgeBasemapStyle } from '@/data/basemap-style';
+import type { NercRegionCollection, RequiredField, RequiredResponse } from '@/lib/api';
+import { getNercRegions, requiredInputs } from '@/lib/api';
 import {
   buildCategoryKey,
   buildOldCategoryKey,
@@ -33,12 +37,15 @@ import {
 } from '@/lib/lookups';
 import type { ProjectFields } from '@/lib/lookups';
 import { setValueAtPath } from '@/lib/path';
+import { REGION_CODES, REGION_NAMES, sortRegions } from '@/lib/regions';
+import type { RegionCode } from '@/lib/regions';
 import { cn } from '@/lib/utils';
 import {
   STEP_ORDER,
   WIZARD_PATH,
   needsDirectDelayCost,
   projectTypes,
+  regionsStepValid,
   stepBlocked,
 } from '@/lib/wizard-steps';
 import type { ProjectType, StepKind } from '@/lib/wizard-steps';
@@ -50,7 +57,7 @@ export interface ScenarioWizardProps {
   onComplete: (
     name: string,
     fullInputs: Record<string, unknown>,
-    metadata: { timestamp: string; source: string },
+    metadata: { timestamp: string; source: string; nerc_regions: string[] },
   ) => void;
 }
 
@@ -60,6 +67,7 @@ type SendingSource = 'margin' | 'dedicated';
 interface WizardState {
   step: number;
   name: string;
+  regions: string[];
   projectType: ProjectType;
   constructionType: string;
   acDc: AcDc;
@@ -109,6 +117,11 @@ const STEP_COPY: Record<StepKind, { title: string; description: string }> = {
     description:
       'This identifies your scenario in the comparison table and exports. You can rename it later.',
   },
+  regions: {
+    title: 'Which NERC regions is this project in?',
+    description:
+      'Tick every region the project sits in. The map shows only those regions. Pick at least one.',
+  },
   project: {
     title: 'Define your project',
     description:
@@ -132,6 +145,7 @@ function createInitialState(): WizardState {
   return {
     step: 0,
     name: '',
+    regions: [],
     projectType: 'greenfield',
     constructionType: '',
     acDc: '',
@@ -323,6 +337,8 @@ function localStepValid(
   switch (kind) {
     case 'name':
       return state.name.trim().length > 0;
+    case 'regions':
+      return regionsStepValid(state.regions);
     case 'project':
       return projectStepValid(state, defaults);
     case 'timeline':
@@ -714,6 +730,170 @@ function NameStep({
         onKeyDown={handleKeyDown}
       />
     </Field>
+  );
+}
+
+const REGION_FILL = '#3b82f6';
+const REGION_IDLE_FILL = '#cbd5e1';
+const SHAPES_SOURCE_ID = 'wizard-nerc-regions';
+const US_CENTER: [number, number] = [-97, 38];
+const US_ZOOM = 2.6;
+
+/** Shapes with a boolean `ticked` property, for the data-driven fill. */
+function tickedShapes(
+  collection: NercRegionCollection,
+  ticked: readonly string[],
+): FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: collection.features.map((feature) => ({
+      ...feature,
+      properties: { ...feature.properties, ticked: ticked.includes(feature.properties.code) },
+    })),
+  };
+}
+
+/** Small, non-interactive map of the six regions; ticked regions are highlighted. */
+function RegionPreviewMap({
+  collection,
+  ticked,
+}: {
+  collection: NercRegionCollection | null;
+  ticked: readonly string[];
+}): ReactElement {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const [ready, setReady] = useState(false);
+  const tickedKey = ticked.join(',');
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const map = new MapLibreMap({
+      container,
+      style: forgeBasemapStyle(),
+      center: US_CENTER,
+      zoom: US_ZOOM,
+      interactive: false,
+      attributionControl: false,
+    });
+    mapRef.current = map;
+    map.on('style.load', () => setReady(true));
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !collection) return;
+    const data = tickedShapes(collection, ticked);
+    const source = map.getSource<GeoJSONSource>(SHAPES_SOURCE_ID);
+    if (source) {
+      source.setData(data);
+      return;
+    }
+    map.addSource(SHAPES_SOURCE_ID, { type: 'geojson', data });
+    map.addLayer({
+      id: 'wizard-nerc-regions-fill',
+      type: 'fill',
+      source: SHAPES_SOURCE_ID,
+      paint: {
+        'fill-color': ['case', ['==', ['get', 'ticked'], true], REGION_FILL, REGION_IDLE_FILL],
+        'fill-opacity': 0.5,
+      },
+    });
+    map.addLayer({
+      id: 'wizard-nerc-regions-line',
+      type: 'line',
+      source: SHAPES_SOURCE_ID,
+      paint: { 'line-color': '#475569', 'line-width': 1 },
+    });
+    const [west, south, east, north] = bbox(data);
+    if ([west, south, east, north].every((value) => Number.isFinite(value))) {
+      map.fitBounds(
+        [
+          [west, south],
+          [east, north],
+        ],
+        { padding: 12, animate: false },
+      );
+    }
+  }, [collection, tickedKey, ready]);
+
+  return (
+    <div
+      ref={containerRef}
+      role="img"
+      aria-label="Map of the six NERC regions, with ticked regions highlighted"
+      className="h-56 w-full overflow-hidden rounded-lg border border-input"
+    />
+  );
+}
+
+function RegionsStep({
+  regions,
+  onChange,
+}: {
+  regions: string[];
+  onChange: (regions: string[]) => void;
+}): ReactElement {
+  const [collection, setCollection] = useState<NercRegionCollection | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getNercRegions()
+      .then((next) => {
+        if (!cancelled) setCollection(next);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function toggle(code: RegionCode, checked: boolean): void {
+    const next = checked ? [...regions, code] : regions.filter((item) => item !== code);
+    onChange(sortRegions(next));
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" role="group" aria-label="NERC regions">
+        {REGION_CODES.map((code) => {
+          const id = `wizard-region-${code}`;
+          const checked = regions.includes(code);
+          return (
+            <label
+              key={code}
+              htmlFor={id}
+              className={cn(
+                'flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm',
+                checked ? 'border-primary bg-primary/5' : 'border-input',
+              )}
+            >
+              <input
+                id={id}
+                type="checkbox"
+                checked={checked}
+                onChange={(event) => toggle(code, event.target.checked)}
+              />
+              {REGION_NAMES[code]}
+            </label>
+          );
+        })}
+      </div>
+      <RegionPreviewMap collection={collection} ticked={regions} />
+      {loadFailed ? (
+        <p className="text-sm text-muted-foreground">
+          The region shapes did not load, so the map is blank. The checkboxes still work.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -1204,7 +1384,7 @@ export function ScenarioWizard({
   const responseReady =
     checkedKey === changeKey && !checking && required != null && requiredError === '';
   const blocked = responseReady ? stepBlocked(kind, required) : [];
-  const waiting = kind !== 'name' && !responseReady;
+  const waiting = kind !== 'name' && kind !== 'regions' && !responseReady;
   const canAdvance =
     !waiting &&
     blocked.length === 0 &&
@@ -1240,6 +1420,7 @@ export function ScenarioWizard({
     onComplete(state.name.trim(), fullInputs, {
       timestamp: new Date().toISOString(),
       source: 'wizard',
+      nerc_regions: sortRegions(state.regions),
     });
     onOpenChange(false);
   }
@@ -1259,6 +1440,12 @@ export function ScenarioWizard({
             onNameChange={(name) => patch({ name })}
             onAdvance={goNext}
             onClose={() => onOpenChange(false)}
+          />
+        ) : null}
+        {kind === 'regions' ? (
+          <RegionsStep
+            regions={state.regions}
+            onChange={(regions) => patch({ regions })}
           />
         ) : null}
         {kind === 'project' ? (

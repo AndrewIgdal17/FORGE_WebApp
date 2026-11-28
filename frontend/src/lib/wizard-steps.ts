@@ -37,9 +37,14 @@ export const WIZARD_PATH = {
   directDelayCost: '05_delays.annual_base_delay_cost',
 } as const;
 
-export type StepKind = 'name' | 'project' | 'timeline' | 'benefits';
+export type StepKind = 'name' | 'regions' | 'project' | 'timeline' | 'benefits';
 
-export const STEP_ORDER: StepKind[] = ['name', 'project', 'timeline', 'benefits'];
+export const STEP_ORDER: StepKind[] = ['name', 'regions', 'project', 'timeline', 'benefits'];
+
+/** The regions step needs at least one ticked NERC region. */
+export function regionsStepValid(regions: readonly string[]): boolean {
+  return regions.length > 0;
+}
 
 const PROJECT_TYPES = ['greenfield', 'reconductoring', 'rebuild'] as const;
 
@@ -56,6 +61,7 @@ export function projectTypes(): Array<'greenfield' | 'reconductoring' | 'rebuild
 export function stepFields(step: StepKind): string[] {
   switch (step) {
     case 'name':
+    case 'regions':
       return [];
     case 'project':
       return [

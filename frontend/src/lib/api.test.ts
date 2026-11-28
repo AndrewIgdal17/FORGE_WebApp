@@ -139,6 +139,7 @@ describe('createProject', () => {
     const payload = {
       sending: { substation_gid: 847 },
       receiving: { substation_gid: 19279 },
+      nerc_regions: ['WECC'],
       scenario: SCENARIO_CREATE,
     };
     await expect(createProject(payload)).resolves.toEqual(body);

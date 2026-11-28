@@ -19,6 +19,7 @@ import type { LineSelection, LineSelectionIn, ScenarioResponse, TerminalIn } fro
 import { acceptedForge, diffChanges, forgeDocument } from '@/lib/changes';
 import { csvEscape, parseCsvLine } from '@/lib/csv';
 import { flattenObject, getValueAtPath, setValueAtPath } from '@/lib/path';
+import { sortRegions } from '@/lib/regions';
 import { asRoute, routeFromSegments } from '@/lib/route-geometry';
 import { supabase } from '@/lib/supabase';
 import {
@@ -71,6 +72,8 @@ export interface ScenarioDraft {
   name: string;
   source: string;
   changes: Record<string, unknown>;
+  /** NERC regions the project sits in; sent sorted on project create. */
+  nerc_regions: string[];
   project_id?: string;
   terminals?: { sending: DraftTerminal; receiving: DraftTerminal };
 }
@@ -880,6 +883,7 @@ export function importForgeFile(text: string, fileName: string): ScenarioDraft {
     name,
     source: 'upload-forge',
     changes: asChanges(data.changes),
+    nerc_regions: [],
   };
 }
 
@@ -919,6 +923,7 @@ export function importCsvFile(
     name,
     source: 'upload-csv',
     changes: diffChanges(defaults, inputs),
+    nerc_regions: [],
   };
 }
 
@@ -1026,6 +1031,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => ({
     const { project: projectRow, scenario: scenarioRow } = await createProjectApi({
       sending,
       receiving,
+      nerc_regions: sortRegions(draft.nerc_regions),
       scenario: {
         name: draft.name,
         source: draft.source,

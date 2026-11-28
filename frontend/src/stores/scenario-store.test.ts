@@ -461,6 +461,7 @@ describe('createProjectWithScenario', () => {
       name: 'Reconductor',
       source: 'wizard',
       changes,
+      nerc_regions: ['RF', 'WECC'],
       terminals: {
         sending: { substation_gid: 10, name: 'Sub A', point: SEND_POINT },
         receiving: {
@@ -482,6 +483,7 @@ describe('createProjectWithScenario', () => {
     expect(createProject).toHaveBeenCalledWith({
       sending: { substation_gid: 10 },
       receiving: { point: RECV_POINT },
+      nerc_regions: ['WECC', 'RF'],
       scenario: {
         name: 'Reconductor',
         source: 'wizard',
@@ -509,6 +511,7 @@ describe('createProjectWithScenario', () => {
       name: 'Broken',
       source: 'wizard',
       changes: {},
+      nerc_regions: ['WECC'],
       terminals: {
         sending: { substation_gid: 10, name: 'Sub A', point: SEND_POINT },
         receiving: {

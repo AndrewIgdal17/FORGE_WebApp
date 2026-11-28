@@ -42,11 +42,12 @@ import {
   rowWidthProblem,
   terrainMatchesRouteLength,
 } from '@/lib/analyze-request';
-import { ApiError, calculate, getSubstationFootprint, requiredInputs } from '@/lib/api';
+import { ApiError, calculate, getNercRegions, getSubstationFootprint, requiredInputs } from '@/lib/api';
 import type { LineSelectionIn, RequiredField, RequiredResponse } from '@/lib/api';
 import { diffChanges } from '@/lib/changes';
 import { debounce } from '@/lib/debounce';
 import { duplicateAction } from '@/lib/duplicate-action';
+import { regionName, regionShapes, sortRegions, terminalRegionCheck } from '@/lib/regions';
 import { sameTerminal } from '@/lib/terminal-pick';
 import { useLineDataPrefill } from '@/lib/line-select';
 import { canCalculate, canDraw, panelFields } from '@/lib/required-gates';
@@ -86,6 +87,14 @@ interface WizardDraft {
   fullInputs: Record<string, unknown>;
   project_id?: string;
   terminals?: ScenarioDraft['terminals'];
+  nerc_regions: string[];
+}
+
+/** A picked terminal that lies outside the draft's regions (see terminalRegionCheck). */
+interface RegionWarning {
+  name: string;
+  point: [number, number];
+  suggested: string | null;
 }
 
 const PROJECT = '01_project_technical_details.project';
@@ -458,6 +467,11 @@ function WorkspaceBody(): ReactElement {
   const [lineDataStale, setLineDataStale] = useState(false);
   const [terminalPick, setTerminalPick] = useState<'sending' | 'receiving' | null>(null);
   const [pendingSending, setPendingSending] = useState<DraftTerminal | null>(null);
+  const [regionWarnings, setRegionWarnings] = useState<
+    Partial<Record<'sending' | 'receiving', RegionWarning>>
+  >({});
+  // Latest region check per end; an older check that finishes late is ignored.
+  const regionCheckSeq = useRef({ sending: 0, receiving: 0 });
   const [calculationStatus, setCalculationStatus] = useState('Not calculated');
   const [perspective, setPerspective] = useState<PerspectiveKey>('societal');
   const [drawn, setDrawn] = useState<ScenarioGeometry | undefined>(undefined);
@@ -639,6 +653,7 @@ function WorkspaceBody(): ReactElement {
       fullInputs,
       project_id: imported.project_id,
       terminals: imported.terminals,
+      nerc_regions: imported.nerc_regions,
     });
     lastStatusRef.current = 'Not calculated';
     setCalculationStatus('Not calculated');
@@ -953,6 +968,7 @@ function WorkspaceBody(): ReactElement {
     name: string,
     source: string,
     fullInputs: Record<string, unknown>,
+    nercRegions: string[],
   ): void {
     const snapshot = useFormStore.getState().defaults;
     if (!snapshot) {
@@ -968,8 +984,9 @@ function WorkspaceBody(): ReactElement {
     loadScenarioChanges(diffChanges(snapshot, fullInputs));
     useLineDataPrefill.getState().reset();
     setLineDataStale(false);
-    setDraft({ name, source, fullInputs });
+    setDraft({ name, source, fullInputs, nerc_regions: nercRegions });
     setPendingSending(null);
+    setRegionWarnings({});
     setTerminalPick('sending');
     lastStatusRef.current = 'Not calculated';
     setCalculationStatus('Not calculated');
@@ -980,6 +997,7 @@ function WorkspaceBody(): ReactElement {
   function abandonDraft(): void {
     setDraft(null);
     setPendingSending(null);
+    setRegionWarnings({});
     setTerminalPick(null);
   }
 
@@ -990,10 +1008,38 @@ function WorkspaceBody(): ReactElement {
     navigate('/app/projects');
   }
 
+  // Checks one picked terminal against the regions and sets or clears its
+  // warning. The pick itself is never refused; the server checks again on create.
+  function checkTerminalRegions(
+    end: 'sending' | 'receiving',
+    terminal: Pick<DraftTerminal, 'name' | 'point'>,
+    regions: readonly string[],
+  ): void {
+    const seq = ++regionCheckSeq.current[end];
+    void getNercRegions()
+      .then((collection) => {
+        if (seq !== regionCheckSeq.current[end]) return;
+        const result = terminalRegionCheck(terminal.point, regions, regionShapes(collection));
+        setRegionWarnings((current) => {
+          const next = { ...current };
+          if (result.ok) {
+            delete next[end];
+          } else {
+            next[end] = { name: terminal.name, point: terminal.point, suggested: result.suggested };
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        // Shapes unavailable: no warning here. The server still checks on create.
+      });
+  }
+
   function handlePickTerminal(terminal: DraftTerminal): void {
     if (terminalPick === 'sending') {
       setPendingSending(terminal);
       setTerminalPick('receiving');
+      if (draft && !draft.project_id) checkTerminalRegions('sending', terminal, draft.nerc_regions);
       return;
     }
     if (terminalPick !== 'receiving') return;
@@ -1007,14 +1053,48 @@ function WorkspaceBody(): ReactElement {
       if (!current || current.project_id) return current;
       return { ...current, terminals: { sending, receiving: terminal } };
     });
+    if (draft && !draft.project_id) checkTerminalRegions('receiving', terminal, draft.nerc_regions);
     setPendingSending(null);
     setTerminalPick(null);
+  }
+
+  // "Add <region>" on a terminal warning: ticks the region on the draft and
+  // re-checks the warned terminals. A warning clears when its check now passes.
+  function handleAddRegion(code: string): void {
+    if (!draft || draft.project_id) return;
+    const regions = sortRegions([...draft.nerc_regions, code]);
+    setDraft((current) =>
+      current && !current.project_id ? { ...current, nerc_regions: regions } : current,
+    );
+    for (const { end, warning } of liveRegionWarnings()) {
+      checkTerminalRegions(end, warning, regions);
+    }
+  }
+
+  // Warnings that still describe the terminal shown for their end. A warning
+  // for a terminal that has since been replaced, removed, or reset is hidden.
+  function liveRegionWarnings(): Array<{ end: 'sending' | 'receiving'; warning: RegionWarning }> {
+    if (!draft || draft.project_id) return [];
+    const shown: Record<'sending' | 'receiving', DraftTerminal | null | undefined> = {
+      sending: draft.terminals?.sending ?? pendingSending,
+      receiving: draft.terminals?.receiving,
+    };
+    const live: Array<{ end: 'sending' | 'receiving'; warning: RegionWarning }> = [];
+    for (const end of ['sending', 'receiving'] as const) {
+      const warning = regionWarnings[end];
+      const current = shown[end];
+      if (!warning || !current) continue;
+      if (current.point[0] !== warning.point[0] || current.point[1] !== warning.point[1]) continue;
+      live.push({ end, warning });
+    }
+    return live;
   }
 
   // Right-click "Remove terminal" on a draft's pin. Keeps the draft's pair and
   // the pending sending pick in step with what is left, then resumes picking.
   function handleRemoveTerminal(role: TerminalRole): void {
     if (!draft || draft.project_id) return;
+    setRegionWarnings({});
     const result = removeTerminalResult(role, {
       sending: draft.terminals?.sending ?? pendingSending,
       receiving: draft.terminals?.receiving ?? null,
@@ -1034,9 +1114,9 @@ function WorkspaceBody(): ReactElement {
   function handleWizardComplete(
     name: string,
     fullInputs: Record<string, unknown>,
-    metadata: { timestamp: string; source: string },
+    metadata: { timestamp: string; source: string; nerc_regions: string[] },
   ): void {
-    beginDraft(name, metadata.source || 'wizard', fullInputs);
+    beginDraft(name, metadata.source || 'wizard', fullInputs, metadata.nerc_regions);
   }
 
   async function handleCreate(): Promise<void> {
@@ -1076,6 +1156,7 @@ function WorkspaceBody(): ReactElement {
             name: draft.name,
             source: draft.source,
             changes,
+            nerc_regions: draft.nerc_regions,
             terminals: draft.terminals,
           },
           changes,
@@ -1453,6 +1534,26 @@ function WorkspaceBody(): ReactElement {
                         role="status"
                       >
                         This line&apos;s data has changed; select it again to update the route
+                      </div>
+                    ) : null}
+                    {liveRegionWarnings().length > 0 ? (
+                      <div
+                        role="alert"
+                        className="absolute top-16 left-1/2 z-30 flex -translate-x-1/2 flex-wrap items-center justify-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900"
+                      >
+                        <span>This terminal is outside the project&apos;s regions.</span>
+                        {[...new Set(liveRegionWarnings().map(({ warning }) => warning.suggested))]
+                          .filter((code): code is string => typeof code === 'string')
+                          .map((code) => (
+                            <button
+                              key={code}
+                              type="button"
+                              onClick={() => handleAddRegion(code)}
+                              className="rounded border border-amber-300 bg-white px-2 py-0.5 font-medium hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                            >
+                              Add {regionName(code)}
+                            </button>
+                          ))}
                       </div>
                     ) : null}
                     <MapPanel

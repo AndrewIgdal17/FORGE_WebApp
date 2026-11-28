@@ -78,6 +78,7 @@ export function newScenarioFromDefaults(
     name: generateScenarioName('Scenario', existingNames),
     source: 'manual',
     changes: {},
+    nerc_regions: [],
     project_id: projectId,
   };
 }

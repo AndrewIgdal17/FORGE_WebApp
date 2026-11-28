@@ -1,4 +1,10 @@
-import type { Geometry, MultiLineString, MultiPolygon, Polygon } from 'geojson';
+import type {
+  FeatureCollection,
+  Geometry,
+  MultiLineString,
+  MultiPolygon,
+  Polygon,
+} from 'geojson';
 
 import { analyzeRequestBody } from '@/lib/analyze-request';
 import { supabase } from '@/lib/supabase';
@@ -127,6 +133,8 @@ export interface ProjectCreate {
   name?: string;
   sending: TerminalIn;
   receiving: TerminalIn;
+  /** Required by the server: one or more region codes, sorted in REGION_CODES order. */
+  nerc_regions: string[];
   scenario: ScenarioCreate;
 }
 
@@ -420,6 +428,29 @@ export async function deleteScenario(id: string): Promise<void> {
   await apiFetch<void>(`/api/scenarios/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
+}
+
+export type NercRegionCollection = FeatureCollection<
+  Polygon | MultiPolygon,
+  { code: string; name: string }
+>;
+
+let nercRegionsRequest: Promise<NercRegionCollection> | null = null;
+
+/**
+ * The six NERC region shapes (no auth). Fetched once per page load; a failed
+ * request is not cached, so the next call tries again.
+ */
+export function getNercRegions(): Promise<NercRegionCollection> {
+  if (!nercRegionsRequest) {
+    nercRegionsRequest = apiFetch<NercRegionCollection>('/api/nerc-regions').catch(
+      (error: unknown) => {
+        nercRegionsRequest = null;
+        throw error;
+      },
+    );
+  }
+  return nercRegionsRequest;
 }
 
 export async function createProject(

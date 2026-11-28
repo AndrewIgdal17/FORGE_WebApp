@@ -5,6 +5,7 @@ import {
   STEP_ORDER,
   needsDirectDelayCost,
   projectTypes,
+  regionsStepValid,
   stepBlocked,
   stepFields,
 } from './wizard-steps';
@@ -35,8 +36,15 @@ function requiredField(
 }
 
 describe('STEP_ORDER', () => {
-  it('walks name, project, timeline, then benefits', () => {
-    expect(STEP_ORDER).toEqual(['name', 'project', 'timeline', 'benefits']);
+  it('walks name, regions, project, timeline, then benefits', () => {
+    expect(STEP_ORDER).toEqual(['name', 'regions', 'project', 'timeline', 'benefits']);
+  });
+});
+
+describe('regionsStepValid', () => {
+  it('needs at least one ticked region', () => {
+    expect(regionsStepValid([])).toBe(false);
+    expect(regionsStepValid(['SERC'])).toBe(true);
   });
 });
 
@@ -49,6 +57,10 @@ describe('projectTypes', () => {
 describe('stepFields', () => {
   it('gives the name step no calculator path', () => {
     expect(stepFields('name')).toEqual([]);
+  });
+
+  it('gives the regions step no calculator path', () => {
+    expect(stepFields('regions')).toEqual([]);
   });
 
   it('gives the project step its calculator paths, excluding derived voltage', () => {
