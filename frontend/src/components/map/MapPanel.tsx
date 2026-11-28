@@ -23,7 +23,7 @@ import {
   type TerminalMarkerSpec,
 } from '@/components/map/terminal-markers';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { corridorCandidateFromFeature, useLineSelect } from '@/hooks/use-line-select';
+import { useLineSelect } from '@/hooks/use-line-select';
 import { useRouteAnalyze } from '@/hooks/use-route-analyze';
 import {
   SUBSTATION_SNAP_MIN_ZOOM,
@@ -45,7 +45,6 @@ import { getValueAtPath } from '@/lib/path';
 import {
   coordsFromLineGeometry,
   lineSelectionStaleInView,
-  nearestPointOnLine,
   routeFullyInMapView,
   OLD_AC_DC_PATH,
   OLD_CAPACITY_PATH,
@@ -53,18 +52,19 @@ import {
   prefillChanges,
   selectionSummary,
   stretchEndForAssembly,
-  stretchTerminalName,
   toggleGid,
   useLineDataPrefill,
   type CorridorCandidate,
 } from '@/lib/line-select';
 import { resolvedRowWidthFt, rowWidthProblem } from '@/lib/analyze-request';
 import { pointTerminalName } from '@/lib/terminals';
+import { terminalClickAction } from '@/lib/terminal-pick';
 import { useFormStore } from '@/stores/form-store';
 import { useMapStore } from '@/stores/map-store';
 import type { DraftTerminal } from '@/stores/scenario-store';
 
 const TERMINAL_MISMATCH_TOAST_ID = 'route-terminal-mismatch';
+const TERMINAL_PICK_HINT_TOAST_ID = 'terminal-pick-hint';
 
 const NO_MARKERS: readonly TerminalMarkerSpec[] = [];
 
@@ -82,6 +82,8 @@ export interface MapPanelProps {
   terminalMarkers?: readonly TerminalMarkerSpec[];
   drawTerminals?: DrawTerminals | null;
   terminalPick?: 'sending' | 'receiving' | null;
+  /** Draft project type (e.g. 'greenfield', 'reconductoring'); decides what a terminal click may place. */
+  projectType?: string | null;
   onPickTerminal?: (terminal: DraftTerminal) => void;
   /** Gids from a stored line selection; used for stale-data notice after tiles load. */
   storedLineGids?: number[];
@@ -157,6 +159,7 @@ export function MapPanel({
   terminalMarkers = NO_MARKERS,
   drawTerminals = null,
   terminalPick = null,
+  projectType = null,
   onPickTerminal,
   storedLineGids,
   onLineDataStaleChange,
@@ -399,47 +402,53 @@ export function MapPanel({
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
       const hit = substationHitAt(map, { x, y });
-      if (hit) {
-        event.preventDefault();
-        event.stopPropagation();
+      const corridorLayer = hitLayerId('ref.corridors');
+      const onLine =
+        map.getLayer(corridorLayer) !== undefined &&
+        map.queryRenderedFeatures([x, y], { layers: [corridorLayer] }).length > 0;
+      const zoomOk = map.getZoom() >= SUBSTATION_SNAP_MIN_ZOOM;
+      const action = terminalClickAction(
+        { kind: hit ? 'substation' : onLine ? 'line' : 'empty' },
+        projectType,
+        zoomOk,
+      );
+      if (action === 'ignore') return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (action === 'hint_pick_substation') {
+        toast('Pick a substation', { id: TERMINAL_PICK_HINT_TOAST_ID });
+        return;
+      }
+      if (action === 'confirm_point') {
+        const lngLat = map.unproject([x, y]);
+        if (!Number.isFinite(lngLat.lng) || !Number.isFinite(lngLat.lat)) return;
+        setPointConfirm([lngLat.lng, lngLat.lat]);
+        return;
+      }
+      if (action === 'place_substation' && hit) {
         onPickTerminalRef.current?.({
           substation_gid: hit.gid,
           name: pickedSubstationName(hit.name, hit.gid),
           point: hit.point,
         });
-        return;
       }
-      const corridorLayer = hitLayerId('ref.corridors');
-      if (map.getLayer(corridorLayer)) {
-        const corridorFeatures = map.queryRenderedFeatures([x, y], { layers: [corridorLayer] });
-        const corridorFeature = corridorFeatures[0];
-        if (corridorFeature) {
-          const candidate = corridorCandidateFromFeature(corridorFeature);
-          const coords = coordsFromLineGeometry(corridorFeature.geometry);
-          const lngLat = map.unproject([x, y]);
-          const clickPoint: [number, number] = [lngLat.lng, lngLat.lat];
-          const snapped = coords.length > 0 ? nearestPointOnLine(clickPoint, coords) : clickPoint;
-          const voltage = candidate?.voltage_kv ?? null;
-          event.preventDefault();
-          event.stopPropagation();
-          onPickTerminalRef.current?.({
-            substation_gid: null,
-            name: stretchTerminalName(voltage),
-            point: snapped,
-          });
-          return;
-        }
-      }
-      if (map.getZoom() < SUBSTATION_SNAP_MIN_ZOOM) return;
-      const lngLat = map.unproject([x, y]);
-      if (!Number.isFinite(lngLat.lng) || !Number.isFinite(lngLat.lat)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      setPointConfirm([lngLat.lng, lngLat.lat]);
+    };
+    const onMove = (event: MouseEvent): void => {
+      const rect = container.getBoundingClientRect();
+      const hit = substationHitAt(map, {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      });
+      map.getCanvas().style.cursor = hit ? 'pointer' : '';
     };
     container.addEventListener('click', onClick, true);
-    return () => container.removeEventListener('click', onClick, true);
-  }, [map, terminalPick]);
+    container.addEventListener('mousemove', onMove);
+    return () => {
+      container.removeEventListener('click', onClick, true);
+      container.removeEventListener('mousemove', onMove);
+      map.getCanvas().style.cursor = '';
+    };
+  }, [map, terminalPick, projectType]);
 
   useEffect(() => {
     if (!map || storedLineGids === undefined || storedLineGids.length === 0) {

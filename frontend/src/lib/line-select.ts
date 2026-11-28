@@ -250,11 +250,6 @@ export function nearestPointOnLine(
   return [best[0], best[1]];
 }
 
-export function stretchTerminalName(voltage: number | null): string {
-  if (voltage === null || !Number.isFinite(voltage)) return 'Point on line';
-  return `Point on ${Math.round(voltage).toLocaleString('en-US')} kV line`;
-}
-
 export function missingLineSelectionGids(
   storedGids: ReadonlyArray<number>,
   loadedGids: ReadonlySet<number>,

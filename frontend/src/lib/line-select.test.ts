@@ -9,7 +9,6 @@ import {
   routeFullyInMapView,
   selectionSummary,
   stretchEndForAssembly,
-  stretchTerminalName,
   toggleGid,
   type CorridorCandidate,
 } from '@/lib/line-select';
@@ -68,16 +67,6 @@ describe('nearestPointOnLine', () => {
 
   it('returns the sole vertex when the line is one point', () => {
     expect(nearestPointOnLine([1, 2], [[3, 4]])).toEqual([3, 4]);
-  });
-});
-
-describe('stretchTerminalName', () => {
-  it('includes rounded voltage when present', () => {
-    expect(stretchTerminalName(138.2)).toBe('Point on 138 kV line');
-  });
-
-  it('omits voltage when missing', () => {
-    expect(stretchTerminalName(null)).toBe('Point on line');
   });
 });
 

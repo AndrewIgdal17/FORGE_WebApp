@@ -1123,6 +1123,23 @@ function WorkspaceBody(): ReactElement {
   }, [ready, rememberProjectId, rememberScenarioId]);
 
   const pickingNewProject = terminalPick !== null && draft !== null && !draft.project_id;
+
+  // Esc steps a pick back: from receiving it clears the pending sending pick and
+  // returns to sending; from sending it ends the pick. Listens only while picking.
+  useEffect(() => {
+    if (terminalPick === null) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      if (terminalPick === 'receiving' && pendingSending) {
+        setPendingSending(null);
+        setTerminalPick('sending');
+      } else {
+        setTerminalPick(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [terminalPick, pendingSending]);
   const lineSelectEnabled =
     routeInputReady && !pickingNewProject && replacesExistingLine(activeProjectType);
   const drawingEnabled = routeInputReady && !pickingNewProject && !lineSelectEnabled;
@@ -1411,6 +1428,7 @@ function WorkspaceBody(): ReactElement {
                       terminalMarkers={terminalMarkers}
                       drawTerminals={mapTerminals}
                       terminalPick={pickingNewProject ? terminalPick : null}
+                      projectType={typeof activeProjectType === 'string' ? activeProjectType : null}
                       onPickTerminal={handlePickTerminal}
                       storedLineGids={activeScenario?.line_selection?.gids}
                       onLineDataStaleChange={setLineDataStale}
