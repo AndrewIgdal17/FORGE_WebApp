@@ -103,7 +103,7 @@ function orientation(ring: readonly (readonly number[])[]): number {
 }
 
 describe('heavySourceSpec', () => {
-  it('serves a project from the region query with the zoom range and promoteId', () => {
+  it('serves a project from the region query with a tiles template', () => {
     expect(heavySourceSpec('ref.corridors', ['WECC'])).toEqual({
       type: 'vector',
       tiles: ['https://tiles.forge-calc.com/ref.corridors_by_region/{z}/{x}/{y}?regions=WECC'],
@@ -113,12 +113,10 @@ describe('heavySourceSpec', () => {
     });
   });
 
-  it('serves the plain tile template when no regions are set', () => {
+  it('keeps the TileJSON url source when no regions are set', () => {
     expect(heavySourceSpec('ref.highways_nhs', [])).toEqual({
       type: 'vector',
-      tiles: ['https://tiles.forge-calc.com/ref.highways_nhs/{z}/{x}/{y}'],
-      minzoom: 0,
-      maxzoom: 22,
+      url: 'https://tiles.forge-calc.com/ref.highways_nhs',
       promoteId: 'gid',
     });
   });
@@ -157,6 +155,18 @@ describe('regionMaskGeometry', () => {
     const shapes: RegionShape[] = [{ code: 'RF', geometry: multi }];
     const mask = regionMaskGeometry(shapes, ['RF']);
     expect(mask.geometry.coordinates).toHaveLength(3);
+  });
+
+  it('unions overlapping ticked shapes into one hole', () => {
+    const a = square('WECC', 0, 0, 2, 2);
+    const b = square('TRE', 1, 0, 3, 2);
+    const mask = regionMaskGeometry([a, b], ['WECC', 'TRE']);
+    const [outer, ...holes] = mask.geometry.coordinates;
+    expect(holes).toHaveLength(1);
+    const xs = (holes[0] as number[][]).map((point) => point[0]);
+    expect(Math.min(...xs)).toBe(0);
+    expect(Math.max(...xs)).toBe(3);
+    expect(orientation(holes[0] as number[][])).toBe(-orientation(outer as number[][]));
   });
 
   it('ignores unticked shapes', () => {

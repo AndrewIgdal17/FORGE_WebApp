@@ -6,7 +6,7 @@ import type {
   MapLayerMouseEvent,
   MapMouseEvent,
 } from 'maplibre-gl';
-import { hitLayerId } from '@/components/map/RouteMap';
+import { hitLayerId, swapRegionSource } from '@/components/map/RouteMap';
 import {
   hoverCorridorGidFilter,
   lineSelectTooltip,
@@ -14,11 +14,14 @@ import {
   toggleGid,
   type CorridorCandidate,
 } from '@/lib/line-select';
+import { heavySourceSpec } from '@/lib/region-tiles';
+import { sortRegions } from '@/lib/regions';
 
 const CORRIDOR_HIT = hitLayerId('ref.corridors');
 const SELECTED_SOURCE = 'forge-line-selected';
 const SELECTED_LAYER = 'forge-line-selected-highlight';
 const HOVER_LAYER = 'forge-line-hover-highlight';
+const CORRIDORS = 'ref.corridors';
 
 function escapeHtml(value: string): string {
   return value
@@ -63,13 +66,9 @@ export function corridorCandidateFromFeature(feature: MapGeoJSONFeature): Corrid
   };
 }
 
-function ensureSelectedLayers(map: MapLibreMap): void {
+function ensureSelectedLayers(map: MapLibreMap, regions: readonly string[]): void {
   if (!map.getSource(SELECTED_SOURCE)) {
-    map.addSource(SELECTED_SOURCE, {
-      type: 'vector',
-      url: 'https://tiles.forge-calc.com/ref.corridors',
-      promoteId: 'gid',
-    });
+    map.addSource(SELECTED_SOURCE, heavySourceSpec(CORRIDORS, regions));
   }
   if (!map.getLayer(SELECTED_LAYER)) {
     map.addLayer({
@@ -93,13 +92,9 @@ function syncSelectedFilter(map: MapLibreMap, gids: number[]): void {
   map.setLayoutProperty(SELECTED_LAYER, 'visibility', gids.length > 0 ? 'visible' : 'none');
 }
 
-function ensureHoverLayer(map: MapLibreMap): void {
+function ensureHoverLayer(map: MapLibreMap, regions: readonly string[]): void {
   if (!map.getSource(SELECTED_SOURCE)) {
-    map.addSource(SELECTED_SOURCE, {
-      type: 'vector',
-      url: 'https://tiles.forge-calc.com/ref.corridors',
-      promoteId: 'gid',
-    });
+    map.addSource(SELECTED_SOURCE, heavySourceSpec(CORRIDORS, regions));
   }
   if (!map.getLayer(HOVER_LAYER)) {
     map.addLayer({
@@ -134,14 +129,28 @@ export interface UseLineSelectOptions {
   onPieceContextMenu?: (gid: number, clientPoint: { x: number; y: number }) => void;
   /** Called with each corridor piece the pointer hovers or clicks, so its details can be kept. */
   onPieceSeen?: (candidate: CorridorCandidate) => void;
+  /** NERC regions of the project; the highlight uses the same filtered tiles as the visible corridors. */
+  regions?: readonly string[] | null;
 }
 
 export function useLineSelect(
   map: MapLibreMap | null,
   options: UseLineSelectOptions,
 ): { hoveredGid: number | null } {
-  const { active, selectedGids, onSelectedGids, onPickerOpen, onPieceContextMenu, onPieceSeen } =
-    options;
+  const {
+    active,
+    selectedGids,
+    onSelectedGids,
+    onPickerOpen,
+    onPieceContextMenu,
+    onPieceSeen,
+    regions,
+  } = options;
+  const regionKey = sortRegions(regions ?? []).join(',');
+  const regionsRef = useRef<string[]>(regionKey ? regionKey.split(',') : []);
+  regionsRef.current = regionKey ? regionKey.split(',') : [];
+  // Region set the highlight source was built with.
+  const appliedRegionsRef = useRef<string[]>(regionsRef.current);
   const activeRef = useRef(active);
   const onPieceContextMenuRef = useRef(onPieceContextMenu);
   onPieceContextMenuRef.current = onPieceContextMenu;
@@ -167,8 +176,9 @@ export function useLineSelect(
     if (!map) return;
     const install = (): void => {
       if (!map.getLayer(CORRIDOR_HIT)) return;
-      ensureSelectedLayers(map);
-      ensureHoverLayer(map);
+      if (!map.getSource(SELECTED_SOURCE)) appliedRegionsRef.current = regionsRef.current;
+      ensureSelectedLayers(map, regionsRef.current);
+      ensureHoverLayer(map, regionsRef.current);
       syncSelectedFilter(map, selectedRef.current);
       syncHoverFilter(map, hoveredGidRef.current);
     };
@@ -180,6 +190,15 @@ export function useLineSelect(
       map.off('style.load', install);
     };
   }, [map]);
+
+  useEffect(() => {
+    if (!map) return;
+    const previous = appliedRegionsRef.current;
+    appliedRegionsRef.current = regionsRef.current;
+    if (map.getSource(SELECTED_SOURCE)) {
+      swapRegionSource(map, SELECTED_SOURCE, CORRIDORS, regionsRef.current, previous);
+    }
+  }, [map, regionKey]);
 
   useEffect(() => {
     if (!map) return;

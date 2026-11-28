@@ -1,6 +1,13 @@
 import bboxOf from '@turf/bbox';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
-import type { Feature, FeatureCollection, MultiLineString, Polygon } from 'geojson';
+import union from '@turf/union';
+import type {
+  Feature,
+  FeatureCollection,
+  MultiLineString,
+  MultiPolygon,
+  Polygon,
+} from 'geojson';
 
 import { sortRegions } from '@/lib/regions';
 import type { RegionShape } from '@/lib/regions';
@@ -25,12 +32,7 @@ export function regionTileUrl(layerId: string, regions: readonly string[]): stri
   return `${TILE_ORIGIN}/${layerId}_by_region/{z}/{x}/{y}?regions=${sortRegions(regions).join(',')}`;
 }
 
-/** Plain tile template for a table source (no region query). */
-export function plainTileUrl(layerId: string): string {
-  return `${TILE_ORIGIN}/${layerId}/{z}/{x}/{y}`;
-}
-
-export interface HeavySourceSpec {
+export interface TilesSourceSpec {
   type: 'vector';
   tiles: string[];
   minzoom: number;
@@ -38,14 +40,32 @@ export interface HeavySourceSpec {
   promoteId: string;
 }
 
+export interface UrlSourceSpec {
+  type: 'vector';
+  url: string;
+  promoteId: string;
+}
+
+export type HeavySourceSpec = TilesSourceSpec | UrlSourceSpec;
+
 /**
- * Vector source for a heavy layer. It uses `tiles`, not a TileJSON url, so the
- * region query can be swapped later with setTiles. The zoom range is fixed
- * (TileJSON is not read); 22 is the map's own maximum zoom.
+ * Vector source for a heavy layer. With no regions it is the TileJSON `url`
+ * source the map always used. With regions it is a `tiles` template carrying
+ * the region query. The zoom range of the tiles source is a fixed 0-22 (22 is
+ * the map's own maximum); it is not read from Martin's TileJSON for the table
+ * sources, so check that it matches after deploy.
  */
 export function heavySourceSpec(layerId: string, regions: readonly string[]): HeavySourceSpec {
-  const tile = regions.length > 0 ? regionTileUrl(layerId, regions) : plainTileUrl(layerId);
-  return { type: 'vector', tiles: [tile], minzoom: 0, maxzoom: 22, promoteId: 'gid' };
+  if (regions.length === 0) {
+    return { type: 'vector', url: `${TILE_ORIGIN}/${layerId}`, promoteId: 'gid' };
+  }
+  return {
+    type: 'vector',
+    tiles: [regionTileUrl(layerId, regions)],
+    minzoom: 0,
+    maxzoom: 22,
+    promoteId: 'gid',
+  };
 }
 
 /** Bounding box [west, south, east, north], padded by `pad` of its width and height on each side. */
@@ -110,24 +130,29 @@ function holeRing(ring: Array<[number, number]>, outerOrientation: number): Arra
 
 /**
  * Grey mask over everything outside the ticked regions: a world polygon with
- * each ticked polygon's outer ring as a hole. Interior rings of a ticked
- * region are not holed out, so a hole inside a ticked region is not masked.
+ * the outer rings of the unioned ticked shapes as holes. The shapes are
+ * unioned first because adjacent simplified shapes overlap, and overlapping
+ * holes triangulate badly. Interior rings of a ticked region are not holed
+ * out, so a hole inside a ticked region is not masked.
  */
 export function regionMaskGeometry(
   shapes: readonly RegionShape[],
   regions: readonly string[],
 ): Feature<Polygon> {
   const ticked = new Set(regions);
-  const outerOrientation = orientation(WORLD_RING);
-  const holes: Array<Array<[number, number]>> = [];
+  const features: Array<Feature<Polygon | MultiPolygon>> = [];
   for (const shape of shapes) {
     if (!ticked.has(shape.code)) continue;
-    if (shape.geometry.type === 'Polygon') {
-      holes.push(holeRing(shape.geometry.coordinates[0] as Array<[number, number]>, outerOrientation));
-    } else {
-      for (const polygon of shape.geometry.coordinates) {
-        holes.push(holeRing(polygon[0] as Array<[number, number]>, outerOrientation));
-      }
+    features.push({ type: 'Feature', properties: {}, geometry: shape.geometry });
+  }
+  const outerOrientation = orientation(WORLD_RING);
+  const holes: Array<Array<[number, number]>> = [];
+  const merged = features.length > 1 ? union({ type: 'FeatureCollection', features }) : features[0];
+  if (merged) {
+    const polygons =
+      merged.geometry.type === 'Polygon' ? [merged.geometry.coordinates] : merged.geometry.coordinates;
+    for (const polygon of polygons) {
+      holes.push(holeRing(polygon[0] as Array<[number, number]>, outerOrientation));
     }
   }
   return {
@@ -144,10 +169,33 @@ export function regionMaskGeometry(
 // 0.02 degrees (roughly 2 km at US latitudes) before the containment test.
 const SAMPLE_STEP_DEG = 0.02;
 
+interface RouteCandidate {
+  code: string;
+  shape: RegionShape;
+  box: [number, number, number, number];
+}
+
+// One-entry cache: the candidate boxes depend only on the shapes and the ticked set.
+let candidateCache: { shapes: readonly RegionShape[]; key: string; list: RouteCandidate[] } | null = null;
+
+function routeCandidates(shapes: readonly RegionShape[], regions: readonly string[]): RouteCandidate[] {
+  const key = [...regions].sort().join(',');
+  if (candidateCache && candidateCache.shapes === shapes && candidateCache.key === key) {
+    return candidateCache.list;
+  }
+  const ticked = new Set(regions);
+  const list = shapes
+    .filter((shape) => !ticked.has(shape.code))
+    .map((shape) => ({ code: shape.code, shape, box: bboxOf(shape.geometry) as RouteCandidate['box'] }));
+  candidateCache = { shapes, key, list };
+  return list;
+}
+
 /**
  * Codes of unticked regions that the route enters, in shape order. Checked by
- * sampling points along each segment against the simplified shapes. A region
- * clipped by a gap narrower than about 2 km between samples can be missed.
+ * sampling points along each segment against the simplified shapes; sampling
+ * stops once every candidate has been hit. A region clipped by a gap narrower
+ * than about 2 km between samples can be missed.
  */
 export function unlistedRegionsOnRoute(
   route: MultiLineString | null,
@@ -155,10 +203,8 @@ export function unlistedRegionsOnRoute(
   shapes: readonly RegionShape[],
 ): string[] {
   if (!route) return [];
-  const ticked = new Set(regions);
-  const candidates = shapes
-    .filter((shape) => !ticked.has(shape.code))
-    .map((shape) => ({ code: shape.code, shape, box: bboxOf(shape.geometry) }));
+  const candidates = routeCandidates(shapes, regions);
+  if (candidates.length === 0) return [];
   const hit = new Set<string>();
 
   for (const line of route.coordinates) {
@@ -179,6 +225,9 @@ export function unlistedRegionsOnRoute(
           const [west, south, east, north] = candidate.box;
           if (point[0] < west || point[0] > east || point[1] < south || point[1] > north) continue;
           if (booleanPointInPolygon(point, candidate.shape.geometry)) hit.add(candidate.code);
+        }
+        if (hit.size === candidates.length) {
+          return shapes.filter((shape) => hit.has(shape.code)).map((shape) => shape.code);
         }
       }
     }

@@ -23,8 +23,8 @@ import {
   REGION_FILTERED_LAYERS,
   TILE_ORIGIN,
   heavySourceSpec,
+  type HeavySourceSpec,
   paddedBounds,
-  plainTileUrl,
   regionMaskGeometry,
   regionTileUrl,
   tickedBounds,
@@ -461,14 +461,53 @@ function setGeoJsonData(
   map.addSource(sourceId, { type: 'geojson', data: data as FeatureCollection });
 }
 
-/** Points the four heavy sources at the region query, or back at the plain tiles. */
-function applyRegionTiles(map: MapLibreMap, regions: readonly string[]): void {
+/**
+ * Re-creates a source with a new spec, keeping its layers (ids, paint, layout,
+ * filters, z-order). Layers go first: a source cannot be removed while one uses it.
+ */
+function rebuildSource(map: MapLibreMap, sourceId: string, spec: HeavySourceSpec): void {
+  const all = map.getStyle().layers;
+  const dependents = all.filter((layer) => 'source' in layer && layer.source === sourceId);
+  const dependentIds = new Set(dependents.map((layer) => layer.id));
+  const beforeIds = dependents.map((layer) => {
+    const start = all.findIndex((candidate) => candidate.id === layer.id);
+    return all.slice(start + 1).find((candidate) => !dependentIds.has(candidate.id))?.id;
+  });
+  for (const layer of dependents) map.removeLayer(layer.id);
+  if (map.getSource(sourceId)) map.removeSource(sourceId);
+  map.addSource(sourceId, spec);
+  dependents.forEach((layer, index) => map.addLayer(layer, beforeIds[index]));
+}
+
+/**
+ * Moves a corridor-style source from one region set to another. Between none
+ * and some the source kind changes (TileJSON url or tiles template), so it is
+ * rebuilt; between two sets setTiles swaps the address. `layerId` is the table
+ * the tiles come from (the source id may differ, as for the line highlight).
+ */
+export function swapRegionSource(
+  map: MapLibreMap,
+  sourceId: string,
+  layerId: string,
+  regions: readonly string[],
+  previous: readonly string[],
+): void {
+  if (regions.length === 0 && previous.length === 0) return;
+  if (regions.length === 0 || previous.length === 0) {
+    rebuildSource(map, sourceId, heavySourceSpec(layerId, regions));
+    return;
+  }
+  const source = map.getSource(sourceId);
+  if (source instanceof VectorTileSource) source.setTiles([regionTileUrl(layerId, regions)]);
+}
+
+function applyRegionTiles(
+  map: MapLibreMap,
+  regions: readonly string[],
+  previous: readonly string[],
+): void {
   for (const layerId of REGION_FILTERED_LAYERS) {
-    const source = map.getSource(layerId);
-    if (!(source instanceof VectorTileSource)) continue;
-    source.setTiles([
-      regions.length > 0 ? regionTileUrl(layerId, regions) : plainTileUrl(layerId),
-    ]);
+    swapRegionSource(map, layerId, layerId, regions, previous);
   }
 }
 
@@ -599,7 +638,7 @@ function syncRegions(
 ): void {
   const key = regions.join(',');
   if (appliedKey.current !== key) {
-    applyRegionTiles(map, regions);
+    applyRegionTiles(map, regions, appliedKey.current ? appliedKey.current.split(',') : []);
     appliedKey.current = key;
   }
   applyRegionShapes(map, regions, shapes);

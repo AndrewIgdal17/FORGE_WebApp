@@ -311,6 +311,7 @@ export function MapPanel({
 
   useLineSelect(map, {
     active: lineSelectActive,
+    regions: projectRegions,
     selectedGids,
     onPieceContextMenu: (gid, clientPoint) => {
       openContextMenu(clientPoint.x, clientPoint.y, [
@@ -722,10 +723,11 @@ export function MapPanel({
   }, [regionKey]);
   const routeOutside = useMemo(
     () =>
-      regionGeometry && projectRegions
+      // Not while drawing: the route changes on every click.
+      regionGeometry && projectRegions && !isDrawing
         ? unlistedRegionsOnRoute(statsRoute, projectRegions, regionGeometry)
         : [],
-    [regionGeometry, projectRegions, statsRoute],
+    [regionGeometry, projectRegions, statsRoute, isDrawing],
   );
 
   const connectorSegments = useMemo(
