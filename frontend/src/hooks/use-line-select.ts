@@ -129,14 +129,18 @@ export interface UseLineSelectOptions {
   selectedGids: number[];
   onSelectedGids: (gids: number[]) => void;
   onPickerOpen: (candidates: CorridorCandidate[]) => void;
+  /** Right-click on a selected piece; the caller opens the piece menu at the client point. */
+  onPieceContextMenu?: (gid: number, clientPoint: { x: number; y: number }) => void;
 }
 
 export function useLineSelect(
   map: MapLibreMap | null,
   options: UseLineSelectOptions,
 ): { hoveredGid: number | null } {
-  const { active, selectedGids, onSelectedGids, onPickerOpen } = options;
+  const { active, selectedGids, onSelectedGids, onPickerOpen, onPieceContextMenu } = options;
   const activeRef = useRef(active);
+  const onPieceContextMenuRef = useRef(onPieceContextMenu);
+  onPieceContextMenuRef.current = onPieceContextMenu;
   const selectedRef = useRef(selectedGids);
   const hoverPopupRef = useRef<Popup | null>(null);
   const hoveredGidRef = useRef<number | null>(null);
@@ -260,14 +264,27 @@ export function useLineSelect(
       onPickerOpen(candidates);
     };
 
+    const onPieceContextMenuEvent = (event: MapLayerMouseEvent): void => {
+      if (!activeRef.current) return;
+      const original = event.originalEvent;
+      original.preventDefault();
+      const [feature] = map.queryRenderedFeatures(event.point, { layers: [SELECTED_LAYER] });
+      if (!feature) return;
+      const candidate = corridorCandidateFromFeature(feature);
+      if (!candidate) return;
+      onPieceContextMenuRef.current?.(candidate.gid, { x: original.clientX, y: original.clientY });
+    };
+
     map.on('mousemove', CORRIDOR_HIT, onMove);
     map.on('mouseleave', CORRIDOR_HIT, onLeave);
     map.on('click', CORRIDOR_HIT, onClick);
+    map.on('contextmenu', SELECTED_LAYER, onPieceContextMenuEvent);
 
     return () => {
       map.off('mousemove', CORRIDOR_HIT, onMove);
       map.off('mouseleave', CORRIDOR_HIT, onLeave);
       map.off('click', CORRIDOR_HIT, onClick);
+      map.off('contextmenu', SELECTED_LAYER, onPieceContextMenuEvent);
       hideTooltip();
     };
   }, [map, active, toggle, onPickerOpen]);

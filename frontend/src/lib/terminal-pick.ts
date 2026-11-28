@@ -75,3 +75,32 @@ export function terminalsAfterTypeChange<T extends PickTerminal>(
   }
   return { terminals: undefined, pendingSending: null, restartAt: 'sending', hint: true };
 }
+
+export type TerminalRole = 'sending' | 'receiving';
+
+/**
+ * Removes one terminal from the draft's pick state. Removing sending clears
+ * both ends and restarts at sending; removing receiving keeps sending and
+ * restarts at receiving.
+ */
+export function removeTerminalResult<T extends PickTerminal>(
+  role: TerminalRole,
+  state: { sending: T | null; receiving: T | null },
+): { sending: T | null; receiving: T | null; pick: TerminalRole } {
+  if (role === 'sending') return { sending: null, receiving: null, pick: 'sending' };
+  return { sending: state.sending, receiving: null, pick: 'receiving' };
+}
+
+export type PinMenuAction = 'remove' | null;
+
+export interface PinMenuItem {
+  label: string;
+  disabled: boolean;
+  action: PinMenuAction;
+}
+
+/** Items for a terminal pin's right-click menu. Saved projects keep their terminals fixed. */
+export function pinMenuItems(isDraft: boolean): PinMenuItem[] {
+  if (isDraft) return [{ label: 'Remove terminal', disabled: false, action: 'remove' }];
+  return [{ label: 'Terminals are fixed for this project', disabled: true, action: null }];
+}

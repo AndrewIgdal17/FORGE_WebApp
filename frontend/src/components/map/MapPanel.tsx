@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { CircuitPicker } from '@/components/map/CircuitPicker';
 import { DrawingToolbar } from '@/components/map/DrawingToolbar';
 import { LineSelectPanel } from '@/components/map/LineSelectPanel';
+import { MapContextMenu, type MapContextMenuItem } from '@/components/map/MapContextMenu';
 import { applyDrawnRouteReset } from '@/components/map/drawn-route-reset';
 import {
   finishedRouteStep,
@@ -20,6 +21,7 @@ import { SatelliteToggle } from '@/components/map/SatelliteToggle';
 import { RouteStats } from '@/components/map/RouteStats';
 import {
   syncTerminalMarkers,
+  type TerminalContextMenuHandler,
   type TerminalMarkerSpec,
 } from '@/components/map/terminal-markers';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -58,7 +60,7 @@ import {
 } from '@/lib/line-select';
 import { resolvedRowWidthFt, rowWidthProblem } from '@/lib/analyze-request';
 import { pointTerminalName } from '@/lib/terminals';
-import { terminalClickAction } from '@/lib/terminal-pick';
+import { pinMenuItems, terminalClickAction, type TerminalRole } from '@/lib/terminal-pick';
 import { useFormStore } from '@/stores/form-store';
 import { useMapStore } from '@/stores/map-store';
 import type { DraftTerminal } from '@/stores/scenario-store';
@@ -85,6 +87,9 @@ export interface MapPanelProps {
   /** Draft project type (e.g. 'greenfield', 'reconductoring'); decides what a terminal click may place. */
   projectType?: string | null;
   onPickTerminal?: (terminal: DraftTerminal) => void;
+  /** True while the project is a draft (no saved project yet); its terminals can be removed. */
+  isDraftProject?: boolean;
+  onRemoveTerminal?: (role: TerminalRole) => void;
   /** Gids from a stored line selection; used for stale-data notice after tiles load. */
   storedLineGids?: number[];
   onLineDataStaleChange?: (stale: boolean) => void;
@@ -161,10 +166,18 @@ export function MapPanel({
   terminalPick = null,
   projectType = null,
   onPickTerminal,
+  isDraftProject = false,
+  onRemoveTerminal,
   storedLineGids,
   onLineDataStaleChange,
 }: MapPanelProps): ReactElement {
   const [map, setMap] = useState<MapLibreMap | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    items: MapContextMenuItem[];
+  } | null>(null);
   const [clearedExisting, setClearedExisting] = useState(false);
   const [finishedRoute, setFinishedRoute] = useState<MultiLineString | null>(null);
   const [analyzed, setAnalyzed] = useState<AnalyzeResponse | null>(null);
@@ -224,9 +237,40 @@ export function MapPanel({
   }, [lineSelectEnabled, initialSelectedGids, storedConnectors]);
 
   const lineSelectActive = lineSelectEnabled && drawTerminals != null && terminalPick == null;
+  // Opens the right-click menu at a client point, in the map container's pixels.
+  // Clamped so the menu stays inside the map.
+  function openContextMenu(clientX: number, clientY: number, items: MapContextMenuItem[]): void {
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const menuWidth = 180;
+    const menuHeight = items.length * 34 + 8;
+    const x = Math.max(4, Math.min(clientX - rect.left, rect.width - menuWidth - 4));
+    const y = Math.max(4, Math.min(clientY - rect.top, rect.height - menuHeight - 4));
+    setContextMenu({ x, y, items });
+  }
+
+  const isDraftRef = useRef(isDraftProject);
+  isDraftRef.current = isDraftProject;
+  const onRemoveTerminalRef = useRef(onRemoveTerminal);
+  onRemoveTerminalRef.current = onRemoveTerminal;
+  const onTerminalContextMenu = useCallback<TerminalContextMenuHandler>((role, clientPoint) => {
+    const items = pinMenuItems(isDraftRef.current).map((item): MapContextMenuItem => ({
+      label: item.label,
+      disabled: item.disabled,
+      onSelect:
+        item.action === 'remove' ? () => onRemoveTerminalRef.current?.(role) : undefined,
+    }));
+    openContextMenu(clientPoint.x, clientPoint.y, items);
+  }, []);
+
   useLineSelect(map, {
     active: lineSelectActive,
     selectedGids,
+    onPieceContextMenu: (gid, clientPoint) => {
+      openContextMenu(clientPoint.x, clientPoint.y, [
+        { label: 'Remove piece', onSelect: () => handleRemoveGid(gid) },
+      ]);
+    },
     onSelectedGids: (gids) => {
       setSelectedGids(gids);
       setAssembledPieces([]);
@@ -384,8 +428,8 @@ export function MapPanel({
 
   useEffect(() => {
     if (!map) return;
-    return syncTerminalMarkers(map, terminalMarkers);
-  }, [map, terminalMarkers]);
+    return syncTerminalMarkers(map, terminalMarkers, onTerminalContextMenu);
+  }, [map, terminalMarkers, onTerminalContextMenu]);
 
   useEffect(() => {
     setPointConfirm(null);
@@ -397,7 +441,7 @@ export function MapPanel({
     const onClick = (event: MouseEvent): void => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      if (target.closest('.maplibregl-ctrl, button, a, input, [role="dialog"]')) return;
+      if (target.closest('.maplibregl-ctrl, button, a, input, [role="dialog"], [data-terminal-role]')) return;
       const rect = container.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
@@ -618,7 +662,7 @@ export function MapPanel({
   );
 
   return (
-    <div className="relative h-full min-h-0 w-full flex-1 overflow-hidden">
+    <div ref={rootRef} className="relative h-full min-h-0 w-full flex-1 overflow-hidden">
       <RouteMap
         onMap={setMap}
         existingRoute={displayedRoute}
@@ -678,6 +722,14 @@ export function MapPanel({
         <div className="absolute bottom-4 left-4 z-10 rounded-md bg-black/70 px-2 py-1 font-mono text-xs text-white">
           z{zoom.toFixed(1)} {zoom < 11 ? '· subs off' : zoom < 13.5 ? '· subs on · snap off' : '· snap on'}
         </div>
+      ) : null}
+      {contextMenu ? (
+        <MapContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenu.items}
+          onClose={() => setContextMenu(null)}
+        />
       ) : null}
       <ConfirmDialog
         open={pointConfirm !== null}

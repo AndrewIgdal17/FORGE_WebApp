@@ -53,7 +53,11 @@ import { getValueAtPath } from '@/lib/path';
 import { isMultiLineString, scenarioMapRoute } from '@/lib/route-geometry';
 import type { TerminalFootprints } from '@/lib/terminals';
 import { useFormStore } from '@/stores/form-store';
-import { terminalsAfterTypeChange } from '@/lib/terminal-pick';
+import {
+  removeTerminalResult,
+  terminalsAfterTypeChange,
+  type TerminalRole,
+} from '@/lib/terminal-pick';
 import {
   clearLastWorkspace,
   projectScenarioMap,
@@ -995,6 +999,26 @@ function WorkspaceBody(): ReactElement {
     setTerminalPick(null);
   }
 
+  // Right-click "Remove terminal" on a draft's pin. Keeps the draft's pair and
+  // the pending sending pick in step with what is left, then resumes picking.
+  function handleRemoveTerminal(role: TerminalRole): void {
+    if (!draft || draft.project_id) return;
+    const result = removeTerminalResult(role, {
+      sending: draft.terminals?.sending ?? pendingSending,
+      receiving: draft.terminals?.receiving ?? null,
+    });
+    const pair =
+      result.sending && result.receiving
+        ? { sending: result.sending, receiving: result.receiving }
+        : undefined;
+    setDraft((current) => {
+      if (!current || current.project_id) return current;
+      return { ...current, terminals: pair };
+    });
+    setPendingSending(result.sending && !result.receiving ? result.sending : null);
+    setTerminalPick(result.pick);
+  }
+
   function handleWizardComplete(
     name: string,
     fullInputs: Record<string, unknown>,
@@ -1444,6 +1468,8 @@ function WorkspaceBody(): ReactElement {
                       terminalPick={pickingNewProject ? terminalPick : null}
                       projectType={typeof activeProjectType === 'string' ? activeProjectType : null}
                       onPickTerminal={handlePickTerminal}
+                      isDraftProject={draft !== null && !draft.project_id}
+                      onRemoveTerminal={handleRemoveTerminal}
                       storedLineGids={activeScenario?.line_selection?.gids}
                       onLineDataStaleChange={setLineDataStale}
                     />

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { terminalClickAction, terminalsAfterTypeChange } from '@/lib/terminal-pick';
+import {
+  pinMenuItems,
+  removeTerminalResult,
+  terminalClickAction,
+  terminalsAfterTypeChange,
+} from '@/lib/terminal-pick';
 import type { DraftTerminal } from '@/stores/scenario-store';
 
 describe('terminalClickAction', () => {
@@ -104,5 +109,48 @@ describe('terminalsAfterTypeChange', () => {
       restartAt: null,
       hint: false,
     });
+  });
+});
+
+describe('removeTerminalResult', () => {
+  it('removing the sending terminal clears both and restarts picking at sending', () => {
+    const sending = sub(1);
+    const receiving = sub(2);
+    expect(removeTerminalResult('sending', { sending, receiving })).toEqual({
+      sending: null,
+      receiving: null,
+      pick: 'sending',
+    });
+  });
+
+  it('removing a pending sending pick clears it and restarts picking at sending', () => {
+    expect(removeTerminalResult('sending', { sending: sub(1), receiving: null })).toEqual({
+      sending: null,
+      receiving: null,
+      pick: 'sending',
+    });
+  });
+
+  it('removing the receiving terminal keeps sending and restarts picking at receiving', () => {
+    const sending = sub(1);
+    expect(removeTerminalResult('receiving', { sending, receiving: sub(2) })).toEqual({
+      sending,
+      receiving: null,
+      pick: 'receiving',
+    });
+  });
+});
+
+describe('pinMenuItems', () => {
+  it('offers Remove terminal on a draft', () => {
+    expect(pinMenuItems(true)).toEqual([
+      { label: 'Remove terminal', disabled: false, action: 'remove' },
+    ]);
+  });
+
+  it('shows a disabled note on a saved project', () => {
+    expect(pinMenuItems(false)).toEqual([
+      { label: 'Terminals are fixed for this project', disabled: true, action: null },
+    ]);
   });
 });
