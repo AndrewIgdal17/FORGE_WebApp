@@ -31,6 +31,7 @@ from . import db as db_module
 from . import footprints as footprints_module
 from . import lines as lines_module
 from . import projects as projects_module
+from . import regions as regions_module
 from . import route as route_module
 from . import scenarios as scenarios_module
 from .audit import router as audit_router
@@ -263,6 +264,7 @@ app.include_router(projects_module.router)
 app.include_router(footprints_module.router)
 app.include_router(route_module.router)
 app.include_router(lines_module.router)
+app.include_router(regions_module.router)
 app.include_router(audit_router)
 
 # React built assets (JS/CSS bundles from Vite)

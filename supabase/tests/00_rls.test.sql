@@ -9,7 +9,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(38);
+select plan(45);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures (run as the bootstrap `postgres` role, which bypasses RLS)
@@ -500,6 +500,106 @@ select throws_ok(
   'inserting a project with equal points fails project_points_differ'
 );
 
+-- Project: nerc_regions accepts only a non-empty, duplicate-free set of the six codes.
+
+select lives_ok(
+  $$ insert into public.project (
+       user_id, name, sending_name, receiving_name, sending_point, receiving_point, nerc_regions
+     ) values (
+       'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+       'regions project',
+       'Laredo',
+       'Rio Grande',
+       ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
+       ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326),
+       array['WECC', 'SERC']
+     ) $$,
+  'a project with two valid NERC regions inserts'
+);
+
+select lives_ok(
+  $$ insert into public.project (
+       user_id, name, sending_name, receiving_name, sending_point, receiving_point, nerc_regions
+     ) values (
+       'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+       'null regions project',
+       'Laredo',
+       'Rio Grande',
+       ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
+       ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326),
+       null
+     ) $$,
+  'a project with null NERC regions inserts (not-null comes in a later migration)'
+);
+
+select throws_ok(
+  $$ insert into public.project (
+       user_id, name, sending_name, receiving_name, sending_point, receiving_point, nerc_regions
+     ) values (
+       'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+       'unknown region project',
+       'Laredo',
+       'Rio Grande',
+       ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
+       ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326),
+       array['WECC', 'XYZ']
+     ) $$,
+  '23514',
+  'new row for relation "project" violates check constraint "project_nerc_regions_valid"',
+  'a project with an unknown NERC region code is rejected'
+);
+
+select throws_ok(
+  $$ insert into public.project (
+       user_id, name, sending_name, receiving_name, sending_point, receiving_point, nerc_regions
+     ) values (
+       'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+       'duplicate region project',
+       'Laredo',
+       'Rio Grande',
+       ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
+       ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326),
+       array['WECC', 'WECC']
+     ) $$,
+  '23514',
+  'new row for relation "project" violates check constraint "project_nerc_regions_valid"',
+  'a project with a duplicate NERC region code is rejected'
+);
+
+select throws_ok(
+  $$ insert into public.project (
+       user_id, name, sending_name, receiving_name, sending_point, receiving_point, nerc_regions
+     ) values (
+       'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+       'empty regions project',
+       'Laredo',
+       'Rio Grande',
+       ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
+       ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326),
+       '{}'::text[]
+     ) $$,
+  '23514',
+  'new row for relation "project" violates check constraint "project_nerc_regions_valid"',
+  'a project with an empty NERC region array is rejected'
+);
+
+select throws_ok(
+  $$ insert into public.project (
+       user_id, name, sending_name, receiving_name, sending_point, receiving_point, nerc_regions
+     ) values (
+       'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+       'null element regions project',
+       'Laredo',
+       'Rio Grande',
+       ST_SetSRID(ST_MakePoint(-111.54, 32.87), 4326),
+       ST_SetSRID(ST_MakePoint(-105.59, 34.35), 4326),
+       array['WECC', null]::text[]
+     ) $$,
+  '23514',
+  'new row for relation "project" violates check constraint "project_nerc_regions_valid"',
+  'a project with a null element in NERC regions is rejected'
+);
+
 set local role authenticated;
 set local request.jwt.claim.sub = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
@@ -508,6 +608,13 @@ select is(
    where id = '33333333-0000-0000-0000-000000000001'),
   'Point',
   'project_read returns sending_point_geojson with type Point'
+);
+
+select is(
+  (select array_to_string(nerc_regions, ',') from public.project_read
+   where name = 'regions project'),
+  'WECC,SERC',
+  'project_read exposes nerc_regions'
 );
 
 reset role;
