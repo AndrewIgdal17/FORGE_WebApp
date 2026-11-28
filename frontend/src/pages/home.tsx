@@ -6,13 +6,9 @@ import { AppNav } from '@/components/layout/app-nav';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import { getDefaults } from '@/lib/api';
-import {
-  importCsvFile,
-  importForgeFile,
-  useScenarioStore,
-  workspaceUrl,
-  type Scenario,
-} from '@/stores/scenario-store';
+import { exampleProjects, type ExampleProject } from '@/lib/example-projects';
+import { useProjectStore } from '@/stores/project-store';
+import { importCsvFile, importForgeFile, useScenarioStore } from '@/stores/scenario-store';
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -24,7 +20,8 @@ export default function HomePage(): ReactElement {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scenarios = useScenarioStore((state) => state.scenarios);
   const loadScenarios = useScenarioStore((state) => state.loadScenarios);
-  const setActiveScenario = useScenarioStore((state) => state.setActiveScenario);
+  const projects = useProjectStore((state) => state.projects);
+  const loadProjects = useProjectStore((state) => state.loadProjects);
   const setPendingDraft = useScenarioStore((state) => state.setPendingDraft);
 
   const [defaults, setDefaults] = useState<Record<string, unknown> | null>(null);
@@ -36,7 +33,7 @@ export default function HomePage(): ReactElement {
 
   useEffect(() => {
     let cancelled = false;
-    void loadScenarios().catch((error: unknown) => {
+    void Promise.all([loadScenarios(), loadProjects()]).catch((error: unknown) => {
       if (!cancelled) toast.error(errorMessage(error));
     });
     void getDefaults()
@@ -49,7 +46,7 @@ export default function HomePage(): ReactElement {
     return () => {
       cancelled = true;
     };
-  }, [loadScenarios]);
+  }, [loadScenarios, loadProjects]);
 
   async function handleFileSelected(event: ChangeEvent<HTMLInputElement>): Promise<void> {
     const input = event.currentTarget;
@@ -81,17 +78,12 @@ export default function HomePage(): ReactElement {
     }
   }
 
-  // Open the example itself. Saving edits there makes your own copy.
-  function openExample(scenario: Scenario): void {
-    setActiveScenario(scenario.id);
-    navigate(
-      scenario.project_id
-        ? workspaceUrl(scenario.project_id, scenario.id)
-        : `/app/workspace?scenario=${encodeURIComponent(scenario.id)}`,
-    );
+  // A project-only link opens the project at its base scenario.
+  function openExample(example: ExampleProject): void {
+    navigate(`/app/workspace?project=${encodeURIComponent(example.id)}`);
   }
 
-  const examples = scenarios.filter((s) => s.source === 'paper');
+  const examples = exampleProjects(projects, scenarios);
   const hasScenarios = scenarios.length > 0;
 
   return (
@@ -116,7 +108,7 @@ export default function HomePage(): ReactElement {
               onClick={() => navigate('/app/workspace?new=1')}
               className="h-12 bg-forge-primary text-base font-semibold text-white shadow-md hover:bg-forge-primary-hover"
             >
-              + New Scenario
+              + New Project
             </Button>
             <div className="flex gap-2.5">
               <Button
@@ -144,23 +136,26 @@ export default function HomePage(): ReactElement {
 
           {examples.length > 0 && (
             <section className="mt-16 w-full max-w-2xl text-left">
-              <h2 className="text-lg font-semibold text-slate-900">Examples</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Case studies from the research papers. Click to open. Saving changes makes your own copy.
-              </p>
-              <div className="mt-4 grid gap-2">
-                {examples.map((scenario) => (
+              <h2 className="text-lg font-semibold text-slate-900">Example Projects</h2>
+              <div className="mt-3 grid gap-2">
+                {examples.map((example) => (
                   <button
-                    key={scenario.id}
+                    key={example.id}
                     type="button"
                     disabled={busy}
-                    onClick={() => openExample(scenario)}
-                    className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition-colors hover:border-forge-primary hover:bg-forge-primary-light"
+                    onClick={() => openExample(example)}
+                    className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition-colors hover:border-forge-primary hover:bg-forge-primary-light"
                   >
-                    <span className="text-sm font-medium text-slate-900">
-                      {scenario.name}
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-slate-900">
+                        {example.name}
+                      </span>
+                      <span className="block truncate text-xs text-slate-500">
+                        {example.terminals} · {example.scenarioCount}{' '}
+                        {example.scenarioCount === 1 ? 'scenario' : 'scenarios'}
+                      </span>
                     </span>
-                    <span className="text-xs text-slate-500">Open →</span>
+                    <span className="shrink-0 text-xs text-slate-500">Open →</span>
                   </button>
                 ))}
               </div>
